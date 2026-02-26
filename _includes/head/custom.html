@@ -1,0 +1,208 @@
+{% include base_path %}
+
+<!-- start custom head snippets -->
+
+<link rel="apple-touch-icon" sizes="57x57" href="{{ base_path }}/images/apple-touch-icon-57x57.png?v=M44lzPylqQ">
+<link rel="apple-touch-icon" sizes="60x60" href="{{ base_path }}/images/apple-touch-icon-60x60.png?v=M44lzPylqQ">
+<link rel="apple-touch-icon" sizes="72x72" href="{{ base_path }}/images/apple-touch-icon-72x72.png?v=M44lzPylqQ">
+<link rel="apple-touch-icon" sizes="76x76" href="{{ base_path }}/images/apple-touch-icon-76x76.png?v=M44lzPylqQ">
+<link rel="apple-touch-icon" sizes="114x114" href="{{ base_path }}/images/apple-touch-icon-114x114.png?v=M44lzPylqQ">
+<link rel="apple-touch-icon" sizes="120x120" href="{{ base_path }}/images/apple-touch-icon-120x120.png?v=M44lzPylqQ">
+<link rel="apple-touch-icon" sizes="144x144" href="{{ base_path }}/images/apple-touch-icon-144x144.png?v=M44lzPylqQ">
+<link rel="apple-touch-icon" sizes="152x152" href="{{ base_path }}/images/apple-touch-icon-152x152.png?v=M44lzPylqQ">
+<link rel="apple-touch-icon" sizes="180x180" href="{{ base_path }}/images/apple-touch-icon-180x180.png?v=M44lzPylqQ">
+<link rel="icon" type="image/png" href="{{ base_path }}/images/favicon-32x32.png?v=M44lzPylqQ" sizes="32x32">
+<link rel="icon" type="image/png" href="{{ base_path }}/images/android-chrome-192x192.png?v=M44lzPylqQ" sizes="192x192">
+<link rel="icon" type="image/png" href="{{ base_path }}/images/favicon-96x96.png?v=M44lzPylqQ" sizes="96x96">
+<link rel="icon" type="image/png" href="{{ base_path }}/images/favicon-16x16.png?v=M44lzPylqQ" sizes="16x16">
+<link rel="manifest" href="{{ base_path }}/images/manifest.json?v=M44lzPylqQ">
+<link rel="mask-icon" href="{{ base_path }}/images/safari-pinned-tab.svg?v=M44lzPylqQ" color="#000000">
+<link rel="shortcut icon" href="/images/favicon.ico?v=M44lzPylqQ">
+<meta name="msapplication-TileColor" content="#000000">
+<meta name="msapplication-TileImage" content="{{ base_path }}/images/mstile-144x144.png?v=M44lzPylqQ">
+<meta name="msapplication-config" content="{{ base_path }}/images/browserconfig.xml?v=M44lzPylqQ">
+<meta name="theme-color" content="#ffffff">
+<link rel="stylesheet" href="{{ base_path }}/assets/css/academicons.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" crossorigin="anonymous">
+
+<!-- Dark Theme Styles -->
+<style>
+  /* ── Dark Mode Toggle Button ──────────────────────── */
+  .theme-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2em;
+    padding: 4px 8px;
+    margin-left: 12px;
+    color: #494e52;
+    transition: color 0.3s;
+    vertical-align: middle;
+  }
+  .theme-toggle:hover { color: #4f46e5; }
+
+  /* ── Dark Mode Overrides ──────────────────────────── */
+  body.dark-mode {
+    background: #0f172a !important;
+    color: #cbd5e1 !important;
+  }
+
+  /* Masthead / Navbar */
+  body.dark-mode .masthead {
+    background: #1e293b !important;
+    border-bottom-color: #334155 !important;
+  }
+  body.dark-mode .masthead a,
+  body.dark-mode .greedy-nav a {
+    color: #e2e8f0 !important;
+  }
+  body.dark-mode .greedy-nav a:hover {
+    color: #818cf8 !important;
+  }
+  body.dark-mode .theme-toggle { color: #e2e8f0; }
+  body.dark-mode .theme-toggle:hover { color: #fbbf24; }
+
+  /* Sidebar */
+  body.dark-mode .sidebar,
+  body.dark-mode .author__urls-wrapper {
+    background: #1e293b !important;
+  }
+  body.dark-mode .author__name,
+  body.dark-mode .author__content h3 {
+    color: #f1f5f9 !important;
+  }
+  body.dark-mode .author__bio,
+  body.dark-mode .author__urls li,
+  body.dark-mode .author__urls a,
+  body.dark-mode .sidebar a {
+    color: #94a3b8 !important;
+  }
+  body.dark-mode .author__urls a:hover {
+    color: #818cf8 !important;
+  }
+  body.dark-mode .btn--inverse {
+    background: #334155 !important;
+    color: #cbd5e1 !important;
+    border-color: #475569 !important;
+  }
+
+  /* Page content */
+  body.dark-mode .page,
+  body.dark-mode .page__content,
+  body.dark-mode .page__inner-wrap,
+  body.dark-mode #main {
+    background: #0f172a !important;
+    color: #cbd5e1 !important;
+  }
+  body.dark-mode .page__title,
+  body.dark-mode h1, body.dark-mode h2,
+  body.dark-mode h3, body.dark-mode h4 {
+    color: #f1f5f9 !important;
+  }
+  body.dark-mode a { color: #818cf8; }
+  body.dark-mode a:hover { color: #a5b4fc; }
+  body.dark-mode hr { border-color: #334155 !important; }
+  body.dark-mode strong { color: #e2e8f0; }
+  body.dark-mode p, body.dark-mode li { color: #cbd5e1; }
+
+  /* Footer */
+  body.dark-mode .page__footer {
+    background: #1e293b !important;
+    color: #94a3b8 !important;
+  }
+  body.dark-mode .page__footer a { color: #818cf8 !important; }
+
+  /* ── Portfolio Custom Dark Overrides ───────────────── */
+
+  /* Intro */
+  body.dark-mode .port-intro p { color: #cbd5e1 !important; }
+
+  /* Interest tags */
+  body.dark-mode .int-tag {
+    background: #312e81 !important;
+    color: #c7d2fe !important;
+  }
+
+  /* Section titles */
+  body.dark-mode .port-section-title {
+    color: #f1f5f9 !important;
+    border-bottom-color: #6366f1 !important;
+  }
+
+  /* Publication cards */
+  body.dark-mode .pub-card {
+    background: #1e293b !important;
+    border-color: #334155 !important;
+    border-left-color: #6366f1 !important;
+  }
+  body.dark-mode .pub-title { color: #e2e8f0 !important; }
+  body.dark-mode .pub-num {
+    background: #312e81 !important;
+    color: #a5b4fc !important;
+  }
+  body.dark-mode .pub-status {
+    background: #422006 !important;
+    color: #fbbf24 !important;
+  }
+  body.dark-mode .pub-venue { color: #f87171 !important; }
+
+  /* Experience cards */
+  body.dark-mode .exp-card {
+    background: #1e293b !important;
+    border-left-color: #10b981 !important;
+  }
+  body.dark-mode .exp-card.orange { border-left-color: #f59e0b !important; }
+  body.dark-mode .exp-card.purple { border-left-color: #8b5cf6 !important; }
+  body.dark-mode .exp-org,
+  body.dark-mode .exp-org a { color: #f1f5f9 !important; }
+  body.dark-mode .exp-role { color: #94a3b8 !important; }
+  body.dark-mode .exp-card li { color: #cbd5e1 !important; }
+
+  /* Awards */
+  body.dark-mode .award-list li {
+    color: #cbd5e1 !important;
+    border-bottom-color: #1e293b !important;
+  }
+  body.dark-mode .award-year { color: #64748b !important; }
+
+  /* Project cards */
+  body.dark-mode .proj-card {
+    background: #1e293b !important;
+    border-color: #334155 !important;
+  }
+  body.dark-mode .proj-title { color: #e2e8f0 !important; }
+  body.dark-mode .proj-desc { color: #94a3b8 !important; }
+  body.dark-mode .tech-tag {
+    background: #334155 !important;
+    color: #94a3b8 !important;
+  }
+
+  /* Role info in sidebar */
+  body.dark-mode .sidebar div[style] { color: #94a3b8 !important; }
+  body.dark-mode .sidebar div[style] div[style*="font-weight"] { color: #e2e8f0 !important; }
+</style>
+
+<!-- Apply saved theme before render to prevent flash -->
+<script>
+  (function() {
+    if (localStorage.getItem('theme') === 'dark') {
+      document.documentElement.className += ' dark-mode-preload';
+      document.addEventListener('DOMContentLoaded', function() {
+        document.body.classList.add('dark-mode');
+      });
+    }
+  })();
+</script>
+
+<script type="text/x-mathjax-config"> MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } }); </script>
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script src='https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/latest.js?config=TeX-MML-AM_CHTML' async></script>
+
+<!-- end custom head snippets -->
