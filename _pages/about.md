@@ -17,6 +17,7 @@ redirect_from:
   line-height: 1.85;
   color: #444;
   margin-bottom: 0.6em;
+  text-align: justify;
 }
 .port-interests {
   margin-top: 10px;
@@ -72,45 +73,59 @@ redirect_from:
   border: 1px solid #e2e8f0;
   border-left: 4px solid #4f46e5;
   border-radius: 8px;
-  padding: 14px 16px;
+  padding: 16px 18px;
   margin-bottom: 14px;
   background: #fafbff;
   transition: box-shadow 0.2s;
 }
 .pub-card:hover { box-shadow: 0 4px 16px rgba(79,70,229,0.1); }
-.pub-num {
-  display: inline-block;
-  font-size: 0.78em;
+.pub-title {
+  font-weight: 700;
+  font-size: 1em;
+  color: #1e293b;
+  display: block;
+  margin-bottom: 8px;
+  line-height: 1.5;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+a.pub-title:hover { color: #4f46e5; }
+.pub-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.pub-links a {
+  font-size: 0.8em;
+  padding: 3px 12px;
+  border-radius: 5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pub-links .link-arxiv { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+.pub-links .link-arxiv:hover { background: #fecaca; }
+.pub-links .link-hf { background: #fefce8; color: #a16207; border: 1px solid #fde68a; }
+.pub-links .link-hf:hover { background: #fde68a; }
+.pub-links .link-project { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.pub-links .link-project:hover { background: #bbf7d0; }
+.pub-info {
+  font-size: 0.88em;
+  color: #555;
+}
+.pub-info .pub-status-text {
+  font-weight: 600;
+  color: #b45309;
+}
+.pub-info .pub-venue {
   font-weight: 700;
   color: #4f46e5;
-  background: #eef2ff;
-  padding: 2px 9px;
-  border-radius: 5px;
-  margin-right: 8px;
-}
-.pub-title { font-weight: 600; font-size: 0.97em; color: #1e293b; }
-.pub-meta { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.pub-status {
-  font-size: 0.78em;
-  background: #fef9c3;
-  color: #854d0e;
-  padding: 2px 9px;
-  border-radius: 4px;
-  font-weight: 600;
-}
-.pub-venue {
-  font-size: 0.82em;
-  color: #dc2626;
-  font-weight: 600;
   font-style: italic;
-}
-.pub-if {
-  font-size: 0.78em;
-  background: #dcfce7;
-  color: #166534;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: 600;
 }
 
 /* Experience cards */
@@ -208,8 +223,6 @@ redirect_from:
 }
 </style>
 
----
-
 <div class="port-intro">
 <p>
 I am a final-year student in <strong>Robotics and Mechatronics Engineering</strong> at the <strong>University of Dhaka</strong>, working at the intersection of intelligent systems, multimodal AI, and real-world decision support. My research focuses on designing scalable AI solutions that translate advanced machine learning methods into practical applications across healthcare, agriculture, and critical infrastructure.
@@ -234,51 +247,53 @@ My broader research interests include multimodal learning, biomedical AI, agenti
 <div class="port-section-title">📄 Publications &amp; Preprints</div>
 
 <div class="pub-card">
-  <span class="pub-num">01</span>
-  <span class="pub-title">PATHWAYS: Evaluating Investigation and Context Discovery in AI Web Agents</span>
-  <div class="pub-meta">
-    <span class="pub-status">⏳ Under Review</span>
-    <span class="pub-venue">ICML 2026</span>
-    <a href="https://arxiv.org/pdf/2602.05354" target="_blank" style="font-size:0.78em; background:#f0f0f0; color:#b31b1b; padding:2px 9px; border-radius:4px; font-weight:600; text-decoration:none;">arXiv</a>
+  <a href="https://arxiv.org/pdf/2602.05354" target="_blank" class="pub-title">PATHWAYS: Evaluating Investigation and Context Discovery in AI Web Agents</a>
+  <div class="pub-links">
+    <a href="https://arxiv.org/pdf/2602.05354" target="_blank" class="link-arxiv">📄 ArXiv</a>
+    <a href="/" class="link-hf">🤗 HuggingFace</a>
+    <a href="/" class="link-project">🌐 Project Page</a>
   </div>
+  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">ICML 2026</span></div>
 </div>
 
 <div class="pub-card">
-  <span class="pub-num">02</span>
   <span class="pub-title">Thinking Like a Botanist: Challenging Multimodal Language Models with Intent Driven Chain-of-Inquiry</span>
-  <div class="pub-meta">
-    <span class="pub-status">⏳ Under Review</span>
-    <span class="pub-venue">ACL 2026</span>
+  <div class="pub-links">
+    <a href="/" class="link-arxiv">📄 ArXiv</a>
+    <a href="/" class="link-hf">🤗 HuggingFace</a>
+    <a href="/" class="link-project">🌐 Project Page</a>
   </div>
+  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">ACL 2026</span></div>
 </div>
 
 <div class="pub-card">
-  <span class="pub-num">03</span>
-  <span class="pub-title">PlantVillageVQA: A Visual Question Answering Dataset for Benchmarking Vision-Language Models in Plant Science</span>
-  <div class="pub-meta">
-    <span class="pub-status">⏳ Under Review</span>
-    <span class="pub-venue">Nature Scientific Data</span>
-    <a href="https://arxiv.org/pdf/2508.17117" target="_blank" style="font-size:0.78em; background:#f0f0f0; color:#b31b1b; padding:2px 9px; border-radius:4px; font-weight:600; text-decoration:none;">arXiv</a>
+  <a href="https://arxiv.org/pdf/2508.17117" target="_blank" class="pub-title">PlantVillageVQA: A Visual Question Answering Dataset for Benchmarking Vision-Language Models in Plant Science</a>
+  <div class="pub-links">
+    <a href="https://arxiv.org/pdf/2508.17117" target="_blank" class="link-arxiv">📄 ArXiv</a>
+    <a href="/" class="link-hf">🤗 HuggingFace</a>
+    <a href="/" class="link-project">🌐 Project Page</a>
   </div>
+  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">Nature Scientific Data</span></div>
 </div>
 
 <div class="pub-card">
-  <span class="pub-num">04</span>
-  <span class="pub-title">SugarcaneShuffleNet: A Very Fast, Lightweight Convolutional Neural Network for Diagnosis of 15 Sugarcane Leaf Diseases</span>
-  <div class="pub-meta">
-    <span class="pub-status">⏳ Under Review</span>
-    <span class="pub-venue">Computers and Electronics in Agriculture</span>
-    <a href="https://arxiv.org/pdf/2508.17107" target="_blank" style="font-size:0.78em; background:#f0f0f0; color:#b31b1b; padding:2px 9px; border-radius:4px; font-weight:600; text-decoration:none;">arXiv</a>
+  <a href="https://arxiv.org/pdf/2508.17107" target="_blank" class="pub-title">SugarcaneShuffleNet: A Very Fast, Lightweight Convolutional Neural Network for Diagnosis of 15 Sugarcane Leaf Diseases</a>
+  <div class="pub-links">
+    <a href="https://arxiv.org/pdf/2508.17107" target="_blank" class="link-arxiv">📄 ArXiv</a>
+    <a href="/" class="link-hf">🤗 HuggingFace</a>
+    <a href="/" class="link-project">🌐 Project Page</a>
   </div>
+  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">Computers and Electronics in Agriculture</span></div>
 </div>
 
 <div class="pub-card">
-  <span class="pub-num">05</span>
   <span class="pub-title">Predicting Groundwater Recharge Potential across Various Physiographic Divisions of Bangladesh using Generative Data Augmentation</span>
-  <div class="pub-meta">
-    <span class="pub-status">⏳ Under Review</span>
-    <span class="pub-venue">Journal of Hydrology</span>
+  <div class="pub-links">
+    <a href="/" class="link-arxiv">📄 ArXiv</a>
+    <a href="/" class="link-hf">🤗 HuggingFace</a>
+    <a href="/" class="link-project">🌐 Project Page</a>
   </div>
+  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">Journal of Hydrology</span></div>
 </div>
 
 ---
