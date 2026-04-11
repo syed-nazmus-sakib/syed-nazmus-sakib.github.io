@@ -131,7 +131,7 @@ I'm a passionate researcher and student deeply immersed in the world of **Roboti
     <td width="6%" align="center"><b>02</b></td>
     <td>
       <b><a href="https://openreview.net/pdf?id=9PtO3zbwQM">Thinking Like a Botanist: Challenging Multimodal Language Models with Intent Driven Chain-of-Inquiry</a></b><br/>
-      <sub>📍 Under Review — <i>ACL 2026</i></sub>
+      <sub>📍 Accepted — <i>ACL 2026 Findings</i></sub>
     </td>
   </tr>
 

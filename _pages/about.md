@@ -231,7 +231,7 @@ I am a final-year student in <strong>Robotics and Mechatronics Engineering</stro
 I currently hold two concurrent research positions — as a <strong>Research Assistant</strong> at <a href="https://cortexai-lab.github.io/" target="_blank" style="color:#4f46e5; font-weight:600;">Cortex AI Lab</a> and a <strong>Research Intern</strong> at the <a href="https://www.dndlab.org/" target="_blank" style="color:#4f46e5; font-weight:600;">Data and Design Lab (CARS)</a>. At Cortex AI Lab, my work centers on multimodal and agent-based AI, including vision-language systems for biomedical reasoning, visual question answering, and structured diagnostic support. At CARS, I develop large-scale data analytics and machine learning pipelines for power system monitoring, failure prediction, and reliability assessment using nationwide electricity and consumption data.
 </p>
 <p>
-My broader research interests include multimodal learning, biomedical AI, agentic systems, and trustworthy AI. I have contributed to projects spanning plant disease diagnosis, vision-language benchmarking, power quality assessment, and autonomous robotic systems. I currently have <strong>five research papers under review</strong> at major venues, including <em>Nature Scientific Data</em>, <em>ICML 2026</em>, and <em>ACL 2026</em>.
+My broader research interests include multimodal learning, biomedical AI, agentic systems, and trustworthy AI. I have contributed to projects spanning plant disease diagnosis, vision-language benchmarking, power quality assessment, and autonomous robotic systems. I currently have research papers under review at major venues, including <em>Nature Scientific Data</em> and <em>ICML 2026</em>, and one paper accepted at <em>ACL 2026 Findings</em>.
 </p>
 <div class="port-interests">
   <strong>Research Interests: &nbsp;</strong>
@@ -261,9 +261,9 @@ My broader research interests include multimodal learning, biomedical AI, agenti
   <div class="pub-links">
     <a href="/" class="link-arxiv">📄 ArXiv</a>
     <a href="/" class="link-hf">🤗 HuggingFace</a>
-    <a href="/" class="link-project">🌐 Project Page</a>
+    <a href="https://syed-nazmus-sakib.github.io/PlantInquiryVQA/" target="_blank" class="link-project">🌐 Project Page</a>
   </div>
-  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">ACL 2026</span></div>
+  <div class="pub-info"><span class="pub-status-text">Accepted</span> at <span class="pub-venue">ACL 2026 Findings</span></div>
 </div>
 
 <div class="pub-card">
@@ -339,8 +339,6 @@ My broader research interests include multimodal learning, biomedical AI, agenti
   <div class="exp-org"><a href="https://robodemybd.com/" target="_blank" style="color:inherit; text-decoration:none; border-bottom:1px dashed #aaa;">Robodemy</a></div>
   <div class="exp-role">Trainer &nbsp;·&nbsp; Mar 2025 – Dec 2025</div>
   <ul>
-    <li>Trained and mentored the <strong>Bangladesh National Robotics Olympiad team</strong>, contributing to their preparation for international competition and achieving <strong>gold medal performance</strong>.</li>
-    <li>Served as <strong>Software Lead</strong> for the <strong>Durbar Mars Rover Team</strong>, developing autonomous control logic, sensor fusion pipelines, and mission software.</li>
     <li>Designed and implemented <strong>IoT-based robotic systems</strong> integrating microcontrollers, wireless communication, and real-time monitoring.</li>
     <li>Conducted structured training on robotics fundamentals, embedded systems, and algorithmic problem solving for competitive and research-oriented robotics.</li>
   </ul>
