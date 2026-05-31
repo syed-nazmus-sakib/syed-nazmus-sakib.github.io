@@ -231,7 +231,7 @@ I am a final-year student in <strong>Robotics and Mechatronics Engineering</stro
 I currently hold two concurrent research positions — as a <strong>Research Assistant</strong> at <a href="https://cortexai-lab.github.io/" target="_blank" style="color:#4f46e5; font-weight:600;">Cortex AI Lab</a> and a <strong>Research Intern</strong> at the <a href="https://www.dndlab.org/" target="_blank" style="color:#4f46e5; font-weight:600;">Data and Design Lab (CARS)</a>. At Cortex AI Lab, my work centers on multimodal and agent-based AI, including vision-language systems for biomedical reasoning, visual question answering, and structured diagnostic support. At CARS, I develop large-scale data analytics and machine learning pipelines for power system monitoring, failure prediction, and reliability assessment using nationwide electricity and consumption data.
 </p>
 <p>
-My broader research interests include multimodal learning, biomedical AI, agentic systems, and trustworthy AI. I have contributed to projects spanning plant disease diagnosis, vision-language benchmarking, power quality assessment, and autonomous robotic systems. I currently have research papers under review at major venues, including <em>Nature Scientific Data</em> and <em>ICML 2026</em>, and one paper accepted at <em>ACL 2026 Findings</em>.
+My broader research interests include multimodal learning, biomedical AI, agentic systems, and trustworthy AI. I have contributed to projects spanning plant disease diagnosis, vision-language benchmarking, power quality assessment, and autonomous robotic systems. I currently have research papers under review at major venues including <em>NeurIPS 2026</em>, <em>EMNLP 2026</em>, and <em>Nature Scientific Data</em>, and one paper accepted at <em>ACL 2026 Findings</em>.
 </p>
 <div class="port-interests">
   <strong>Research Interests: &nbsp;</strong>
@@ -240,20 +240,22 @@ My broader research interests include multimodal learning, biomedical AI, agenti
   <span class="int-tag">Vision-Language Models</span>
   <span class="int-tag">Agentic Systems</span>
   <span class="int-tag">Trustworthy AI</span>
-  <span class="int-tag">Agricultural Technology</span>
+  <span class="int-tag">LLM Agent Safety</span>
+  <span class="int-tag">Multi-Agent Systems</span>
+  <span class="int-tag">Reinforcement Learning</span>
 </div>
 </div>
 
 <div class="port-section-title">📄 Publications &amp; Preprints</div>
 
 <div class="pub-card">
-  <a href="https://arxiv.org/pdf/2602.05354" target="_blank" class="pub-title">PATHWAYS: Evaluating Investigation and Context Discovery in AI Web Agents</a>
+  <a href="https://arxiv.org/pdf/2602.05354" target="_blank" class="pub-title">MIRAGE: Do Web Agents Investigate Before They Decide?</a>
   <div class="pub-links">
     <a href="https://arxiv.org/pdf/2602.05354" target="_blank" class="link-arxiv">📄 ArXiv</a>
     <a href="/" class="link-hf">🤗 HuggingFace</a>
     <a href="/" class="link-project">🌐 Project Page</a>
   </div>
-  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">ICML 2026</span></div>
+  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">NeurIPS 2026</span></div>
 </div>
 
 <div class="pub-card">
@@ -287,6 +289,24 @@ My broader research interests include multimodal learning, biomedical AI, agenti
 </div>
 
 <div class="pub-card">
+  <span class="pub-title">MemeEconomy: Do LLM Agents Trade Ethics for Survival?</span>
+  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">NeurIPS 2026</span></div>
+</div>
+
+<div class="pub-card">
+  <span class="pub-title">The Surface You Test Is Not the Surface That Breaks</span>
+  <div class="pub-links">
+    <a href="https://github.com/syed-nazmus-sakib/surface-adaptive-injection" target="_blank" class="link-project">💻 Code</a>
+  </div>
+  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">EMNLP 2026</span></div>
+</div>
+
+<div class="pub-card">
+  <span class="pub-title">PhyDrawGen: Physically Grounded Diagram Generation from Natural Language</span>
+  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">EMNLP 2026</span></div>
+</div>
+
+<div class="pub-card">
   <span class="pub-title">Predicting Groundwater Recharge Potential across Various Physiographic Divisions of Bangladesh using Generative Data Augmentation</span>
   <div class="pub-links">
     <a href="/" class="link-arxiv">📄 ArXiv</a>
@@ -305,15 +325,15 @@ My broader research interests include multimodal learning, biomedical AI, agenti
   <div class="exp-role">Research Assistant &nbsp;·&nbsp; Mar 2025 – Present</div>
   <ul>
     <li>Conduct research on <strong>agentic AI and collaborative multi-agent systems</strong>, focusing on coordinated reasoning, task decomposition, and autonomous decision-making in complex environments.</li>
-    <li>Develop <strong>multimodal biomedical AI systems</strong> integrating vision and language for clinically relevant tasks such as:
+    <li>Investigate <strong>safety and alignment of multi-agent systems</strong>, including:
       <ul>
-        <li>Visual Question Answering for medical images</li>
-        <li>Differential diagnosis support from imaging and clinical context</li>
-        <li>Automated radiology report generation</li>
+        <li>Behavior of LLM agents under competitive and survival pressures</li>
+        <li>Adversarial robustness and prompt-injection attack surfaces</li>
+        <li>Investigation and context-discovery behavior in autonomous web agents</li>
       </ul>
     </li>
-    <li>Design and evaluate <strong>medical vision-language pipelines</strong> for robustness, interpretability, and clinical usability.</li>
-    <li>Investigate architectures that combine <strong>agent-based reasoning with multimodal perception</strong>, enabling structured clinical reasoning workflows and human-aligned decision support.</li>
+    <li>Develop <strong>vision-language systems for plant-pathology reasoning</strong>, building intent-driven visual question answering benchmarks and chain-of-inquiry evaluation pipelines.</li>
+    <li>Design and evaluate <strong>multimodal VQA pipelines</strong> for robustness, interpretability, and trustworthy decision support.</li>
   </ul>
 </div>
 
