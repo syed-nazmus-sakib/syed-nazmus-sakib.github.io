@@ -1,0 +1,1204 @@
+<style>
+  /* ============================================================
+     STEEPED — a field guide to visual self-supervised learning
+     Palette: milk-tea cream ground, espresso ink, matcha accent
+     ============================================================ */
+
+  :root {
+    /* neutrals — warmed toward the accent, never pure grey */
+    --paper:    #EFE6D4;
+    --paper-2:  #E8DCC5;
+    --paper-3:  #E0D2B7;
+    --line:     #D3C4A5;
+    --line-2:   #C6B490;
+    --ink:      #2B261C;
+    --ink-soft: #574D3C;
+    --ink-faint:#897B62;
+    /* accents */
+    --accent:      #6E7A4F;   /* matcha */
+    --accent-deep: #4E5836;
+    --accent-soft: #DCE0C4;
+    --caramel:     #9A6A3E;
+    /* family hues (data viz) */
+    --f-pretext:   #B5835A;
+    --f-contrast:  #7C8C4B;
+    --f-cluster:   #C08A3E;
+    --f-boot:      #A65D57;
+    --f-redun:     #4F8A7B;
+    --f-mask:      #7E6DAB;
+    --f-jepa:      #4A6D9C;
+    --f-auto:      #B0688E;
+
+    --serif: 'Iowan Old Style','Palatino Linotype','Palatino','Book Antiqua',Georgia,'Times New Roman',serif;
+    --sans:  ui-sans-serif,-apple-system,BlinkMacSystemFont,'Avenir Next','Segoe UI',system-ui,sans-serif;
+    --mono:  ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace;
+
+    --measure: 66ch;
+    --shadow: 0 1px 0 rgba(43,38,28,.04), 0 18px 40px -28px rgba(43,38,28,.35);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:    #211B12;
+      --paper-2:  #2A2317;
+      --paper-3:  #342B1C;
+      --line:     #453A27;
+      --line-2:   #574A32;
+      --ink:      #ECE2CD;
+      --ink-soft: #C6BA9E;
+      --ink-faint:#8F8064;
+      --accent:      #AEBC86;
+      --accent-deep: #C4D29C;
+      --accent-soft: #34381F;
+      --caramel:     #CF9C5F;
+      --f-pretext:   #CFA177;
+      --f-contrast:  #A7BA6C;
+      --f-cluster:   #DAA457;
+      --f-boot:      #CE7E77;
+      --f-redun:     #6FB1A0;
+      --f-mask:      #A493D0;
+      --f-jepa:      #7396C4;
+      --f-auto:      #D08BAF;
+      --shadow: 0 1px 0 rgba(0,0,0,.2), 0 22px 46px -28px rgba(0,0,0,.7);
+    }
+  }
+  /* explicit toggle wins in both directions */
+  :root[data-theme="light"] {
+    --paper:#EFE6D4;--paper-2:#E8DCC5;--paper-3:#E0D2B7;--line:#D3C4A5;--line-2:#C6B490;
+    --ink:#2B261C;--ink-soft:#574D3C;--ink-faint:#897B62;
+    --accent:#6E7A4F;--accent-deep:#4E5836;--accent-soft:#DCE0C4;--caramel:#9A6A3E;
+    --f-pretext:#B5835A;--f-contrast:#7C8C4B;--f-cluster:#C08A3E;--f-boot:#A65D57;
+    --f-redun:#4F8A7B;--f-mask:#7E6DAB;--f-jepa:#4A6D9C;--f-auto:#B0688E;
+    --shadow:0 1px 0 rgba(43,38,28,.04),0 18px 40px -28px rgba(43,38,28,.35);
+  }
+  :root[data-theme="dark"] {
+    --paper:#211B12;--paper-2:#2A2317;--paper-3:#342B1C;--line:#453A27;--line-2:#574A32;
+    --ink:#ECE2CD;--ink-soft:#C6BA9E;--ink-faint:#8F8064;
+    --accent:#AEBC86;--accent-deep:#C4D29C;--accent-soft:#34381F;--caramel:#CF9C5F;
+    --f-pretext:#CFA177;--f-contrast:#A7BA6C;--f-cluster:#DAA457;--f-boot:#CE7E77;
+    --f-redun:#6FB1A0;--f-mask:#A493D0;--f-jepa:#7396C4;--f-auto:#D08BAF;
+    --shadow:0 1px 0 rgba(0,0,0,.2),0 22px 46px -28px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: clamp(1.02rem, 0.62vw + 0.9rem, 1.18rem);
+    line-height: 1.72;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* faint paper grain */
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(154,106,62,.035), transparent 40%),
+      radial-gradient(circle at 82% 12%, rgba(110,122,79,.04), transparent 45%);
+    background-attachment: fixed;
+  }
+
+  ::selection { background: var(--accent-soft); color: var(--ink); }
+
+  a { color: var(--accent-deep); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  /* ---------- layout scaffolding ---------- */
+  .wrap { width: min(100% - 2.6rem, 720px); margin-inline: auto; }
+  .wide { width: min(100% - 2.6rem, 1180px); margin-inline: auto; }
+
+  section { padding-block: clamp(2.6rem, 6vw, 5rem); }
+
+  .eyebrow {
+    font-family: var(--sans);
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin: 0 0 1.1rem;
+    display: flex; align-items: center; gap: .7rem;
+  }
+  .eyebrow::before { content:""; width: 26px; height: 1px; background: var(--line-2); }
+
+  h1,h2,h3 { text-wrap: balance; line-height: 1.08; font-weight: 600; }
+
+  .prose p { max-width: var(--measure); }
+  .prose p + p { margin-top: 1.15rem; }
+  .lede { font-size: 1.22em; line-height: 1.6; color: var(--ink-soft); max-width: var(--measure); }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .7rem clamp(.9rem,3vw,1.6rem);
+    background: color-mix(in oklab, var(--paper) 82%, transparent);
+    backdrop-filter: blur(9px);
+    border-bottom: 1px solid var(--line);
+    font-family: var(--sans);
+  }
+  .brand { display:flex; align-items:center; gap:.6rem; font-size:.82rem; letter-spacing:.14em; text-transform:uppercase; font-weight:600; color:var(--ink-soft);}
+  .brand .dot { width:11px;height:11px;border-radius:50%; background:radial-gradient(circle at 35% 30%, #caa06f, var(--caramel)); box-shadow: 0 0 0 3px color-mix(in oklab,var(--caramel) 22%, transparent);}
+  .themebtn {
+    font: inherit; font-size:.74rem; letter-spacing:.1em; text-transform:uppercase;
+    background: var(--paper-2); color: var(--ink-soft);
+    border:1px solid var(--line); border-radius: 999px; padding:.4rem .8rem; cursor:pointer;
+    display:flex; align-items:center; gap:.45rem; transition: border-color .2s, color .2s;
+  }
+  .themebtn:hover { border-color: var(--line-2); color: var(--ink); }
+
+  /* ---------- hero ---------- */
+  .hero { position: relative; padding-block: clamp(3.4rem, 9vw, 7rem) clamp(2.4rem,5vw,4rem); overflow: hidden; }
+  .hero canvas { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; opacity:.5; }
+  .hero .wrap { position: relative; z-index: 1; }
+  .hero-kicker { font-family:var(--sans); font-size:.76rem; letter-spacing:.28em; text-transform:uppercase; color:var(--caramel); font-weight:600; }
+  h1.title {
+    font-size: clamp(2.6rem, 6.4vw, 5rem);
+    letter-spacing: -.015em;
+    margin: 1.1rem 0 1.3rem;
+  }
+  h1.title em { font-style: italic; color: var(--accent-deep); }
+  .hero .lede { font-size: clamp(1.15rem,1.4vw,1.4rem); }
+  .hero-meta { margin-top: 2.2rem; display:flex; flex-wrap:wrap; gap: .55rem 1.4rem; font-family:var(--mono); font-size:.76rem; color:var(--ink-faint); }
+  .hero-meta span { display:flex; align-items:center; gap:.5rem; }
+  .hero-meta span::before { content:""; width:6px;height:6px;border-radius:50%; background: var(--accent); }
+  .scrollcue { margin-top: 2.6rem; font-family:var(--sans); font-size:.74rem; letter-spacing:.18em; text-transform:uppercase; color: var(--ink-faint); display:flex; align-items:center; gap:.6rem; }
+  .scrollcue .ln { width:44px; height:1px; background:var(--line-2); position:relative; overflow:hidden;}
+  .scrollcue .ln::after{content:"";position:absolute;inset:0;width:40%;background:var(--accent);animation:slide 2.4s ease-in-out infinite;}
+  @keyframes slide{0%{transform:translateX(-100%)}60%,100%{transform:translateX(260%)}}
+
+  /* ---------- pull statement ---------- */
+  .arc { border-top:1px solid var(--line); border-bottom:1px solid var(--line); background: var(--paper-2); }
+  .arc .flow {
+    font-family: var(--mono); font-size: clamp(.82rem,1vw,.95rem); line-height: 2.1;
+    color: var(--ink-soft); letter-spacing: .01em;
+  }
+  .arc .flow b { color: var(--accent-deep); font-weight:600; }
+  .arc .flow .arr { color: var(--caramel); padding: 0 .35rem; }
+
+  /* ---------- chapter rail ---------- */
+  .rail {
+    position: fixed; left: max(1.1rem, calc((100vw - 1180px)/2 - 6.2rem)); top: 50%;
+    transform: translateY(-50%); z-index: 30;
+    display: flex; flex-direction: column; gap: .1rem;
+    font-family: var(--sans);
+  }
+  .rail a {
+    display:flex; align-items:center; gap:.6rem; text-decoration:none;
+    font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; color: var(--ink-faint);
+    padding:.28rem 0; transition: color .25s;
+  }
+  .rail a .tick { width: 14px; height: 2px; background: var(--line-2); transition: width .25s, background .25s; }
+  .rail a .lbl { opacity: 0; transform: translateX(-4px); transition: opacity .25s, transform .25s; white-space:nowrap; }
+  .rail a:hover .lbl, .rail a.active .lbl { opacity: 1; transform: none; }
+  .rail a:hover { color: var(--ink-soft); }
+  .rail a.active { color: var(--accent-deep); }
+  .rail a.active .tick { width: 30px; background: var(--accent); }
+  @media (max-width: 1360px){ .rail{ display:none; } }
+
+  /* ---------- section headings ---------- */
+  .chap-head { margin-bottom: 2.2rem; }
+  .chap-num { font-family: var(--mono); font-size: .82rem; color: var(--caramel); letter-spacing:.05em; }
+  h2.chap { font-size: clamp(1.9rem, 3.6vw, 2.9rem); letter-spacing:-.01em; margin:.5rem 0 0; }
+  h2.chap .yrs { display:block; font-family:var(--sans); font-size:.8rem; font-weight:500; letter-spacing:.18em; text-transform:uppercase; color:var(--ink-faint); margin-top:.7rem; }
+
+  /* ---------- paper cards ---------- */
+  .papers { display:flex; flex-direction:column; gap: 1.2rem; margin-top: 2rem; }
+  .paper {
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: clamp(1.2rem,2.4vw,1.7rem);
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+  .paper::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background: var(--fam,var(--accent)); opacity:.85; }
+  .paper header { display:flex; align-items:baseline; flex-wrap:wrap; gap:.55rem .8rem; margin-bottom:.7rem; }
+  .paper .yr { font-family:var(--mono); font-size:.8rem; color:var(--caramel); font-weight:600; }
+  .paper h3 { font-size: clamp(1.16rem,1.7vw,1.4rem); margin:0; flex:1 1 auto; min-width: 12ch; }
+  .paper h3 .full { display:block; font-family:var(--sans); font-weight:500; font-size:.74rem; letter-spacing:.02em; color:var(--ink-faint); margin-top:.28rem; font-style: italic; }
+  .fam {
+    font-family:var(--sans); font-size:.64rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+    padding:.28rem .55rem; border-radius:999px; white-space:nowrap;
+    color: var(--fam,var(--accent-deep));
+    background: color-mix(in oklab, var(--fam,var(--accent)) 15%, transparent);
+    border: 1px solid color-mix(in oklab, var(--fam,var(--accent)) 34%, transparent);
+  }
+  .paper p { margin:.4rem 0 0; max-width: none; }
+  .paper p + p { margin-top:.7rem; }
+  .paper .k { color: var(--accent-deep); font-style: italic; }
+
+  /* schematic */
+  .schematic { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px dashed var(--line-2); overflow-x: auto; }
+  .schematic svg { display:block; }
+  .schem-cap { font-family:var(--sans); font-size:.68rem; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:.6rem; }
+
+  /* transition note between eras */
+  .segue { max-width: var(--measure); margin: 1.7rem 0 0; padding-left: 1.1rem; border-left: 2px solid var(--line-2); color: var(--ink-soft); font-style: italic; }
+
+  /* ---------- river (centerpiece) ---------- */
+  .river-wrap { background: var(--paper-2); border-block:1px solid var(--line); }
+  .river-scroll { overflow-x: auto; overflow-y: hidden; padding-bottom: .6rem; }
+  .river-legend { display:flex; flex-wrap:wrap; gap:.5rem .7rem; margin: 1.4rem 0 0; font-family:var(--sans); }
+  .river-legend button {
+    font: inherit; font-size:.72rem; letter-spacing:.04em; cursor:pointer;
+    background: var(--paper-3); border:1px solid var(--line); border-radius:999px;
+    padding:.32rem .7rem; color:var(--ink-soft); display:flex; align-items:center; gap:.45rem;
+    transition: border-color .2s, background .2s, opacity .2s;
+  }
+  .river-legend button .sw { width:10px; height:10px; border-radius:3px; background: var(--c); }
+  .river-legend button:hover { border-color: var(--line-2); }
+  .river-legend.filtered button:not(.on){ opacity:.4; }
+  .river-hint { font-family:var(--sans); font-size:.74rem; color:var(--ink-faint); margin-top:1rem; }
+  #river text { font-family: var(--mono); }
+  .rv-node { cursor: pointer; }
+  .rv-node circle { transition: r .18s, fill-opacity .18s; }
+  .rv-label { fill: var(--ink-soft); font-size: 10.5px; transition: fill .18s, opacity .18s; }
+  .rv-edge { fill:none; transition: opacity .18s, stroke-width .18s; }
+  .rv-lane { fill: var(--ink-faint); font-size: 11px; letter-spacing:.1em; text-transform:uppercase; opacity:.75; }
+  .rv-axis { fill: var(--ink-faint); font-size: 11px; }
+  .rv-band { fill: var(--paper-3); opacity:.4; }
+  #river.dim .rv-edge:not(.lit){ opacity:.06; }
+  #river.dim .rv-node:not(.lit){ opacity:.28; }
+  #river.dim .rv-node.lit circle { stroke: var(--ink); stroke-width: 1.4px; }
+  #river.fam-dim .rv-edge:not(.famlit){ opacity:.05; }
+  #river.fam-dim .rv-node:not(.famlit){ opacity:.22; }
+
+  /* ---------- simple family tree ---------- */
+  .tree-wrap { background: var(--paper); }
+  .tree-scroll { overflow-x: auto; overflow-y: hidden; padding-bottom: .6rem; }
+  #tree { display: block; min-width: 820px; }
+  #tree .tr-box { cursor: pointer; }
+  #tree .tr-box:hover rect:first-of-type { stroke: var(--accent); stroke-width: 2px; }
+  .tree-key { display:flex; flex-wrap:wrap; gap:.4rem 1.3rem; margin-top:1.3rem; font-family:var(--sans); font-size:.76rem; color:var(--ink-faint); }
+  .tree-key span { display:flex; align-items:center; gap:.5rem; }
+  .tree-key .solid { width:26px; height:0; border-top:2px solid var(--line-2); }
+  .tree-key .dash { width:26px; height:0; border-top:2px dashed var(--line-2); }
+
+  /* ---------- comparison matrix ---------- */
+  .matrix-scroll { overflow-x:auto; margin-top:2rem; border:1px solid var(--line); border-radius:14px; box-shadow: var(--shadow); }
+  table.matrix { border-collapse: collapse; width:100%; min-width: 640px; font-size:.9rem; background: var(--paper-2); }
+  table.matrix th, table.matrix td { padding:.72rem .9rem; text-align:left; border-bottom:1px solid var(--line); }
+  table.matrix thead th { font-family:var(--sans); font-size:.68rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint); font-weight:700; background: var(--paper-3); position:sticky; top:0; }
+  table.matrix tbody th { font-family:var(--serif); font-weight:600; font-size:1rem; }
+  table.matrix tbody th .fdot { display:inline-block; width:8px;height:8px;border-radius:50%; margin-right:.5rem; vertical-align:middle; background: var(--fam,var(--accent)); }
+  table.matrix tr:hover td, table.matrix tr:hover th { background: color-mix(in oklab, var(--accent) 7%, transparent); }
+  table.matrix td { color: var(--ink-soft); }
+  .yn { font-family:var(--mono); font-size:.78rem; padding:.14rem .5rem; border-radius:6px; white-space:nowrap; }
+  .yn.y { color: var(--f-boot); background: color-mix(in oklab, var(--f-boot) 15%, transparent); }
+  .yn.n { color: var(--ink-faint); background: color-mix(in oklab, var(--ink-faint) 13%, transparent); }
+  .yn.m { color: var(--caramel); background: color-mix(in oklab, var(--caramel) 15%, transparent); }
+
+  /* ---------- CLIP aside ---------- */
+  .aside {
+    background: var(--paper-3); border:1px solid var(--line); border-radius:16px;
+    padding: clamp(1.4rem,3vw,2.2rem); box-shadow: var(--shadow); position:relative;
+  }
+  .aside .tag { position:absolute; top:-.7rem; left:1.4rem; font-family:var(--sans); font-size:.66rem; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--paper); background: var(--f-auto); padding:.28rem .7rem; border-radius:999px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:1.4rem; margin-top:1.2rem; }
+  .split .col { background: var(--paper-2); border:1px solid var(--line); border-radius:12px; padding:1rem 1.1rem; }
+  .split .col h4 { margin:0 0 .5rem; font-size:.98rem; }
+  .split .col p { margin:0; font-size:.92rem; color:var(--ink-soft); }
+  @media (max-width:560px){ .split{ grid-template-columns:1fr; } }
+
+  /* ---------- canon ---------- */
+  .canon { background: var(--paper-2); border-block:1px solid var(--line); }
+  .canon-list { list-style:none; margin:2rem 0 0; padding:0; counter-reset: c; display:flex; flex-direction:column; gap:.2rem; }
+  .canon-list li { display:flex; gap:1.1rem; align-items:baseline; padding:1rem 0; border-bottom:1px solid var(--line); }
+  .canon-list li::before { counter-increment:c; content: counter(c,decimal-leading-zero); font-family:var(--mono); font-size:.9rem; color:var(--caramel); min-width:2.4ch; }
+  .canon-list h4 { margin:0; font-size:1.12rem; }
+  .canon-list p { margin:.3rem 0 0; color:var(--ink-soft); font-size:.94rem; max-width:60ch; }
+  .philos { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-top:2.4rem; }
+  .philos .p { background:var(--paper-3); border:1px solid var(--line); border-radius:12px; padding:1.2rem; }
+  .philos .p .h { font-family:var(--sans); font-size:.68rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; margin-bottom:.5rem; }
+  .philos .p:nth-child(1) .h{ color:var(--f-boot);} .philos .p:nth-child(2) .h{ color:var(--f-mask);} .philos .p:nth-child(3) .h{ color:var(--f-jepa);}
+  .philos .p p { margin:0; font-size:.9rem; color:var(--ink-soft); }
+  @media (max-width:640px){ .philos{ grid-template-columns:1fr; } }
+
+  /* ---------- footer ---------- */
+  footer { padding-block: 3rem; border-top:1px solid var(--line); font-family:var(--sans); }
+  footer .refs { columns: 2; column-gap: 2rem; font-size:.76rem; color:var(--ink-faint); }
+  footer .refs a { color:var(--ink-soft); text-decoration:none; }
+  footer .refs a:hover { color:var(--accent-deep); text-decoration:underline; }
+  footer .refs div { break-inside:avoid; margin-bottom:.5rem; font-family:var(--mono); }
+  footer .colophon { margin-top:2rem; font-size:.8rem; color:var(--ink-faint); max-width:var(--measure); line-height:1.7; }
+  @media (max-width:560px){ footer .refs{ columns:1; } }
+
+  /* ---------- reveal animation ---------- */
+  .reveal { opacity:0; transform: translateY(18px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity:1; transform:none; }
+  @media (prefers-reduced-motion: reduce){
+    .reveal{ opacity:1; transform:none; transition:none; }
+    .scrollcue .ln::after{ animation:none; }
+    * { scroll-behavior:auto !important; }
+  }
+  html { scroll-behavior: smooth; }
+</style>
+
+<div class="topbar">
+  <div class="brand"><span class="dot"></span> Steeped · a field guide</div>
+  <button class="themebtn" id="themeBtn" aria-label="Toggle colour theme"><span id="themeIco">◐</span> <span id="themeTxt">Theme</span></button>
+</div>
+
+<!-- ============ HERO ============ -->
+<header class="hero">
+  <canvas id="steam" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <p class="hero-kicker">Visual Self-Supervised Learning · 2014 – 2026</p>
+    <h1 class="title">Learning to see,<br><em>without being told</em> what's there.</h1>
+    <p class="lede">For a decade, the frontier of computer vision was drawn by architecture — AlexNet to ResNet to ConvNeXt. This is the other history: the quiet revolution in <strong>what the network is asked to learn</strong> when nobody hands it a single label. Same images, no annotations — and, step by step, machines that taught themselves to see.</p>
+    <div class="hero-meta">
+      <span>8 families of method</span>
+      <span>≈40 landmark papers</span>
+      <span>one continuous idea</span>
+    </div>
+    <div class="scrollcue"><span class="ln"></span> begin the descent</div>
+  </div>
+</header>
+
+<!-- ============ THE ARC ============ -->
+<section class="arc">
+  <div class="wrap">
+    <p class="eyebrow">The whole story in one breath</p>
+    <p class="flow">
+      <b>Invent a pretext task</b> <span class="arr">→</span> <b>compare image instances</b> <span class="arr">→</span> <b>drop the negatives</b> <span class="arr">→</span> <b>predict a teacher's representation</b> <span class="arr">→</span> <b>mask and reconstruct</b> <span class="arr">→</span> <b>predict in latent space</b> <span class="arr">→</span> <b>scale into a visual foundation model</b>.
+    </p>
+    <p class="prose" style="margin-top:1.6rem; color:var(--ink-soft)">Read those seven moves as one sentence and you have the plot. Everything below is the cast of characters — where each idea came from, what problem it was trying to escape, and which paper it handed the torch to next. One crucial difference from the CNN story: convolutional papers mostly changed the <em>network</em>. Self-supervised papers mostly changed the <em>objective</em> — the target, the teacher, the trick that keeps the whole thing from collapsing into nonsense. The same method rides on ResNets, ViTs, or ConvNeXts alike.</p>
+  </div>
+</section>
+
+<!-- ============ SIMPLE FAMILY TREE ============ -->
+<section class="tree-wrap" id="tree-sec">
+  <div class="wide">
+    <div class="chap-head reveal">
+      <p class="eyebrow">Start here</p>
+      <h2 class="chap">The family tree, simply</h2>
+      <p class="lede" style="margin-top:1rem">The same story as one clean descent — read top to bottom. <strong>Solid lines</strong> are direct lineage; <strong>dashed lines</strong> are a borrowed idea. Get this shape in your head and the detailed timeline below reads at a glance.</p>
+    </div>
+    <div class="tree-scroll reveal">
+      <svg id="tree" role="img" aria-label="A top-down family tree of self-supervised learning methods"></svg>
+    </div>
+    <div class="tree-key">
+      <span><span class="solid"></span> direct lineage</span>
+      <span><span class="dash"></span> borrowed idea</span>
+      <span>Tap any box to jump to its entry below.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RIVER (centerpiece) ============ -->
+<section class="river-wrap" id="river-sec">
+  <div class="wide">
+    <div class="chap-head reveal">
+      <p class="eyebrow">The map</p>
+      <h2 class="chap">The River of Ideas</h2>
+      <p class="lede" style="margin-top:1rem">Time runs left to right; each horizontal stream is a family of method. Lines trace lineage — who inherited what. <strong>Hover a method</strong> to light up its ancestors and descendants; <strong>hover a family</strong> in the legend to follow its current downstream.</p>
+    </div>
+    <div class="river-scroll reveal">
+      <svg id="river" role="img" aria-label="A lineage graph of self-supervised learning methods from 2014 to 2026"></svg>
+    </div>
+    <div class="river-legend" id="riverLegend"></div>
+    <p class="river-hint">Tap any node to jump to its entry below.</p>
+  </div>
+</section>
+
+<!-- ============ ERA I ============ -->
+<section id="era1">
+  <div class="wrap">
+    <div class="chap-head reveal">
+      <p class="chap-num">Era I</p>
+      <h2 class="chap">Handcrafted Pretexts<span class="yrs">2014 – 2018 · invent a puzzle only the image can answer</span></h2>
+    </div>
+    <div class="prose reveal">
+      <p>The first idea was almost mischievous: if you have no labels, <em>manufacture</em> a question whose answer is already hidden in the pixels. Rotate an image and ask by how much. Cut it into tiles and ask for the original order. Strip the colour and ask for it back. To answer, the network has no choice but to learn something real about objects, parts and scenes.</p>
+    </div>
+    <div class="papers">
+
+      <article class="paper reveal" id="m-exemplar" style="--fam:var(--f-pretext)">
+        <header><span class="yr">2014</span><h3>Exemplar CNN<span class="full">Discriminative Unsupervised Feature Learning with Exemplar CNNs</span></h3><span class="fam">Pretext</span></header>
+        <p>Take one patch, distort it a dozen ways, and declare every distortion a member of the <span class="k">same class</span>. Trivial as it sounds, it planted the seed the whole field would grow from: <em>different views of one image should mean the same thing.</em></p>
+      </article>
+
+      <article class="paper reveal" id="m-context" style="--fam:var(--f-pretext)">
+        <header><span class="yr">2015</span><h3>Context Prediction<span class="full">Unsupervised Visual Representation Learning by Context Prediction</span></h3><span class="fam">Pretext</span></header>
+        <p>Show two patches; ask where the second sits relative to the first — above, to the left, diagonally down. To place a wheel beneath a car window, the model must grasp object parts and spatial layout.</p>
+        <div class="schematic" data-schem='{"cap":"predict the spatial relation","type":"chain","nodes":[{"t":"Patch A + Patch B","k":"in"},{"t":"Encoder","k":"net"},{"t":"Which of 8 positions?","k":"out"}]}'></div>
+      </article>
+
+      <article class="paper reveal" id="m-jigsaw" style="--fam:var(--f-pretext)">
+        <header><span class="yr">2016</span><h3>Jigsaw Puzzles<span class="full">Unsupervised Learning by Solving Jigsaw Puzzles</span></h3><span class="fam">Pretext</span></header>
+        <p>Shuffle nine tiles and predict the permutation that restores them. A harder, more global cousin of context prediction — the network must reason about the whole configuration at once.</p>
+      </article>
+
+      <article class="paper reveal" id="m-color" style="--fam:var(--f-pretext)">
+        <header><span class="yr">2016</span><h3>Colorful Image Colorization<span class="full">Colorful Image Colorization</span></h3><span class="fam">Pretext</span></header>
+        <p>Hand the model a greyscale photo; ask for the colour back. Skies lean blue, grass green, skin warm — getting it right quietly demands semantics, which makes colourisation a surprisingly strong teacher.</p>
+        <div class="schematic" data-schem='{"cap":"reconstruct the colour channels","type":"chain","nodes":[{"t":"Greyscale (L)","k":"in"},{"t":"Encoder–Decoder","k":"net"},{"t":"Colour (a,b)","k":"out"}]}'></div>
+      </article>
+
+      <article class="paper reveal" id="m-rotnet" style="--fam:var(--f-pretext)">
+        <header><span class="yr">2018</span><h3>RotNet<span class="full">Unsupervised Representation Learning by Predicting Image Rotations</span></h3><span class="fam">Pretext</span></header>
+        <p>Rotate by 0°, 90°, 180° or 270° and classify the angle — four classes, free labels. To know a cat is upside down you must first know what an upright cat looks like.</p>
+        <div class="schematic" data-schem='{"cap":"classify the applied rotation","type":"chain","nodes":[{"t":"Rotate {0,90,180,270}","k":"in"},{"t":"Encoder","k":"net"},{"t":"Which angle?","k":"out"}]}'></div>
+      </article>
+    </div>
+    <p class="segue reveal">The catch: each puzzle taught only what that puzzle needed. A rotation-solver could ignore colour; a colouriser could lean on texture. The field wanted a single objective that captured <em>everything an image is</em> — and found it in a deceptively simple demand: agreement between views.</p>
+  </div>
+</section>
+
+<!-- ============ ERA II ============ -->
+<section id="era2">
+  <div class="wrap">
+    <div class="chap-head reveal">
+      <p class="chap-num">Era II</p>
+      <h2 class="chap">Every Image Its Own Class<span class="yrs">2018 – 2020 · the contrastive turn</span></h2>
+    </div>
+    <div class="prose reveal">
+      <p>Stop inventing puzzles. Instead treat each image as a category of one: two augmentations of the same photo should pull together, everything else should push apart. This one reframing — <em>instance discrimination</em> — became the engine of modern representation learning.</p>
+    </div>
+    <div class="papers">
+
+      <article class="paper reveal" id="m-instdisc" style="--fam:var(--f-contrast)">
+        <header><span class="yr">2018</span><h3>Instance Discrimination<span class="full">Non-Parametric Instance-Level Discrimination</span></h3><span class="fam">Contrastive</span></header>
+        <p>Image 1 is class 1, image 2 is class 2, and so on for the entire dataset. A <span class="k">memory bank</span> stored a representation for every instance so any image could be contrasted against the rest. The blueprint for what followed.</p>
+      </article>
+
+      <article class="paper reveal" id="m-cpc" style="--fam:var(--f-contrast)">
+        <header><span class="yr">2018</span><h3>Contrastive Predictive Coding<span class="full">Representation Learning with Contrastive Predictive Coding</span></h3><span class="fam">Contrastive</span></header>
+        <p>Predict the future <em>in latent space</em>: from context, guess the representation of what comes next, and pick it out from a lineup of distractors. CPC fused predictive coding, mutual-information intuition and the contrastive loss — a thread that resurfaces, years later, as JEPA.</p>
+      </article>
+
+      <article class="paper reveal" id="m-moco" style="--fam:var(--f-contrast)">
+        <header><span class="yr">2019</span><h3>MoCo<span class="full">Momentum Contrast for Unsupervised Visual Representation Learning</span></h3><span class="fam">Contrastive</span></header>
+        <p>Contrastive learning is hungry for negatives, but huge batches are expensive. MoCo's answer: a <span class="k">momentum encoder</span> feeding a rolling queue of keys, so a modest batch still sees thousands of consistent negatives. Elegant, and hugely influential.</p>
+        <div class="schematic" data-schem='{"cap":"query vs. a queue of momentum keys","type":"twin","a":{"label":"Query","chain":["augment","encoder"]},"b":{"label":"Key","chain":["augment","momentum encoder"]},"join":"contrast vs. queue","tone":"contrast"}'></div>
+      </article>
+
+      <article class="paper reveal" id="m-simclr" style="--fam:var(--f-contrast)">
+        <header><span class="yr">2020</span><h3>SimCLR<span class="full">A Simple Framework for Contrastive Learning of Visual Representations</span></h3><span class="fam">Contrastive</span></header>
+        <p>No memory bank, no queue — just do the simple thing extremely well. Aggressive crop-and-colour augmentation, a throwaway <span class="k">projection head</span>, big batches, long training and a temperature-scaled InfoNCE loss. SimCLR proved contrastive SSL could rival supervised features, and set the recipe everyone copied.</p>
+        <div class="schematic" data-schem='{"cap":"two views, pull together, push all others apart","type":"twin","a":{"label":"View A","chain":["augment","encoder","projection"]},"b":{"label":"View B","chain":["augment","encoder","projection"]},"join":"InfoNCE","tone":"contrast"}'></div>
+      </article>
+    </div>
+    <p class="prose reveal" style="margin-top:1.6rem; color:var(--ink-soft)">Two roads now forked away from raw pairwise contrast. One asked whether images could be grouped instead of compared one-by-one. The other asked the heretical question: do we even need the negatives?</p>
+  </div>
+</section>
+
+<!-- ============ ERA III ============ -->
+<section id="era3">
+  <div class="wrap">
+    <div class="chap-head reveal">
+      <p class="chap-num">Era III</p>
+      <h2 class="chap">Clusters &amp; Prototypes<span class="yrs">2018 – 2020 · compare assignments, not images</span></h2>
+    </div>
+    <div class="prose reveal">
+      <p>If contrasting every pair is wasteful, group the data and compare <em>group membership</em> instead. This clustering branch runs parallel to the contrastive one — and eventually merges with self-distillation to produce DINO.</p>
+    </div>
+    <div class="papers">
+      <article class="paper reveal" id="m-deepcluster" style="--fam:var(--f-cluster)">
+        <header><span class="yr">2018</span><h3>DeepCluster<span class="full">Deep Clustering for Unsupervised Learning of Visual Features</span></h3><span class="fam">Clustering</span></header>
+        <p>A loop: extract features, run k-means, treat the cluster IDs as <span class="k">pseudo-labels</span>, train on them, repeat. Crude but effective — and the origin of the whole clustering lineage.</p>
+      </article>
+      <article class="paper reveal" id="m-swav" style="--fam:var(--f-cluster)">
+        <header><span class="yr">2020</span><h3>SwAV<span class="full">Swapping Assignments Between Views</span></h3><span class="fam">Clustering</span></header>
+        <p>Cluster <em>online</em> against learnable prototypes, then swap: view A must predict view B's cluster assignment and vice-versa — no explicit negatives needed. SwAV also introduced <span class="k">multi-crop</span> (a few big views, several small ones), a trick DINO would inherit wholesale.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ERA IV ============ -->
+<section id="era4">
+  <div class="wrap">
+    <div class="chap-head reveal">
+      <p class="chap-num">Era IV</p>
+      <h2 class="chap">Learning Without Negatives<span class="yrs">2020 – 2022 · and the spectre of collapse</span></h2>
+    </div>
+    <div class="prose reveal">
+      <p>Here comes the era's great surprise: you can learn strong features while only ever pulling matching views <em>together</em> — never pushing anything apart. The obvious risk is <strong>collapse</strong>: map every image to the same point and the matching loss hits zero while the features become worthless. The papers below are, at heart, a catalogue of clever ways to dodge that trap.</p>
+    </div>
+    <div class="papers">
+      <article class="paper reveal" id="m-byol" style="--fam:var(--f-boot)">
+        <header><span class="yr">2020</span><h3>BYOL<span class="full">Bootstrap Your Own Latent</span></h3><span class="fam">Bootstrap</span></header>
+        <p>An online network learns to predict the output of a slowly-updated <span class="k">EMA copy of itself</span>, with a stop-gradient blocking the shortcut. No negatives at all — a result the field found almost suspicious, given how essential negatives had seemed.</p>
+        <div class="schematic" data-schem='{"cap":"online predicts a slow-moving target of itself","type":"twin","a":{"label":"Online","chain":["augment","encoder","predictor"]},"b":{"label":"Target · EMA","chain":["augment","encoder","stop-grad"]},"join":"match","tone":"boot"}'></div>
+      </article>
+      <article class="paper reveal" id="m-simsiam" style="--fam:var(--f-boot)">
+        <header><span class="yr">2021</span><h3>SimSiam<span class="full">Exploring Simple Siamese Representation Learning</span></h3><span class="fam">Bootstrap</span></header>
+        <p>Strip BYOL further: drop the momentum teacher entirely. A predictor plus a single <span class="k">stop-gradient</span> turns out to be enough to avoid collapse — a startling, clarifying minimalism.</p>
+      </article>
+      <article class="paper reveal" id="m-barlow" style="--fam:var(--f-redun)">
+        <header><span class="yr">2021</span><h3>Barlow Twins<span class="full">Self-Supervised Learning via Redundancy Reduction</span></h3><span class="fam">Redundancy</span></header>
+        <p>A different defence against collapse: statistics. Drive the cross-correlation matrix between two views toward the <span class="k">identity</span> — diagonal ones (dimensions agree across views), off-diagonal zeros (dimensions stop repeating each other). No teacher, no stop-gradient, no negatives.</p>
+      </article>
+      <article class="paper reveal" id="m-vicreg" style="--fam:var(--f-redun)">
+        <header><span class="yr">2022</span><h3>VICReg<span class="full">Variance–Invariance–Covariance Regularization</span></h3><span class="fam">Redundancy</span></header>
+        <p>Make the recipe explicit as three terms: <em>invariance</em> (views agree), <em>variance</em> (keep every dimension alive, forbidding collapse) and <em>covariance</em> (decorrelate dimensions). A clean, modular reading of what non-contrastive learning is really doing.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ERA V — DINO ============ -->
+<section id="era5">
+  <div class="wrap">
+    <div class="chap-head reveal">
+      <p class="chap-num">Era V</p>
+      <h2 class="chap">Self-Distillation: the DINO family<span class="yrs">2021 – 2025 · from emergent attention to foundation models</span></h2>
+    </div>
+    <div class="prose reveal">
+      <p>Combine SwAV's multi-crop, BYOL's momentum teacher, and a distillation loss — and something remarkable falls out. A student matches the probability distribution of a teacher that is just its own moving average, no labels anywhere. This is the most consequential modern lineage in image SSL.</p>
+    </div>
+    <div class="papers">
+      <article class="paper reveal" id="m-dino" style="--fam:var(--f-boot)">
+        <header><span class="yr">2021</span><h3>DINO<span class="full">Emerging Properties in Self-Supervised Vision Transformers</span></h3><span class="fam">Self-distillation</span></header>
+        <p>self-<strong>DI</strong>stillation with <strong>NO</strong> labels. Centering plus teacher-temperature sharpening keep it from collapsing; cross-entropy between student and teacher distributions does the learning. Its headline discovery: the attention maps of a self-supervised ViT <span class="k">segment objects on their own</span>, with no segmentation training at all.</p>
+        <div class="schematic" data-schem='{"cap":"student matches a centred, sharpened teacher","type":"twin","a":{"label":"Student","chain":["crops","ViT","softmax"]},"b":{"label":"Teacher · EMA","chain":["global crops","ViT","center + sharpen"]},"join":"cross-entropy","tone":"boot"}'></div>
+      </article>
+      <article class="paper reveal" id="m-ibot" style="--fam:var(--f-mask)">
+        <header><span class="yr">2022</span><h3>iBOT<span class="full">Image BERT Pre-Training with Online Tokenizer</span></h3><span class="fam">Masked · distilled</span></header>
+        <p>The bridge between two eras. Keep DINO's global class-token distillation, then <em>also</em> mask patches and have the student predict the teacher's representation of the missing ones — the teacher acting as a live <span class="k">visual tokenizer</span>. This local objective is what makes the features excel at dense prediction.</p>
+      </article>
+      <article class="paper reveal" id="m-dinov2" style="--fam:var(--f-boot)">
+        <header><span class="yr">2023</span><h3>DINOv2<span class="full">Learning Robust Visual Features without Supervision</span></h3><span class="fam">Self-distillation</span></header>
+        <p>Not a new loss so much as an engineering triumph: DINO's image loss + iBOT's patch loss, larger ViTs, distillation into smaller ones, and above all a <span class="k">curated 142M-image dataset</span>. The result — frozen features strong enough to rival supervised ones across classification and dense tasks — turned SSL into a genuine foundation-model pipeline.</p>
+      </article>
+      <article class="paper reveal" id="m-dinov3" style="--fam:var(--f-boot)">
+        <header><span class="yr">2025</span><h3>DINOv3<span class="full">DINOv3</span></h3><span class="fam">Self-distillation</span></header>
+        <p>Scale further, and stabilise. Its signature contribution — <span class="k">Gram anchoring</span> — stops dense patch features from quietly degrading over very long training, yielding sharp, reliable features at high resolution. DINO gave semantics; DINOv2 gave general-purpose frozen features; DINOv3 gives stable <em>dense</em> ones.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ERA VI — Masked ============ -->
+<section id="era6">
+  <div class="wrap">
+    <div class="chap-head reveal">
+      <p class="chap-num">Era VI</p>
+      <h2 class="chap">Masking &amp; Reconstruction<span class="yrs">2021 – 2023 · BERT comes to vision</span></h2>
+    </div>
+    <div class="prose reveal">
+      <p>The Vision Transformer made images look like sentences — sequences of patch tokens. So borrow BERT's move: hide some patches and predict what's missing. The only real question is <em>what</em> you predict — discrete tokens, raw pixels, or a teacher's latent code — and each answer spawned a school.</p>
+    </div>
+    <div class="papers">
+      <article class="paper reveal" id="m-beit" style="--fam:var(--f-mask)">
+        <header><span class="yr">2021</span><h3>BEiT<span class="full">BERT Pre-Training of Image Transformers</span></h3><span class="fam">Masked</span></header>
+        <p>Mask patches, predict the <span class="k">discrete visual token</span> IDs of the missing ones, using a separately-trained tokenizer — the most literal translation of masked-language modelling into pixels.</p>
+      </article>
+      <article class="paper reveal" id="m-mae" style="--fam:var(--f-mask)">
+        <header><span class="yr">2022</span><h3>MAE<span class="full">Masked Autoencoders Are Scalable Vision Learners</span></h3><span class="fam">Masked</span></header>
+        <p>Hide a brutal <span class="k">75%</span> of patches; encode only the visible quarter with a heavy encoder; let a lightweight decoder paint the missing pixels back. Because masked tokens never touch the encoder, pre-training is fast — and it scales beautifully.</p>
+        <div class="schematic" data-schem='{"cap":"encode a few visible patches, reconstruct the rest","type":"chain","nodes":[{"t":"Mask 75%","k":"in"},{"t":"Encoder (visible only)","k":"net"},{"t":"Light decoder","k":"net"},{"t":"Raw pixels","k":"out"}]}'></div>
+      </article>
+      <article class="paper reveal" id="m-maskfeat" style="--fam:var(--f-mask)">
+        <header><span class="yr">2022</span><h3>MaskFeat<span class="full">Masked Feature Prediction</span></h3><span class="fam">Masked</span></header>
+        <p>Predict neither pixels nor tokens but a <span class="k">handcrafted feature</span> — HOG gradients — of the masked region. Proof that the reconstruction <em>target</em>, not the pixels themselves, is the real design knob.</p>
+      </article>
+    </div>
+    <div class="aside reveal" style="margin-top:2rem">
+      <span class="tag">the fault line</span>
+      <h3 style="margin:.4rem 0 0; font-size:1.2rem">MAE vs. DINO — two temperaments</h3>
+      <div class="split">
+        <div class="col"><h4>DINO-like</h4><p>Learns augmentation-invariant <em>semantics</em>. Its frozen features are strong straight out of the box — reach for them when you can't or won't fine-tune.</p></div>
+        <div class="col"><h4>MAE-like</h4><p>Learns to <em>reconstruct context</em>. Often quietest as a frozen feature but strongest after end-to-end fine-tuning — a scalable, general-purpose initialisation.</p></div>
+      </div>
+      <p style="margin:1.1rem 0 0; color:var(--ink-soft); font-size:.92rem">DINOv2 makes the split explicit: match semantics for frozen use, reconstruct for fine-tuned use. Much of what came next is an attempt to get both at once.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ERA VII — JEPA ============ -->
+<section id="era7">
+  <div class="wrap">
+    <div class="chap-head reveal">
+      <p class="chap-num">Era VII</p>
+      <h2 class="chap">Predicting in Latent Space<span class="yrs">2023 – 2026 · the JEPA line</span></h2>
+    </div>
+    <div class="prose reveal">
+      <p>MAE predicts pixels — including the unpredictable noise of exact texture. What if you predicted only the <em>meaning</em> of the missing region instead? Joint-Embedding Predictive Architectures do exactly that, closing the loop opened by CPC years earlier.</p>
+    </div>
+    <div class="papers">
+      <article class="paper reveal" id="m-ijepa" style="--fam:var(--f-jepa)">
+        <header><span class="yr">2023</span><h3>I-JEPA<span class="full">Image-based Joint-Embedding Predictive Architecture</span></h3><span class="fam">JEPA</span></header>
+        <p>From a context block, predict the <span class="k">latent representations</span> of masked target blocks — no pixel decoder, no contrastive negatives, little reliance on hand-tuned augmentation. By predicting in feature space, it can shrug off detail it could never have guessed and focus on structure.</p>
+        <div class="schematic" data-schem='{"cap":"predict target representations, not pixels","type":"twin","a":{"label":"Context","chain":["context blocks","encoder","predictor"]},"b":{"label":"Target","chain":["target blocks","target encoder","stop-grad"]},"join":"match in latent space","tone":"jepa"}'></div>
+      </article>
+      <article class="paper reveal" id="m-vjepa2" style="--fam:var(--f-jepa)">
+        <header><span class="yr">2025 – 26</span><h3>V-JEPA 2 · 2.1<span class="full">Self-Supervised Video Models for Understanding, Prediction &amp; Planning</span></h3><span class="fam">JEPA</span></header>
+        <p>Carry latent prediction into <span class="k">video and time</span>. V-JEPA 2 couples self-supervised video features with an action-conditioned world model for robotic planning; 2.1 pushes toward dense, spatially and temporally structured features. Less about ImageNet, more about the current frontier — perception, prediction and control.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ERA VIII — Autoregressive ============ -->
+<section id="era8">
+  <div class="wrap">
+    <div class="chap-head reveal">
+      <p class="chap-num">Era VIII</p>
+      <h2 class="chap">Autoregressive Vision<span class="yrs">2020 – 2024 · the LLM playbook, for pixels</span></h2>
+    </div>
+    <div class="papers">
+      <article class="paper reveal" id="m-aim" style="--fam:var(--f-auto)">
+        <header><span class="yr">2024</span><h3>AIM<span class="full">Scalable Pre-Training of Large Autoregressive Image Models</span></h3><span class="fam">Autoregressive</span></header>
+        <p>Where MAE predicts randomly-masked patches with two-sided context, AIM predicts the <span class="k">next</span> patch from those before it — the GPT objective, applied to vision (with iGPT as its ancestor). The real question it poses: do image encoders enjoy the same clean scaling laws as language models? Early answer — encouragingly, yes.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MATRIX ============ -->
+<section id="matrix-sec">
+  <div class="wide">
+    <div class="chap-head reveal">
+      <p class="eyebrow">At a glance</p>
+      <h2 class="chap">The method matrix</h2>
+      <p class="lede" style="margin-top:1rem">Four questions separate almost every method: what does it match or predict, does it need negatives, is there a teacher, does it mask?</p>
+    </div>
+    <div class="matrix-scroll reveal">
+      <table class="matrix">
+        <thead>
+          <tr><th scope="col">Method</th><th scope="col">Matches / predicts</th><th scope="col">Negatives</th><th scope="col">Teacher</th><th scope="col">Masking</th></tr>
+        </thead>
+        <tbody id="matrixBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CLIP aside ============ -->
+<section id="clip-sec">
+  <div class="wrap">
+    <div class="aside reveal">
+      <span class="tag">adjacent branch</span>
+      <h2 style="margin:.4rem 0 0; font-size:clamp(1.4rem,2.4vw,1.9rem)">Where CLIP belongs</h2>
+      <p style="margin:1rem 0 0; color:var(--ink-soft)">CLIP is pivotal — but it isn't pure image-only SSL. The signal doesn't come from the image alone; it comes from <em>image–text pairs</em>. That makes it natural-language supervision, a sibling on the multimodal branch rather than a node on this tree.</p>
+      <div class="split">
+        <div class="col"><h4>Pure visual SSL</h4><p>The image supplies its own learning signal.<br><span style="font-family:var(--mono);font-size:.8rem;color:var(--ink-faint)">SimCLR · DINO · MAE → DINOv2/v3</span></p></div>
+        <div class="col"><h4>Vision–language</h4><p>Paired captions supply the alignment signal.<br><span style="font-family:var(--mono);font-size:.8rem;color:var(--ink-faint)">CLIP → ALIGN → SigLIP · EVA-CLIP</span></p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CANON ============ -->
+<section class="canon" id="canon">
+  <div class="wrap">
+    <div class="chap-head reveal">
+      <p class="eyebrow">If you read only a handful</p>
+      <h2 class="chap">The papers that changed direction</h2>
+    </div>
+    <ol class="canon-list reveal">
+      <li><div><h4>Instance Discrimination</h4><p>Made each image its own class — the idea everything contrastive is built on.</p></div></li>
+      <li><div><h4>SimCLR / MoCo</h4><p>Established modern contrastive vision SSL, and its enduring augmentation recipe.</p></div></li>
+      <li><div><h4>BYOL</h4><p>Showed the negatives were never strictly necessary.</p></div></li>
+      <li><div><h4>DINO</h4><p>Self-distilled ViTs whose attention discovers objects unsupervised.</p></div></li>
+      <li><div><h4>MAE</h4><p>Made masked reconstruction simple, fast and scalable.</p></div></li>
+      <li><div><h4>I-JEPA</h4><p>Moved prediction out of pixel space and into abstract latents.</p></div></li>
+      <li><div><h4>DINOv2 / v3</h4><p>Turned SSL encoders into general-purpose visual foundation models.</p></div></li>
+    </ol>
+    <div class="philos reveal">
+      <div class="p"><div class="h">Match</div><p>The DINO family aligns to a semantic teacher's representation.</p></div>
+      <div class="p"><div class="h">Reconstruct</div><p>The MAE / AIM family rebuilds or autoregressively predicts visual content.</p></div>
+      <div class="p"><div class="h">Predict latents</div><p>The JEPA family forecasts abstract representations of what's missing or next.</p></div>
+    </div>
+    <p class="prose reveal" style="margin-top:2.2rem; color:var(--ink-soft)">The whole field is converging on those three verbs. Pick one — <em>match, reconstruct, or predict a latent</em> — decide who the teacher is and how you'll dodge collapse, and you can place almost any new paper on this river within a minute of reading its abstract.</p>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="wrap">
+    <p class="eyebrow">Sources</p>
+    <div class="refs">
+      <div><a href="https://arxiv.org/abs/1406.6909">Exemplar CNN</a> · 1406.6909</div>
+      <div><a href="https://arxiv.org/abs/1505.05192">Context Prediction</a> · 1505.05192</div>
+      <div><a href="https://arxiv.org/abs/1603.09246">Jigsaw</a> · 1603.09246</div>
+      <div><a href="https://arxiv.org/abs/1603.08511">Colorization</a> · 1603.08511</div>
+      <div><a href="https://arxiv.org/abs/1803.07728">RotNet</a> · 1803.07728</div>
+      <div><a href="https://arxiv.org/abs/1805.01978">Instance Discrimination</a> · 1805.01978</div>
+      <div><a href="https://arxiv.org/abs/1807.03748">CPC</a> · 1807.03748</div>
+      <div><a href="https://arxiv.org/abs/1807.05520">DeepCluster</a> · 1807.05520</div>
+      <div><a href="https://arxiv.org/abs/1911.05722">MoCo</a> · 1911.05722</div>
+      <div><a href="https://arxiv.org/abs/2002.05709">SimCLR</a> · 2002.05709</div>
+      <div><a href="https://arxiv.org/abs/2006.09882">SwAV</a> · 2006.09882</div>
+      <div><a href="https://arxiv.org/abs/2006.07733">BYOL</a> · 2006.07733</div>
+      <div><a href="https://arxiv.org/abs/2011.10566">SimSiam</a> · 2011.10566</div>
+      <div><a href="https://arxiv.org/abs/2103.03230">Barlow Twins</a> · 2103.03230</div>
+      <div><a href="https://arxiv.org/abs/2105.04906">VICReg</a> · 2105.04906</div>
+      <div><a href="https://arxiv.org/abs/2104.14294">DINO</a> · 2104.14294</div>
+      <div><a href="https://arxiv.org/abs/2111.07832">iBOT</a> · 2111.07832</div>
+      <div><a href="https://arxiv.org/abs/2106.08254">BEiT</a> · 2106.08254</div>
+      <div><a href="https://arxiv.org/abs/2111.06377">MAE</a> · 2111.06377</div>
+      <div><a href="https://arxiv.org/abs/2304.07193">DINOv2</a> · 2304.07193</div>
+      <div><a href="https://arxiv.org/abs/2508.10104">DINOv3</a> · 2508.10104</div>
+      <div><a href="https://arxiv.org/abs/2301.08243">I-JEPA</a> · 2301.08243</div>
+      <div><a href="https://arxiv.org/abs/2506.09985">V-JEPA 2</a> · 2506.09985</div>
+      <div><a href="https://arxiv.org/abs/2401.08541">AIM</a> · 2401.08541</div>
+    </div>
+    <p class="colophon"><strong>Steeped</strong> — a field guide to visual self-supervised learning, 2014–2026. Years mark first public appearance, so a few precede their conference year. Set in Iowan Old Style; palette steeped to the colour of milk tea. A reference map, not a substitute for the papers themselves.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- theme toggle ---------- */
+  var root = document.documentElement;
+  var btn = document.getElementById("themeBtn");
+  var ico = document.getElementById("themeIco");
+  function currentDark(){
+    var t = root.getAttribute("data-theme");
+    if(t) return t === "dark";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  function syncIco(){ ico.textContent = currentDark() ? "☾" : "☀"; }
+  btn.addEventListener("click", function(){
+    root.setAttribute("data-theme", currentDark() ? "light" : "dark");
+    syncIco(); drawRiver(); if(window.__drawTree) window.__drawTree();
+  });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function(){ syncIco(); drawRiver(); if(window.__drawTree) window.__drawTree(); });
+  syncIco();
+
+  function famColor(v){ return getComputedStyle(root).getPropertyValue(v).trim(); }
+  function tone(name){ return { in:famColor('--paper-3'), net:famColor('--accent'), out:famColor('--caramel') }; }
+
+  /* =========================================================
+     SCHEMATICS — clean pill-and-arrow diagrams (chain / twin)
+     ========================================================= */
+  var mctx = document.createElement("canvas").getContext("2d");
+  function measure(t, f){ mctx.font = f; return mctx.measureText(t).width; }
+  var PILLFONT = "600 12px ui-monospace, Menlo, monospace";
+  var SUBFONT  = "600 9.5px ui-sans-serif, system-ui, sans-serif";
+
+  function pill(x,y,label,fill,stroke,txt){
+    var pad=13, w=Math.max(52, measure(label,PILLFONT)+pad*2), h=30;
+    return {w:w,h:h,svg:'<g transform="translate('+x+','+y+')">'
+      +'<rect width="'+w+'" height="'+h+'" rx="8" fill="'+fill+'" stroke="'+stroke+'" stroke-width="1"/>'
+      +'<text x="'+(w/2)+'" y="'+(h/2+4)+'" text-anchor="middle" fill="'+txt+'" style="font:'+PILLFONT+'">'+esc(label)+'</text></g>'};
+  }
+  function arrow(x1,y,x2,col){
+    return '<g stroke="'+col+'" stroke-width="1.4" fill="none">'
+      +'<line x1="'+x1+'" y1="'+y+'" x2="'+(x2-5)+'" y2="'+y+'"/>'
+      +'<path d="M'+(x2-6)+' '+(y-3.4)+' L'+x2+' '+y+' L'+(x2-6)+' '+(y+3.4)+'" stroke-linejoin="round" stroke-linecap="round"/></g>';
+  }
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  function kindStyle(k){
+    var p3=famColor('--paper-3'), line=famColor('--line-2'), ink=famColor('--ink-soft'),
+        acc=famColor('--accent'), accd=famColor('--accent-deep'), car=famColor('--caramel'), p2=famColor('--paper-2');
+    if(k==='in')  return {fill:p3, stroke:line, txt:ink};
+    if(k==='net') return {fill:'color-mix(in oklab,'+acc+' 20%, '+p2+')', stroke:acc, txt:accd};
+    if(k==='out') return {fill:'color-mix(in oklab,'+car+' 22%, '+p2+')', stroke:car, txt:car};
+    return {fill:p2, stroke:line, txt:ink};
+  }
+
+  function renderChain(spec){
+    var gap=30, x=2, y=8, parts=[], col=famColor('--line-2');
+    for(var i=0;i<spec.nodes.length;i++){
+      var n=spec.nodes[i], st=kindStyle(n.k);
+      var p=pill(x,y,n.t,st.fill,st.stroke,st.txt); parts.push(p.svg);
+      if(i<spec.nodes.length-1){ parts.push(arrow(x+p.w+6, y+15, x+p.w+gap-2, col)); }
+      x+=p.w+gap;
+    }
+    return svgWrap(parts.join(""), x, 46);
+  }
+
+  function renderTwin(spec){
+    var accMap={contrast:'--f-contrast',boot:'--f-boot',jepa:'--f-jepa'};
+    var accent = famColor(accMap[spec.tone]||'--accent');
+    var line=famColor('--line-2'), p2=famColor('--paper-2'), p3=famColor('--paper-3'), ink=famColor('--ink-soft');
+    function branch(b, y){
+      var x=64, out=[], lbl=famColor('--ink-faint');
+      out.push('<text x="4" y="'+(y+19)+'" fill="'+lbl+'" style="font:'+SUBFONT+'; letter-spacing:.08em; text-transform:uppercase">'+esc(b.label)+'</text>');
+      for(var i=0;i<b.chain.length;i++){
+        var isNet = i>0;
+        var st = isNet ? {fill:'color-mix(in oklab,'+accent+' 18%, '+p2+')',stroke:accent,txt:famColor('--ink')} : {fill:p3,stroke:line,txt:ink};
+        var p=pill(x,y,b.chain[i],st.fill,st.stroke,st.txt); out.push(p.svg);
+        if(i<b.chain.length-1) out.push(arrow(x+p.w+5,y+15,x+p.w+26,line));
+        x+=p.w+31;
+      }
+      return {svg:out.join(""), endx:x-31};
+    }
+    var top=branch(spec.a, 8), bot=branch(spec.b, 66);
+    var endx=Math.max(top.endx, bot.endx)+10;
+    var joinW=Math.max(70, measure(spec.join,PILLFONT)+26), joinX=endx+34, joinY=37;
+    // converging connectors
+    var conv='<g stroke="'+accent+'" stroke-width="1.4" fill="none" opacity=".9">'
+      +'<path d="M'+endx+' 23 C '+(endx+18)+' 23, '+(endx+16)+' '+(joinY+15)+', '+(joinX-6)+' '+(joinY+15)+'"/>'
+      +'<path d="M'+endx+' 81 C '+(endx+18)+' 81, '+(endx+16)+' '+(joinY+15)+', '+(joinX-6)+' '+(joinY+15)+'"/>'
+      +'<path d="M'+(joinX-9)+' '+(joinY+11)+' L'+(joinX-3)+' '+(joinY+15)+' L'+(joinX-9)+' '+(joinY+19)+'" stroke-linejoin="round" stroke-linecap="round"/></g>';
+    var join='<g transform="translate('+joinX+','+(joinY)+')">'
+      +'<rect width="'+joinW+'" height="30" rx="15" fill="'+accent+'" opacity=".92"/>'
+      +'<text x="'+(joinW/2)+'" y="19" text-anchor="middle" fill="'+famColor('--paper')+'" style="font:'+PILLFONT+'">'+esc(spec.join)+'</text></g>';
+    return svgWrap(top.svg+bot.svg+conv+join, joinX+joinW+6, 104);
+  }
+
+  function svgWrap(inner,w,h){
+    return '<svg width="'+Math.ceil(w)+'" height="'+h+'" viewBox="0 0 '+Math.ceil(w)+' '+h+'" xmlns="http://www.w3.org/2000/svg">'+inner+'</svg>';
+  }
+
+  document.querySelectorAll(".schematic").forEach(function(el){
+    var spec; try{ spec=JSON.parse(el.getAttribute("data-schem")); }catch(e){ return; }
+    var svg = spec.type==="twin" ? renderTwin(spec) : renderChain(spec);
+    el.innerHTML = '<div class="schem-cap">'+esc(spec.cap||"")+'</div>'+svg;
+  });
+
+  /* =========================================================
+     THE RIVER — lineage graph
+     ========================================================= */
+  var FAM = [
+    {key:"pretext",  label:"Pretext",         v:"--f-pretext"},
+    {key:"contrast", label:"Contrastive",     v:"--f-contrast"},
+    {key:"cluster",  label:"Clustering",      v:"--f-cluster"},
+    {key:"boot",     label:"Self-distillation",v:"--f-boot"},
+    {key:"redun",    label:"Redundancy",      v:"--f-redun"},
+    {key:"mask",     label:"Masked modeling", v:"--f-mask"},
+    {key:"jepa",     label:"JEPA (latent)",   v:"--f-jepa"},
+    {key:"auto",     label:"Autoregressive",  v:"--f-auto"}
+  ];
+  var laneIdx={}; FAM.forEach(function(f,i){ laneIdx[f.key]=i; });
+
+  var NODES = [
+    {id:"exemplar",   t:"Exemplar",    y:2014, f:"pretext"},
+    {id:"context",    t:"Context Pred",y:2015, f:"pretext", off:-14},
+    {id:"jigsaw",     t:"Jigsaw",      y:2016, f:"pretext", off:-16},
+    {id:"color",      t:"Colorization",y:2016, f:"pretext", off:16},
+    {id:"rotnet",     t:"RotNet",      y:2018, f:"pretext"},
+    {id:"instdisc",   t:"Instance Disc",y:2018,f:"contrast", p:["exemplar"]},
+    {id:"cpc",        t:"CPC",         y:2018, f:"contrast", off:20, p:["instdisc"]},
+    {id:"moco",       t:"MoCo",        y:2019, f:"contrast", p:["instdisc"]},
+    {id:"simclr",     t:"SimCLR",      y:2020, f:"contrast", off:-16, p:["instdisc"]},
+    {id:"deepcluster",t:"DeepCluster", y:2018, f:"cluster",  p:["instdisc"]},
+    {id:"swav",       t:"SwAV",        y:2020, f:"cluster",  p:["deepcluster"]},
+    {id:"byol",       t:"BYOL",        y:2020, f:"boot",     p:["moco"]},
+    {id:"simsiam",    t:"SimSiam",     y:2021, f:"boot", off:20, p:["byol"]},
+    {id:"dino",       t:"DINO",        y:2021, f:"boot", off:-14, p:["byol","swav"]},
+    {id:"dinov2",     t:"DINOv2",      y:2023, f:"boot",     p:["dino","ibot"]},
+    {id:"dinov3",     t:"DINOv3",      y:2025, f:"boot",     p:["dinov2"]},
+    {id:"barlow",     t:"Barlow Twins",y:2021, f:"redun",    p:["byol"]},
+    {id:"vicreg",     t:"VICReg",      y:2022, f:"redun",    p:["barlow"]},
+    {id:"beit",       t:"BEiT",        y:2021, f:"mask"},
+    {id:"ibot",       t:"iBOT",        y:2022, f:"mask", off:-16, p:["dino","beit"]},
+    {id:"mae",        t:"MAE",         y:2022, f:"mask", off:16, p:["beit"]},
+    {id:"maskfeat",   t:"MaskFeat",    y:2022, f:"mask", off:44, p:["beit"]},
+    {id:"cpc2",hidden:true},
+    {id:"ijepa",      t:"I-JEPA",      y:2023, f:"jepa",     p:["cpc","mae"]},
+    {id:"vjepa2",     t:"V-JEPA 2",    y:2025, f:"jepa",     p:["ijepa"]},
+    {id:"vjepa21",    t:"V-JEPA 2.1",  y:2026, f:"jepa",     p:["vjepa2"]},
+    {id:"igpt",       t:"iGPT",        y:2020, f:"auto"},
+    {id:"aim",        t:"AIM",         y:2024, f:"auto",     p:["igpt"]}
+  ].filter(function(n){ return !n.hidden; });
+
+  var NMAP={}; NODES.forEach(function(n){ NMAP[n.id]=n; });
+  // adjacency for hover highlighting
+  var kids={}; NODES.forEach(function(n){ (n.p||[]).forEach(function(pp){ (kids[pp]=kids[pp]||[]).push(n.id); }); });
+
+  var Y0=2014, Y1=2026;
+  var svg = document.getElementById("river");
+  var filtered=null;
+
+  function drawRiver(){
+    var laneH=64, top=42, botPad=20, leftLbl=120, rightPad=40;
+    var W=1180, plotW=W-leftLbl-rightPad;
+    var H=top+FAM.length*laneH+botPad;
+    function X(y){ return leftLbl + (y-Y0)/(Y1-Y0)*plotW; }
+    function laneY(f){ return top + laneIdx[f]*laneH + laneH/2; }
+    function Y(n){ return laneY(n.f) + (n.off||0); }
+
+    var col={}; FAM.forEach(function(f){ col[f.key]=famColor(f.v); });
+    var out=[];
+
+    // lane bands + labels
+    FAM.forEach(function(f,i){
+      var yTop=top+i*laneH;
+      if(i%2===0) out.push('<rect class="rv-band" x="0" y="'+yTop+'" width="'+W+'" height="'+laneH+'"/>');
+      out.push('<text class="rv-lane" x="14" y="'+(yTop+laneH/2+4)+'" fill="'+col[f.key]+'" opacity=".9">'+f.label+'</text>');
+      out.push('<line x1="'+leftLbl+'" y1="'+(yTop)+'" x2="'+W+'" y2="'+yTop+'" stroke="'+famColor('--line')+'" stroke-width="1" opacity=".5"/>');
+    });
+
+    // year axis
+    for(var yr=Y0; yr<=Y1; yr+=2){
+      var xx=X(yr);
+      out.push('<line x1="'+xx+'" y1="'+top+'" x2="'+xx+'" y2="'+(H-botPad)+'" stroke="'+famColor('--line')+'" stroke-width="1" opacity=".4"/>');
+      out.push('<text class="rv-axis" x="'+xx+'" y="'+(top-14)+'" text-anchor="middle" fill="'+famColor('--ink-faint')+'">'+yr+'</text>');
+    }
+
+    // edges
+    NODES.forEach(function(n){
+      (n.p||[]).forEach(function(pid){
+        var pnode=NMAP[pid]; if(!pnode) return;
+        var x1=X(pnode.y), y1=Y(pnode), x2=X(n.y), y2=Y(n);
+        var mx=(x1+x2)/2;
+        var d='M'+x1+' '+y1+' C '+mx+' '+y1+', '+mx+' '+y2+', '+x2+' '+y2;
+        out.push('<path class="rv-edge" data-a="'+pid+'" data-b="'+n.id+'" data-f="'+n.f+'" d="'+d+'" stroke="'+col[n.f]+'" stroke-width="1.8" opacity=".5"/>');
+      });
+    });
+
+    // nodes
+    NODES.forEach(function(n){
+      var x=X(n.y), y=Y(n), c=col[n.f];
+      var labelRight = n.y < Y1-1.4;
+      var lx = labelRight ? x+9 : x-9;
+      var anchor = labelRight ? "start" : "end";
+      out.push('<g class="rv-node" data-id="'+n.id+'" data-f="'+n.f+'" tabindex="0" role="link" aria-label="'+n.t+'">'
+        +'<circle cx="'+x+'" cy="'+y+'" r="5" fill="'+c+'" fill-opacity=".92" stroke="'+famColor('--paper-2')+'" stroke-width="1.5"/>'
+        +'<text class="rv-label" x="'+lx+'" y="'+(y+3.6)+'" text-anchor="'+anchor+'">'+n.t+'</text></g>');
+    });
+
+    svg.setAttribute("viewBox","0 0 "+W+" "+H);
+    svg.setAttribute("width", W);
+    svg.setAttribute("height", H);
+    svg.style.minWidth = "900px";
+    svg.innerHTML = out.join("");
+    wireNodes();
+    if(filtered) applyFamFilter(filtered);
+  }
+
+  function ancestryOf(id){
+    var set={}; (function up(i){ if(set[i])return; set[i]=1; var n=NMAP[i]; if(n&&n.p)n.p.forEach(up); })(id);
+    (function down(i){ (kids[i]||[]).forEach(function(k){ if(!set[k]){ set[k]=1; down(k);} }); })(id);
+    return set;
+  }
+  function wireNodes(){
+    svg.querySelectorAll(".rv-node").forEach(function(g){
+      var id=g.getAttribute("data-id");
+      function on(){
+        var set=ancestryOf(id);
+        svg.classList.add("dim");
+        svg.querySelectorAll(".rv-node").forEach(function(nn){ nn.classList.toggle("lit", !!set[nn.getAttribute("data-id")]); });
+        svg.querySelectorAll(".rv-edge").forEach(function(e){ e.classList.toggle("lit", !!set[e.getAttribute("data-a")] && !!set[e.getAttribute("data-b")]); });
+      }
+      function off(){ svg.classList.remove("dim"); svg.querySelectorAll(".lit").forEach(function(x){x.classList.remove("lit");}); }
+      g.addEventListener("mouseenter",on); g.addEventListener("mouseleave",off);
+      g.addEventListener("focus",on); g.addEventListener("blur",off);
+      function go(){ var el=document.getElementById("m-"+id); if(el) el.scrollIntoView({behavior: reduce?"auto":"smooth", block:"center"}); }
+      g.addEventListener("click",go);
+      g.addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); go(); } });
+    });
+  }
+  function applyFamFilter(fkey){
+    // light the family's nodes and their descendants
+    var set={};
+    NODES.forEach(function(n){ if(n.f===fkey){ set[n.id]=1; (function down(i){ (kids[i]||[]).forEach(function(k){ if(!set[k]){set[k]=1;down(k);} }); })(n.id); } });
+    svg.classList.add("fam-dim");
+    svg.querySelectorAll(".rv-node").forEach(function(nn){ nn.classList.toggle("famlit", !!set[nn.getAttribute("data-id")]); });
+    svg.querySelectorAll(".rv-edge").forEach(function(e){ e.classList.toggle("famlit", !!set[e.getAttribute("data-a")] && !!set[e.getAttribute("data-b")]); });
+  }
+  function clearFamFilter(){ svg.classList.remove("fam-dim"); svg.querySelectorAll(".famlit").forEach(function(x){x.classList.remove("famlit");}); }
+
+  // legend
+  var legend=document.getElementById("riverLegend");
+  FAM.forEach(function(f){
+    var b=document.createElement("button");
+    b.innerHTML='<span class="sw" style="--c:var('+f.v+')"></span>'+f.label;
+    b.addEventListener("mouseenter",function(){ applyFamFilter(f.key); });
+    b.addEventListener("mouseleave",function(){ if(filtered!==f.key) clearFamFilter(); });
+    b.addEventListener("click",function(){
+      if(filtered===f.key){ filtered=null; legend.classList.remove("filtered"); b.classList.remove("on"); clearFamFilter(); }
+      else { filtered=f.key; legend.classList.add("filtered");
+        legend.querySelectorAll("button").forEach(function(x){x.classList.remove("on");}); b.classList.add("on"); applyFamFilter(f.key); }
+    });
+    legend.appendChild(b);
+  });
+
+  drawRiver();
+  window.addEventListener("resize", function(){ /* svg is fixed-width & scrolls; no redraw needed */ });
+
+  /* =========================================================
+     SIMPLE FAMILY TREE — a clean top-down flowchart
+     ========================================================= */
+  var tsvg = document.getElementById("tree");
+  var TSERIF = "'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif";
+  var TH = 66;
+  var TBOX = [
+    {id:"root", cx:590, y:20,  w:280, t:"Handcrafted Pretexts",     s:"Jigsaw · RotNet · Colorization", f:"pretext",  link:"era1"},
+    {id:"inst", cx:590, y:132, w:280, t:"Instance Discrimination",  s:"every image = its own class",     f:"contrast", link:"m-instdisc"},
+    {id:"contr",cx:590, y:244, w:280, t:"Contrastive Learning",     s:"SimCLR · MoCo",                   f:"contrast", link:"m-simclr"},
+    {id:"clust",cx:250, y:372, w:250, t:"Clustering",               s:"DeepCluster · SwAV",              f:"cluster",  link:"m-swav"},
+    {id:"boot", cx:770, y:372, w:290, t:"No-negatives · Bootstrap", s:"BYOL · SimSiam",                  f:"boot",     link:"m-byol"},
+    {id:"dino", cx:600, y:500, w:230, t:"Self-distillation",        s:"DINO",                            f:"boot",     link:"m-dino"},
+    {id:"redun",cx:930, y:500, w:250, t:"Redundancy Reduction",     s:"Barlow Twins · VICReg",           f:"redun",    link:"m-barlow"},
+    {id:"found",cx:600, y:628, w:280, t:"Visual Foundation Models", s:"DINOv2 · DINOv3",                 f:"boot",     link:"m-dinov2"},
+    {id:"mask", cx:250, y:772, w:280, t:"Masked Modeling",          s:"BEiT · MAE · iBOT",               f:"mask",     link:"m-mae"},
+    {id:"jepa", cx:600, y:772, w:280, t:"Latent Prediction · JEPA", s:"I-JEPA · V-JEPA 2",               f:"jepa",     link:"m-ijepa"},
+    {id:"auto", cx:930, y:772, w:230, t:"Autoregressive",           s:"iGPT · AIM",                      f:"auto",     link:"m-aim"}
+  ];
+  var TMAP={}; TBOX.forEach(function(b){ TMAP[b.id]=b; });
+  var TEDGE = [
+    {a:"root", b:"inst"}, {a:"inst", b:"contr"},
+    {a:"contr",b:"clust"},{a:"contr",b:"boot"},
+    {a:"boot", b:"dino"}, {a:"boot", b:"redun"},
+    {a:"dino", b:"found"},
+    {a:"clust",b:"dino", dash:true, lbl:"multi-crop"},
+    {a:"mask", b:"jepa", dash:true, lbl:"predict latents, not pixels"}
+  ];
+
+  function drawTree(){
+    var W=1120, H=858;
+    var ink=famColor('--ink'), sub=famColor('--ink-faint'),
+        p2=famColor('--paper-2'), p3=famColor('--paper-3'),
+        line=famColor('--line'), line2=famColor('--line-2'), inks=famColor('--ink-soft');
+    var col={}; FAM.forEach(function(f){ col[f.key]=famColor(f.v); });
+    var o=[];
+
+    function edgePath(d,c,dash){
+      return '<path d="'+d+'" fill="none" stroke="'+c+'" stroke-width="2" stroke-linejoin="round" '
+        +(dash?'stroke-dasharray="5 6" opacity=".7"':'opacity=".85"')+'/>';
+    }
+    function headDown(x,y,c){ return '<path d="M'+(x-5)+' '+(y-2)+' L'+x+' '+(y+5)+' L'+(x+5)+' '+(y-2)+'" fill="none" stroke="'+c+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'; }
+    function headRight(x,y,c){ return '<path d="M'+(x-6)+' '+(y-4)+' L'+x+' '+y+' L'+(x-6)+' '+(y+4)+'" fill="none" stroke="'+c+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'; }
+    function elabel(x,y,t){
+      var w=measure(t,"600 10px ui-sans-serif")+14;
+      return '<g><rect x="'+(x-w/2)+'" y="'+(y-11)+'" width="'+w+'" height="16" rx="8" fill="'+p2+'" opacity=".95"/>'
+        +'<text x="'+x+'" y="'+(y+1)+'" text-anchor="middle" fill="'+inks+'" style="font:600 10px ui-sans-serif,system-ui,sans-serif; letter-spacing:.02em">'+esc(t)+'</text></g>';
+    }
+
+    // edges
+    TEDGE.forEach(function(e){
+      var a=TMAP[e.a], b=TMAP[e.b], c=col[b.f];
+      if(a.y===b.y){ // same-row horizontal influence
+        var x1=a.cx+a.w/2, x2=b.cx-b.w/2, yy=a.y+TH/2;
+        o.push(edgePath('M'+x1+' '+yy+' L'+(x2-3)+' '+yy, c, e.dash));
+        o.push(headRight(x2-2, yy, c));
+        if(e.lbl) o.push(elabel((x1+x2)/2, yy-9, e.lbl));
+        return;
+      }
+      var pb=a.y+TH, ct=b.y, mid=(pb+ct)/2;
+      o.push(edgePath('M'+a.cx+' '+pb+' L'+a.cx+' '+mid+' L'+b.cx+' '+mid+' L'+b.cx+' '+(ct-6), c, e.dash));
+      o.push(headDown(b.cx, ct-6, c));
+      if(e.lbl) o.push(elabel((a.cx+b.cx)/2, mid-6, e.lbl));
+    });
+
+    // ViT-era divider band + feeders
+    var dy=700;
+    o.push('<rect x="60" y="'+dy+'" width="'+(W-120)+'" height="34" rx="17" fill="'+p3+'" stroke="'+line+'"/>');
+    o.push('<text x="'+(W/2)+'" y="'+(dy+22)+'" text-anchor="middle" fill="'+inks+'" style="font:600 12px ui-sans-serif,system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase">The Vision Transformer arrives — hide patches, then predict</text>');
+    [250,600,930].forEach(function(vx){
+      o.push('<path d="M'+vx+' '+(dy+34)+' L'+vx+' '+(772-6)+'" fill="none" stroke="'+line2+'" stroke-width="2" opacity=".55"/>');
+      o.push(headDown(vx, 772-6, line2));
+    });
+
+    // boxes
+    TBOX.forEach(function(b){
+      var x=b.cx-b.w/2, c=col[b.f];
+      o.push('<g class="tr-box" data-link="'+b.link+'" tabindex="0" role="link" aria-label="'+esc(b.t)+'">'
+        +'<rect x="'+x+'" y="'+b.y+'" width="'+b.w+'" height="'+TH+'" rx="13" fill="'+p2+'" stroke="'+line+'" stroke-width="1"/>'
+        +'<rect x="'+x+'" y="'+(b.y+4)+'" width="5" height="'+(TH-8)+'" rx="2.5" fill="'+c+'"/>'
+        +'<text x="'+(x+20)+'" y="'+(b.y+28)+'" fill="'+ink+'" style="font:600 15px '+TSERIF+'">'+esc(b.t)+'</text>'
+        +'<text x="'+(x+20)+'" y="'+(b.y+48)+'" fill="'+sub+'" style="font:600 11px ui-monospace,Menlo,monospace">'+esc(b.s)+'</text>'
+        +'</g>');
+    });
+
+    tsvg.setAttribute("viewBox","0 0 "+W+" "+H);
+    tsvg.setAttribute("width", W); tsvg.setAttribute("height", H);
+    tsvg.style.minWidth="820px";
+    tsvg.innerHTML=o.join("");
+
+    tsvg.querySelectorAll(".tr-box").forEach(function(g){
+      function go(){ var el=document.getElementById(g.getAttribute("data-link")); if(el) el.scrollIntoView({behavior: reduce?"auto":"smooth", block:"center"}); }
+      g.addEventListener("click", go);
+      g.addEventListener("keydown", function(ev){ if(ev.key==="Enter"||ev.key===" "){ ev.preventDefault(); go(); } });
+    });
+  }
+  window.__drawTree = drawTree;
+  drawTree();
+
+  /* =========================================================
+     MATRIX
+     ========================================================= */
+  var MATRIX = [
+    ["SimCLR","contrast","Embeddings of two views","y","n","n"],
+    ["MoCo","contrast","Query vs. momentum-key queue","y","m|EMA","n"],
+    ["SwAV","cluster","Prototype assignments, swapped","m|implicit","n","n"],
+    ["BYOL","boot","Online predicts EMA target","n","m|EMA","n"],
+    ["SimSiam","boot","One branch predicts stop-grad branch","n","n","n"],
+    ["Barlow Twins","redun","Cross-correlation → identity","n","n","n"],
+    ["VICReg","redun","Variance · invariance · covariance","n","n","n"],
+    ["DINO","boot","Teacher's output distribution","n","m|EMA","m|opt."],
+    ["BEiT","mask","Discrete visual tokens","n","m|fixed","y"],
+    ["MAE","mask","Missing raw pixels","n","n","y"],
+    ["iBOT","mask","Teacher patch representations","n","m|EMA","y"],
+    ["I-JEPA","jepa","Latent of target blocks","n","m|target","y"],
+    ["AIM","auto","Next patch / feature","n","n","m|causal"]
+  ];
+  function cell(v){
+    if(v==="y") return '<span class="yn y">yes</span>';
+    if(v==="n") return '<span class="yn n">no</span>';
+    var parts=v.split("|");
+    if(parts[0]==="m") return '<span class="yn m">'+(parts[1]||"partial")+'</span>';
+    return esc(v);
+  }
+  var mb=document.getElementById("matrixBody");
+  MATRIX.forEach(function(r){
+    var tr=document.createElement("tr");
+    tr.innerHTML='<th scope="row" style="--fam:var(--f-'+r[1]+')"><span class="fdot"></span>'+r[0]+'</th>'
+      +'<td>'+esc(r[2])+'</td><td>'+cell(r[3])+'</td><td>'+cell(r[4])+'</td><td>'+cell(r[5])+'</td>';
+    mb.appendChild(tr);
+  });
+
+  /* =========================================================
+     REVEAL ON SCROLL + rail
+     ========================================================= */
+  if(!reduce && "IntersectionObserver" in window){
+    var io=new IntersectionObserver(function(es){
+      es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add("in"); io.unobserve(e.target); } });
+    },{rootMargin:"0px 0px -8% 0px", threshold:.08});
+    document.querySelectorAll(".reveal").forEach(function(el){ io.observe(el); });
+  } else {
+    document.querySelectorAll(".reveal").forEach(function(el){ el.classList.add("in"); });
+  }
+
+  /* chapter rail */
+  var chapters=[
+    ["tree-sec","Family tree"],["river-sec","Timeline"],["era1","I · Pretext"],["era2","II · Contrastive"],["era3","III · Clusters"],
+    ["era4","IV · No-negatives"],["era5","V · DINO"],["era6","VI · Masked"],
+    ["era7","VII · JEPA"],["era8","VIII · Autoregressive"],["matrix-sec","Matrix"],["canon","Canon"]
+  ];
+  var rail=document.createElement("nav"); rail.className="rail"; rail.setAttribute("aria-label","Chapters");
+  chapters.forEach(function(c){
+    var a=document.createElement("a"); a.href="#"+c[0]; a.dataset.id=c[0];
+    a.innerHTML='<span class="tick"></span><span class="lbl">'+c[1]+'</span>';
+    rail.appendChild(a);
+  });
+  document.body.appendChild(rail);
+  var railLinks=rail.querySelectorAll("a");
+  if("IntersectionObserver" in window){
+    var seen={};
+    var ro=new IntersectionObserver(function(es){
+      es.forEach(function(e){ seen[e.target.id]=e.isIntersecting?e.intersectionRatio:0; });
+      var best=null,bv=0;
+      Object.keys(seen).forEach(function(k){ if(seen[k]>bv){bv=seen[k];best=k;} });
+      railLinks.forEach(function(a){ a.classList.toggle("active", a.dataset.id===best); });
+    },{threshold:[.15,.4,.7]});
+    chapters.forEach(function(c){ var el=document.getElementById(c[0]); if(el) ro.observe(el); });
+  }
+
+  /* =========================================================
+     HERO — drifting steam particles (subtle, decorative)
+     ========================================================= */
+  var cv=document.getElementById("steam"), cx=cv.getContext("2d"), parts=[], raf;
+  function sizeCv(){ var r=cv.getBoundingClientRect(); cv.width=r.width*devicePixelRatio; cv.height=r.height*devicePixelRatio; cx.setTransform(devicePixelRatio,0,0,devicePixelRatio,1,1); }
+  function seed(){ var r=cv.getBoundingClientRect(); parts=[]; var n=Math.min(46, Math.round(r.width/26));
+    for(var i=0;i<n;i++){ parts.push({x:Math.random()*r.width, y:Math.random()*r.height, r:8+Math.random()*26, s:.12+Math.random()*.28, o:.04+Math.random()*.10, dx:(Math.random()-.5)*.12}); } }
+  function tick(){ var r=cv.getBoundingClientRect(); cx.clearRect(0,0,r.width,r.height);
+    var accent = famColor('--accent'); var car = famColor('--caramel');
+    parts.forEach(function(p,i){ p.y-=p.s; p.x+=p.dx; if(p.y< -p.r){ p.y=r.height+p.r; p.x=Math.random()*r.width; }
+      var g=cx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r);
+      var c = i%3===0 ? car : accent;
+      g.addColorStop(0, hexA(c, p.o)); g.addColorStop(1, hexA(c,0));
+      cx.fillStyle=g; cx.beginPath(); cx.arc(p.x,p.y,p.r,0,7); cx.fill(); });
+    raf=requestAnimationFrame(tick);
+  }
+  function hexA(h,a){ h=h.replace('#',''); if(h.length===3){h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];}
+    var n=parseInt(h,16); return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a.toFixed(3)+')'; }
+  if(!reduce){ sizeCv(); seed(); tick();
+    var rt; window.addEventListener("resize",function(){ clearTimeout(rt); rt=setTimeout(function(){ sizeCv(); seed(); },200); });
+  }
+})();
+</script>

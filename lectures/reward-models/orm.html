@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>05 · Outcome Reward Model · Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl · Rewards</span>
+    </a>
+    <nav class="chapter-nav" aria-label="Chapters">
+      <a href="index.html">00 · Overview</a>
+      <a href="scalar.html">01 · Scalar</a>
+      <a href="pointwise.html">02 · Pointwise</a>
+      <a href="pairwise.html">03 · Pairwise</a>
+      <a href="listwise.html">04 · Listwise</a>
+      <a class="active" href="orm.html">05 · ORM</a>
+      <a href="prm.html">06 · PRM</a>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#idea">1. What an ORM does</a></li>
+        <li><a href="#example">2. Simple example</a></li>
+        <li><a href="#architecture">3. Architecture</a></li>
+        <li><a href="#training">4. Training</a></li>
+        <li><a href="#weakness">5. Main weakness</a></li>
+        <li><a href="#advantage">6. Main advantage</a></li>
+        <li><a href="#vs">7. ORM versus PRM</a></li>
+        <li><a href="#core">8. Core understanding</a></li>
+        <li><a href="#lab">9. Laboratory</a></li>
+        <li><a href="#worked">10. Worked example</a></li>
+        <li><a href="#next">11. What comes next</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Reward Models · Chapter 05</p>
+      <h1 class="study-title">Outcome <em>reward model</em> (ORM)</h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        An ORM judges the complete solution only after it finishes. It maps a problem
+        and a full answer to one final reward. It does not score individual reasoning
+        steps. Labels are often automatic (answer match, unit tests, task success),
+        which makes ORMs scalable, but credit assignment is weak: a lucky final answer
+        can hide broken intermediate steps.
+      </div>
+
+      <section class="study-section" id="idea">
+        <h2>1. What an ORM does</h2>
+        <div class="prose-study">
+          <p class="lead">
+            An ORM judges the complete solution only after it finishes.
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            \text{Problem} + \text{Full solution}
+            \;\longrightarrow\;
+            \text{one final reward}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            It does <strong>not</strong> score individual reasoning steps. The whole
+            trajectory collapses into a single outcome signal.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="example">
+        <h2>2. Simple example</h2>
+        <div class="prose-study">
+          <p>Problem:</p>
+          <blockquote>What is \(15 \times 6\)?</blockquote>
+        </div>
+
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Solution A</h4>
+            <div class="eq-block tight" style="margin:0.5rem 0">
+              \[
+                15 \times 6 = 90
+              \]
+            </div>
+            <p>ORM output:</p>
+            <div class="eq-block tight" style="margin:0.5rem 0">
+              \[
+                r_A = 0.98
+              \]
+            </div>
+          </div>
+          <div class="compare-card">
+            <h4>Solution B</h4>
+            <div class="eq-block tight" style="margin:0.5rem 0">
+              \[
+                15 \times 6 = 80
+              \]
+            </div>
+            <p>ORM output:</p>
+            <div class="eq-block tight" style="margin:0.5rem 0">
+              \[
+                r_B = 0.04
+              \]
+            </div>
+          </div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            The ORM says whether the <strong>overall answer is correct or good</strong>.
+            It does not explain which line of work was responsible.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="architecture">
+        <h2>3. Architecture</h2>
+        <div class="bellman-trace" style="max-width:36rem">
+<pre style="margin:0;font-family:inherit;white-space:pre-wrap">
+Problem + complete reasoning + final answer
+                    |
+                    v
+               Transformer
+                    |
+                    v
+          Final-token hidden state h_T
+                    |
+                    v
+               Reward head
+                    |
+                    v
+             One outcome score
+</pre>
+        </div>
+        <div class="prose-study">
+          <p>Mathematically:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            r_\theta(x,y)=w^\top h_T+b
+          \]
+        </div>
+        <div class="prose-study">
+          <ul>
+            <li>\(x\): problem</li>
+            <li>\(y\): complete solution</li>
+            <li>\(h_T\): final-token representation</li>
+            <li>\(r_\theta\): outcome reward</li>
+          </ul>
+          <p>For correctness classification, pass the score through a sigmoid:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            p_\theta(\text{correct}\mid x,y)
+            =
+            \sigma(w^\top h_T+b)
+          \]
+        </div>
+        <div class="note-box">
+          <span class="box-label">Relation to earlier chapters</span>
+          <p>
+            Architecturally this looks like the scalar RM or the pointwise verifier.
+            The ORM distinction is <em>what is being judged</em>: the finished outcome
+            of a full solution, usually with an automatic correctness label, not a
+            preference between two open-ended replies.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="training">
+        <h2>4. Training</h2>
+        <div class="prose-study">
+          <p>Suppose the label is whether the final answer is right:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            z=
+            \begin{cases}
+            1, &amp; \text{final answer correct}\\
+            0, &amp; \text{final answer incorrect}
+            \end{cases}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>Binary cross-entropy loss:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            \mathcal{L}
+            =
+            -\big[z\log p+(1-z)\log(1-p)\big]
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The model learns to give \(p \to 1\) for correct solutions and
+            \(p \to 0\) for incorrect ones.
+          </p>
+        </div>
+        <div class="def-box">
+          <span class="box-label">Loss at a glance</span>
+          <p>
+            If \(z=1\), loss \(=-\log p\) (push \(p\) up).
+            If \(z=0\), loss \(=-\log(1-p)\) (push \(p\) down).
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="weakness">
+        <h2>5. Main weakness</h2>
+        <div class="prose-study">
+          <p>Consider a solution with a broken middle step and a lucky finish:</p>
+        </div>
+        <div class="bellman-trace" style="max-width:34rem">
+<pre style="margin:0;font-family:inherit;white-space:pre-wrap">
+Step 1: 2 + 3 = 6       ← wrong
+Step 2: 6 - 1 = 5
+Final answer: 5          ← accidentally correct
+</pre>
+        </div>
+        <div class="prose-study">
+          <p>
+            An ORM trained only on the final answer may reward this solution:
+          </p>
+        </div>
+        <div class="eq-block">
+          \[
+            r \approx 1
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            even though the reasoning is invalid. It cannot identify
+            <strong>where</strong> an error occurred. All credit (or blame) is
+            attached to the whole trajectory at once.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="advantage">
+        <h2>6. Main advantage</h2>
+        <div class="prose-study">
+          <p>
+            ORM labels are easy to obtain.
+          </p>
+          <p>For mathematics:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            \text{predicted answer} = \text{reference answer?}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>For code:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            \text{did it pass the unit tests?}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>For an agent:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            \text{was the task completed?}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Therefore, ORM training can use large amounts of automatically labelled
+            data. That scalability is why ORMs appear so often in math and coding RL.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="vs">
+        <h2>7. ORM versus PRM</h2>
+        <table class="practice-table">
+          <thead>
+            <tr><th>ORM</th><th>PRM</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>One reward after completion</td><td>Reward after every step</td></tr>
+            <tr><td>Judges final outcome</td><td>Judges reasoning process</td></tr>
+            <tr><td>Easier to label</td><td>Harder to label</td></tr>
+            <tr><td>Sparse feedback</td><td>Dense feedback</td></tr>
+            <tr><td>Cannot localize errors</td><td>Can identify bad steps</td></tr>
+          </tbody>
+        </table>
+        <div class="prose-study">
+          <p>For a three-step solution:</p>
+        </div>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>ORM</h4>
+            <div class="eq-block tight" style="margin:0.5rem 0">
+              \[
+                [r_{\mathrm{final}}]=[0]
+              \]
+            </div>
+            <p>It only says the solution failed.</p>
+          </div>
+          <div class="compare-card">
+            <h4>PRM</h4>
+            <div class="eq-block tight" style="margin:0.5rem 0">
+              \[
+                [r_1,r_2,r_3]=[0.97,\,0.08,\,0.03]
+              \]
+            </div>
+            <p>It shows that the error probably began at Step 2.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="study-section" id="core">
+        <h2>8. Core understanding</h2>
+        <div class="thm-box">
+          <span class="box-label">Remember</span>
+          \[
+            \boxed{
+              \text{ORM evaluates whether the completed solution succeeded,}
+              \text{ not how it reached the answer.}
+            }
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            It is simple and scalable, but provides weak credit assignment because
+            all reasoning steps receive only one final signal.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section lab-wide" id="lab">
+        <h2>9. Laboratory · ORM outcome playground</h2>
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Final logit → probability → BCE</h3>
+            <span>Outcome label only</span>
+          </div>
+          <div class="btn-row" style="margin-bottom:0.75rem">
+            <button type="button" class="btn small" id="ormExA">Solution A (90)</button>
+            <button type="button" class="btn small ghost" id="ormExB">Solution B (80)</button>
+            <button type="button" class="btn small ghost" id="ormExLucky">Lucky final answer</button>
+          </div>
+          <label class="slider-label">
+            Logit \(a = w^\top h_T + b\)
+            <input type="range" id="ormLogit" min="-4" max="4" step="0.05" value="3.9" />
+            <strong id="ormLogitL">3.90</strong>
+          </label>
+          <label class="slider-label">
+            Label \(z\) (final answer correct?)
+            <input type="range" id="ormLabel" min="0" max="1" step="1" value="1" />
+            <strong id="ormLabelL">correct (1)</strong>
+          </label>
+          <div class="stat-strip">
+            <div><span>\(p=\sigma(a)\)</span><strong id="ormProb">-</strong></div>
+            <div><span>Loss</span><strong id="ormLoss">-</strong></div>
+          </div>
+          <div class="bellman-trace" id="ormTrace" style="margin-top:0.75rem">
+            Adjust the outcome logit and label.
+          </div>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>10. Worked example, step by step</h2>
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Problem: \(15\times 6\). Solution A ends at 90. Label \(z=1\).</li>
+            <li class="hidden-step">Run transformer on problem + full solution. Read \(h_T\).</li>
+            <li class="hidden-step">Compute logit \(a=w^\top h_T+b\). Suppose \(a=3.9\).</li>
+            <li class="hidden-step">\(p=\sigma(3.9)\approx 0.98\). Loss \(=-\log(0.98)\approx 0.02\).</li>
+            <li class="hidden-step">Solution B ends at 80 with \(z=0\). If \(a=-3.2\), then \(p\approx 0.04\), small loss.</li>
+            <li class="hidden-step">Lucky broken reasoning with correct final answer still gets \(z=1\). ORM may still output \(p\approx 1\).</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>11. What comes next</h2>
+        <div class="prose-study">
+          <p>
+            Process reward models fix the localization gap: they score each reasoning
+            step, so a wrong middle step can be caught even when the final answer
+            looks fine.
+          </p>
+        </div>
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="listwise.html" style="color:inherit;text-decoration:none">&larr; Listwise</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Up next</p>
+            <h3>Process Reward Model</h3>
+            <p>One score after every step, not only at the end.</p>
+          </div>
+          <a class="btn primary" href="prm.html">Continue &rarr;</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Reward Models · 05 ORM</p>
+    <p class="muted">One finished solution. One outcome score.</p>
+  </footer>
+  <script src="orm.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

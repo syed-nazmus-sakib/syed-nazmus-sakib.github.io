@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exemplar CNN — First Principles · Steeped</title>
+<meta name="description" content="A first-principles walkthrough of Discriminative Unsupervised Feature Learning with Exemplar Convolutional Neural Networks (Dosovitskiy et al., 2014).">
+<script>
+  MathJax = {
+    tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']] },
+    options: { skipHtmlTags: ['script','noscript','style','textarea','pre','code'] }
+  };
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<style>
+  :root {
+    --paper:    #EFE6D4;
+    --paper-2:  #E8DCC5;
+    --paper-3:  #E0D2B7;
+    --line:     #D3C4A5;
+    --line-2:   #C6B490;
+    --ink:      #2B261C;
+    --ink-soft: #574D3C;
+    --ink-faint:#897B62;
+    --accent:      #6E7A4F;
+    --accent-deep: #4E5836;
+    --accent-soft: #DCE0C4;
+    --caramel:     #9A6A3E;
+    --f-pretext:   #B5835A;
+    --serif: 'Iowan Old Style','Palatino Linotype','Palatino','Book Antiqua',Georgia,'Times New Roman',serif;
+    --sans:  ui-sans-serif,-apple-system,BlinkMacSystemFont,'Avenir Next','Segoe UI',system-ui,sans-serif;
+    --mono:  ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace;
+    --measure: 66ch;
+    --shadow: 0 1px 0 rgba(43,38,28,.04), 0 18px 40px -28px rgba(43,38,28,.35);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:#211B12;--paper-2:#2A2317;--paper-3:#342B1C;--line:#453A27;--line-2:#574A32;
+      --ink:#ECE2CD;--ink-soft:#C6BA9E;--ink-faint:#8F8064;
+      --accent:#AEBC86;--accent-deep:#C4D29C;--accent-soft:#34381F;--caramel:#CF9C5F;
+      --f-pretext:#CFA177;
+      --shadow:0 1px 0 rgba(0,0,0,.2),0 22px 46px -28px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="light"] {
+    --paper:#EFE6D4;--paper-2:#E8DCC5;--paper-3:#E0D2B7;--line:#D3C4A5;--line-2:#C6B490;
+    --ink:#2B261C;--ink-soft:#574D3C;--ink-faint:#897B62;
+    --accent:#6E7A4F;--accent-deep:#4E5836;--accent-soft:#DCE0C4;--caramel:#9A6A3E;
+    --f-pretext:#B5835A;
+    --shadow:0 1px 0 rgba(43,38,28,.04),0 18px 40px -28px rgba(43,38,28,.35);
+  }
+  :root[data-theme="dark"] {
+    --paper:#211B12;--paper-2:#2A2317;--paper-3:#342B1C;--line:#453A27;--line-2:#574A32;
+    --ink:#ECE2CD;--ink-soft:#C6BA9E;--ink-faint:#8F8064;
+    --accent:#AEBC86;--accent-deep:#C4D29C;--accent-soft:#34381F;--caramel:#CF9C5F;
+    --f-pretext:#CFA177;
+    --shadow:0 1px 0 rgba(0,0,0,.2),0 22px 46px -28px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: clamp(1.02rem, 0.62vw + 0.9rem, 1.16rem);
+    line-height: 1.72;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    background-image:
+      radial-gradient(circle at 18% 12%, rgba(181,131,90,.06), transparent 42%),
+      radial-gradient(circle at 88% 8%, rgba(110,122,79,.045), transparent 40%);
+    background-attachment: fixed;
+  }
+  ::selection { background: var(--accent-soft); color: var(--ink); }
+  a { color: var(--accent-deep); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  .wrap { width: min(100% - 2.4rem, 720px); margin-inline: auto; }
+  .wide { width: min(100% - 2.4rem, 900px); margin-inline: auto; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: .7rem clamp(.9rem,3vw,1.6rem);
+    background: color-mix(in oklab, var(--paper) 82%, transparent);
+    backdrop-filter: blur(9px);
+    border-bottom: 1px solid var(--line);
+    font-family: var(--sans);
+  }
+  .brand { display:flex; align-items:center; gap:.55rem; font-size:.78rem; letter-spacing:.12em; text-transform:uppercase; font-weight:600; color:var(--ink-soft); text-decoration:none; }
+  .brand .dot { width:10px;height:10px;border-radius:50%; background:radial-gradient(circle at 35% 30%, #caa06f, var(--caramel)); box-shadow: 0 0 0 3px color-mix(in oklab,var(--caramel) 22%, transparent);}
+  .topbar-right { display:flex; align-items:center; gap:.6rem; }
+  .themebtn, .back {
+    font: inherit; font-size:.72rem; letter-spacing:.08em; text-transform:uppercase;
+    background: var(--paper-2); color: var(--ink-soft);
+    border:1px solid var(--line); border-radius: 999px; padding:.38rem .75rem; cursor:pointer;
+    text-decoration:none; display:inline-flex; align-items:center; gap:.4rem;
+  }
+  .themebtn:hover, .back:hover { border-color: var(--line-2); color: var(--ink); }
+
+  .hero { padding: clamp(2.8rem,7vw,4.8rem) 0 clamp(1.8rem,4vw,2.6rem); }
+  .hero-kicker {
+    font-family: var(--sans); font-size:.74rem; letter-spacing:.22em; text-transform:uppercase;
+    color: var(--f-pretext); font-weight:700; display:flex; align-items:center; gap:.7rem; margin:0 0 1rem;
+  }
+  .hero-kicker::before { content:""; width:22px; height:1px; background: var(--line-2); }
+  h1 {
+    font-size: clamp(2.1rem, 4.8vw, 3.4rem);
+    letter-spacing: -.015em; line-height: 1.08; font-weight: 600;
+    margin: 0 0 1rem; text-wrap: balance;
+  }
+  h1 em { font-style: italic; color: var(--accent-deep); }
+  .subtitle {
+    font-family: var(--sans); font-size:.92rem; color: var(--ink-faint); font-style: italic;
+    margin: 0 0 1.4rem; max-width: 52ch;
+  }
+  .lede { font-size: 1.14em; line-height: 1.58; color: var(--ink-soft); max-width: var(--measure); margin: 0; }
+  .meta {
+    margin-top: 1.8rem; display:flex; flex-wrap:wrap; gap: .5rem 1.3rem;
+    font-family: var(--mono); font-size:.74rem; color: var(--ink-faint);
+  }
+  .meta span { display:flex; align-items:center; gap:.45rem; }
+  .meta span::before { content:""; width:5px;height:5px;border-radius:50%; background: var(--f-pretext); }
+
+  .toc {
+    margin: 2rem 0 0; padding: 1.2rem 1.3rem;
+    background: var(--paper-2); border: 1px solid var(--line); border-radius: 12px;
+  }
+  .toc h2 {
+    font-family: var(--sans); font-size:.66rem; letter-spacing:.16em; text-transform:uppercase;
+    color: var(--ink-faint); font-weight:700; margin: 0 0 .8rem;
+  }
+  .toc ol {
+    margin: 0; padding: 0; list-style: none; counter-reset: t;
+    display: grid; gap: .35rem;
+  }
+  .toc li { counter-increment: t; }
+  .toc a {
+    display: flex; gap: .7rem; align-items: baseline; text-decoration: none; color: var(--ink-soft);
+    font-family: var(--sans); font-size: .88rem; padding: .2rem 0;
+  }
+  .toc a::before {
+    content: counter(t, decimal-leading-zero);
+    font-family: var(--mono); font-size: .78rem; color: var(--caramel); min-width: 2.2ch;
+  }
+  .toc a:hover { color: var(--accent-deep); }
+
+  section { padding-block: clamp(2.2rem, 5vw, 3.6rem); border-top: 1px solid var(--line); }
+  .chap-num { font-family: var(--mono); font-size: .8rem; color: var(--caramel); letter-spacing: .04em; margin: 0 0 .45rem; }
+  h2.chap {
+    font-size: clamp(1.55rem, 2.8vw, 2.15rem); letter-spacing: -.01em;
+    margin: 0 0 1.3rem; line-height: 1.15; text-wrap: balance;
+  }
+  h3 {
+    font-size: 1.18rem; margin: 2rem 0 .8rem; line-height: 1.25;
+  }
+  .prose p { max-width: var(--measure); margin: 0; }
+  .prose p + p { margin-top: 1.1rem; }
+  .prose ul, .prose ol { max-width: var(--measure); margin: 1rem 0; padding-left: 1.25rem; color: var(--ink-soft); }
+  .prose li + li { margin-top: .45rem; }
+
+  .q {
+    margin: 1.5rem 0;
+    padding: 1rem 1.15rem 1rem 1.25rem;
+    border-left: 3px solid var(--f-pretext);
+    background: color-mix(in oklab, var(--f-pretext) 8%, var(--paper-2));
+    border-radius: 0 10px 10px 0;
+  }
+  .q .qlabel {
+    font-family: var(--sans); font-size: .64rem; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--f-pretext); margin: 0 0 .45rem;
+  }
+  .q p { margin: 0; color: var(--ink); font-style: italic; max-width: none; }
+  .q p + p { margin-top: .7rem; font-style: normal; color: var(--ink-soft); }
+
+  .eq {
+    margin: 1.4rem 0;
+    padding: 1.1rem 1.2rem;
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow-x: auto;
+    box-shadow: var(--shadow);
+  }
+  .eq .cap {
+    font-family: var(--sans); font-size: .66rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0 0 .7rem;
+  }
+  .eq .mjx-chtml, .eq mjx-container { font-size: 1.05em !important; }
+
+  .why {
+    margin: 1.4rem 0 0;
+    padding: 1rem 1.15rem;
+    background: var(--paper-3);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .why .wl {
+    font-family: var(--sans); font-size: .64rem; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent-deep); margin: 0 0 .4rem;
+  }
+  .why p { margin: 0; color: var(--ink-soft); font-size: .95rem; max-width: none; }
+
+  .schem {
+    margin: 1.5rem 0;
+    padding: 1.2rem;
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow-x: auto;
+  }
+  .schem .cap {
+    font-family: var(--sans); font-size: .66rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0 0 .9rem;
+  }
+  .flow {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .55rem;
+    font-family: var(--mono); font-size: .82rem;
+  }
+  .pill {
+    padding: .45rem .75rem; border-radius: 8px;
+    border: 1px solid var(--line-2); background: var(--paper-3); color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  .pill.net {
+    background: color-mix(in oklab, var(--f-pretext) 18%, var(--paper-2));
+    border-color: var(--f-pretext); color: var(--ink);
+  }
+  .pill.out {
+    background: color-mix(in oklab, var(--caramel) 20%, var(--paper-2));
+    border-color: var(--caramel); color: var(--caramel);
+  }
+  .arr { color: var(--caramel); font-weight: 600; }
+
+  .split2 {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.4rem 0;
+  }
+  @media (max-width:640px){ .split2{ grid-template-columns:1fr; } }
+  .card {
+    background: var(--paper-2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 1.1rem 1.15rem;
+  }
+  .card h4 { margin: 0 0 .45rem; font-size: 1rem; }
+  .card p { margin: 0; font-size: .92rem; color: var(--ink-soft); }
+
+  .table-wrap {
+    margin: 1.4rem 0; overflow-x: auto; border: 1px solid var(--line);
+    border-radius: 12px; box-shadow: var(--shadow);
+  }
+  table {
+    border-collapse: collapse; width: 100%; min-width: 520px;
+    background: var(--paper-2); font-size: .9rem;
+  }
+  th, td { padding: .65rem .85rem; text-align: left; border-bottom: 1px solid var(--line); }
+  thead th {
+    font-family: var(--sans); font-size: .66rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 700; background: var(--paper-3);
+  }
+  td { color: var(--ink-soft); }
+  tbody th { font-weight: 600; color: var(--ink); }
+
+  .seed {
+    margin: 1.6rem 0 0;
+    padding: 1.15rem 1.25rem;
+    border: 1px dashed var(--line-2);
+    border-radius: 12px;
+    background: color-mix(in oklab, var(--accent) 6%, var(--paper-2));
+  }
+  .seed .sl {
+    font-family: var(--sans); font-size: .64rem; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent-deep); margin: 0 0 .45rem;
+  }
+  .seed p { margin: 0; color: var(--ink-soft); max-width: none; }
+
+  .nav-papers {
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding-block: 2.4rem; border-top: 1px solid var(--line);
+  }
+  .nav-papers a {
+    font-family: var(--sans); font-size: .82rem; text-decoration: none;
+    color: var(--ink-soft); padding: .7rem 1rem;
+    background: var(--paper-2); border: 1px solid var(--line); border-radius: 10px;
+  }
+  .nav-papers a:hover { color: var(--accent-deep); border-color: var(--line-2); }
+  .nav-papers .muted { color: var(--ink-faint); font-style: italic; border-style: dashed; pointer-events: none; }
+
+  footer {
+    padding-block: 2.4rem 3rem; border-top: 1px solid var(--line);
+    font-family: var(--sans); font-size: .78rem; color: var(--ink-faint);
+  }
+  footer a { color: var(--ink-soft); }
+  .colophon { max-width: var(--measure); line-height: 1.7; margin: .8rem 0 0; }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce){ html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="../index.html"><span class="dot"></span> Steeped · papers</a>
+  <div class="topbar-right">
+    <a class="back" href="../index.html#m-exemplar">← Field guide</a>
+    <button class="themebtn" id="themeBtn" aria-label="Toggle colour theme"><span id="themeIco">◐</span> Theme</button>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="hero-kicker">Paper 01 · Era I · Pretext · 2014</p>
+    <h1>Exemplar CNN<br><em>from first principles</em></h1>
+    <p class="subtitle">Discriminative Unsupervised Feature Learning with Exemplar Convolutional Neural Networks — Dosovitskiy, Fischer, Springenberg, Riedmiller &amp; Brox</p>
+    <p class="lede">Before contrastive learning had a name, before MoCo and SimCLR, someone asked a deceptively simple question: if every photo is its own class, and we invent the members of that class by distorting it — can a network learn to see without labels?</p>
+    <div class="meta">
+      <span>arXiv:1406.6909</span>
+      <span>surrogate classes</span>
+      <span>invariance by discrimination</span>
+    </div>
+
+    <nav class="toc" aria-label="Contents">
+      <h2>Walk through</h2>
+      <ol>
+        <li><a href="#s1">What problem existed before this paper?</a></li>
+        <li><a href="#s2">The core bet — invent classes from one patch</a></li>
+        <li><a href="#s3">How the surrogate data is built</a></li>
+        <li><a href="#s4">The loss — and why it is two forces at once</a></li>
+        <li><a href="#s5">Unpacking the math until it feels inevitable</a></li>
+        <li><a href="#s6">What they actually showed</a></li>
+        <li><a href="#s7">Push back — what should we doubt?</a></li>
+        <li><a href="#s8">What this paper planted in the field</a></li>
+      </ol>
+    </nav>
+  </div>
+</header>
+
+<!-- ========== 1 ========== -->
+<section id="s1">
+  <div class="wrap prose">
+    <p class="chap-num">01</p>
+    <h2 class="chap">What problem existed before this paper?</h2>
+
+    <p>By 2014, supervised CNNs (AlexNet and its descendants) had just broken open computer vision. The recipe was clear: take millions of labeled images, train a deep net, and get features that transfer surprisingly well. But two cracks were already visible.</p>
+
+    <div class="q">
+      <p class="qlabel">Question everything</p>
+      <p>Why do we need labels at all? Pixels already contain structure — objects, lighting, geometry. If a human infant can learn to see without a teacher naming every object, why must a network wait for ImageNet?</p>
+      <p>And even if labels work for classification: are class labels the <em>right</em> signal for every task? Matching two patches across viewpoint change does not care whether the patch is a “dog” or a “car.” Class supervision might even hurt.</p>
+    </div>
+
+    <p>Unsupervised methods of the time mostly tried to <em>model the input distribution</em> $p(\mathbf{x})$: autoencoders reconstruct the image; sparse coding finds a dictionary that rebuilds it. The hope was that a good model of $p(\mathbf{x})$ would somehow contain $p(y\mid\mathbf{x})$. That hope was only partly true — and those methods were hard to stack into deep CNNs end-to-end.</p>
+
+    <p>So the paper’s real starting point is not “can we beat ImageNet?” It is: <strong>can we invent a training signal from unlabeled images that forces a CNN to learn features that are both discriminative and invariant?</strong></p>
+  </div>
+</section>
+
+<!-- ========== 2 ========== -->
+<section id="s2">
+  <div class="wrap prose">
+    <p class="chap-num">02</p>
+    <h2 class="chap">The core bet — invent classes from one patch</h2>
+
+    <p>Here is the entire idea, stripped bare:</p>
+
+    <ol>
+      <li>Sample a patch from an image. Call it a <em>seed</em>.</li>
+      <li>Apply many random transformations to that seed. Call every transformed version a member of the <em>same surrogate class</em>.</li>
+      <li>Do this for $N$ different seeds → $N$ surrogate classes.</li>
+      <li>Train a CNN to classify which seed a transformed patch came from.</li>
+    </ol>
+
+    <div class="schem">
+      <p class="cap">The surrogate classification loop</p>
+      <div class="flow">
+        <span class="pill">seed patch $\mathbf{x}_i$</span>
+        <span class="arr">→</span>
+        <span class="pill">$K$ random transforms $T_{\boldsymbol{\alpha}}$</span>
+        <span class="arr">→</span>
+        <span class="pill net">CNN + softmax</span>
+        <span class="arr">→</span>
+        <span class="pill out">predict class $i$</span>
+      </div>
+    </div>
+
+    <div class="q">
+      <p class="qlabel">Why should this work at all?</p>
+      <p>To tell “this distorted patch came from seed 47, not seed 891,” the network must find something stable about seed 47 — identity that survives translation, scale, mild rotation, colour shifts. That stability <em>is</em> invariance. And because it must separate thousands of seeds, the features cannot collapse to a constant: they must stay discriminative.</p>
+    </div>
+
+    <p>Notice what is <em>not</em> being asked: reconstruct the pixels, model $p(\mathbf{x})$, or predict a human label. The network only has to answer: <em>which exemplar did this come from?</em> That is enough.</p>
+
+    <div class="why">
+      <p class="wl">Why “Exemplar”?</p>
+      <p>Each surrogate class is born from a <em>single</em> real sample (one exemplar), not from a semantic category that already contains many natural instances. Data augmentation usually expands a labeled class; here the class <em>is</em> the augmentation of one unlabeled patch.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 3 ========== -->
+<section id="s3">
+  <div class="wrap prose">
+    <p class="chap-num">03</p>
+    <h2 class="chap">How the surrogate data is built</h2>
+
+    <p>Start with unlabeled images (they used STL-10’s 100k unlabeled set). Sample $N$ patches of $32\times 32$ — but not uniformly. Sample with probability proportional to mean squared gradient magnitude, so you preferentially get patches with edges and structure, not empty sky.</p>
+
+    <div class="q">
+      <p class="qlabel">Why not sample uniformly?</p>
+      <p>A blank patch transformed a hundred ways is still blank. Discriminating empty patches teaches nothing about objects. The gradient prior is a cheap prior that “interesting content exists here.” It is handcrafted — and that is already a design choice worth noticing.</p>
+    </div>
+
+    <p>Then define a family of transformations $\{T_{\boldsymbol{\alpha}}\}$ parameterized by a vector $\boldsymbol{\alpha}$. Each $T_{\boldsymbol{\alpha}}$ is a composition of elementary transforms. For classification they used:</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Transform</th><th>Range</th><th>What invariance does it buy?</th></tr></thead>
+        <tbody>
+          <tr><th>Translation</th><td>up to 20% of patch size</td><td>object position within the crop</td></tr>
+          <tr><th>Scaling</th><td>factor $0.7$–$1.4$</td><td>apparent size / distance</td></tr>
+          <tr><th>Rotation</th><td>up to $\pm 20^\circ$</td><td>mild viewpoint / camera tilt</td></tr>
+          <tr><th>Contrast (PCA)</th><td>per-PC multiply $0.5$–$2$</td><td>lighting / camera response</td></tr>
+          <tr><th>Contrast (HSV)</th><td>S,V power &amp; scale</td><td>saturation / brightness</td></tr>
+          <tr><th>Color (hue)</th><td>$\pm 0.1$ on H</td><td>global colour cast</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>For each seed $\mathbf{x}_i$, draw $K$ random parameter vectors and form the set</p>
+
+    $$
+    S_{\mathbf{x}_i} = \{ T_{\boldsymbol{\alpha}_i^{1}}\mathbf{x}_i,\;\ldots,\; T_{\boldsymbol{\alpha}_i^{K}}\mathbf{x}_i \}.
+    $$
+
+    <p>Assign every member of $S_{\mathbf{x}_i}$ the surrogate label $i$. Subtract per-pixel mean over the whole surrogate dataset. Train.</p>
+
+    <div class="q">
+      <p class="qlabel">Are these the “right” transforms?</p>
+      <p>They are a bet about which variations a useful visual feature should ignore. The paper’s own ablations later show translation, colour, and contrast matter most for classification; rotation and scale less so. For matching, they had to <em>add blur</em> — because without it, the network overfit to sharp edges and failed under defocus. So the transform list is not universal truth; it is the definition of the invariances you want.</p>
+    </div>
+
+    <div class="why">
+      <p class="wl">A quiet assumption</p>
+      <p>Transforms must not change the <em>identity</em> of the content. If two seeds look almost the same after heavy colour jitter, the labels become lying teachers. If you force hue invariance, you cannot later distinguish a black panther from a puma by colour alone. The paper says this explicitly — the objective encodes a prior about what should not matter.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 4 ========== -->
+<section id="s4">
+  <div class="wrap prose">
+    <p class="chap-num">04</p>
+    <h2 class="chap">The loss — and why it is two forces at once</h2>
+
+    <p>With surrogate classes defined, training is ordinary multiclass classification. The empirical loss is</p>
+
+    <div class="eq">
+      <p class="cap">Equation (1) — surrogate classification</p>
+      $$
+      L(X)=\sum_{\mathbf{x}_i\in X}\sum_{T\in\mathcal{T}_i} \ell\!\big(i,\, T\mathbf{x}_i\big).
+      $$
+    </div>
+
+    <p>With a softmax output $f(\cdot)$ and one-hot target $\mathbf{e}_i$, the per-sample loss is cross-entropy:</p>
+
+    <div class="eq">
+      <p class="cap">Equation (2) — multinomial negative log-likelihood</p>
+      $$
+      \ell(i,\,T\mathbf{x}_i)=-\langle\mathbf{e}_i,\,\log f(T\mathbf{x}_i)\rangle
+      =-\sum_k (\mathbf{e}_i)_k\log f_k(T\mathbf{x}_i).
+      $$
+    </div>
+
+    <p>If we imagine infinitely many transforms per class, this becomes an expectation over transform parameters:</p>
+
+    <div class="eq">
+      <p class="cap">Equation (3) — population form</p>
+      $$
+      \widehat{L}(X)=\sum_{\mathbf{x}_i\in X}\mathbb{E}_{\boldsymbol{\alpha}}\big[\ell(i,\,T_{\boldsymbol{\alpha}}\mathbf{x}_i)\big].
+      $$
+    </div>
+
+    <p>Intuition so far: pull all transforms of one seed toward the same class logit; push different seeds apart. But the paper does something more careful — it <em>decomposes</em> this objective to show those two forces explicitly.</p>
+  </div>
+</section>
+
+<!-- ========== 5 ========== -->
+<section id="s5">
+  <div class="wrap prose">
+    <p class="chap-num">05</p>
+    <h2 class="chap">Unpacking the math until it feels inevitable</h2>
+
+    <p>Write $g(\mathbf{x})$ for the second-to-last layer (the “feature”), $\mathbf{W}$ for the final linear layer, $h(\mathbf{x})=\mathbf{W}g(\mathbf{x})$ for pre-softmax logits, and</p>
+
+    $$
+    f(\mathbf{x})=\mathrm{softmax}(h(\mathbf{x})),\qquad
+    \mathrm{softmax}(\mathbf{z})=\frac{\exp(\mathbf{z})}{\|\exp(\mathbf{z})\|_1}.
+    $$
+
+    <p>Plugging into the population loss and expanding $-\langle\mathbf{e}_i,\log f\rangle$ gives</p>
+
+    <div class="eq">
+      <p class="cap">Equation (5)</p>
+      $$
+      \sum_{\mathbf{x}_i}\mathbb{E}_{\boldsymbol{\alpha}}
+      \Big[
+      -\langle\mathbf{e}_i,\,h(T_{\boldsymbol{\alpha}}\mathbf{x}_i)\rangle
+      +\log\|\exp(h(T_{\boldsymbol{\alpha}}\mathbf{x}_i))\|_1
+      \Big].
+      $$
+    </div>
+
+    <p>Now introduce the <em>average feature</em> of a seed under random transforms:</p>
+
+    $$
+    \widehat{\mathbf{g}}_i=\mathbb{E}_{\boldsymbol{\alpha}}\big[g(T_{\boldsymbol{\alpha}}\mathbf{x}_i)\big].
+    $$
+
+    <p>Rewrite (5) by adding and subtracting terms that involve only $\widehat{\mathbf{g}}_i$. You get two sums:</p>
+
+    <div class="eq">
+      <p class="cap">Equation (6) — discrimination + invariance</p>
+      $$
+      \begin{aligned}
+      &\underbrace{\sum_i\Big[
+      -\langle\mathbf{e}_i,\,\mathbf{W}\widehat{\mathbf{g}}_i\rangle
+      +\log\|\exp(\mathbf{W}\widehat{\mathbf{g}}_i)\|_1
+      \Big]}_{\text{(A) classify the average representation}}
+      \\[0.6em]
+      +&
+      \underbrace{\sum_i\Big[
+      \mathbb{E}_{\boldsymbol{\alpha}}\log\|\exp(h(T_{\boldsymbol{\alpha}}\mathbf{x}_i))\|_1
+      -\log\|\exp(\mathbf{W}\widehat{\mathbf{g}}_i)\|_1
+      \Big]}_{\text{(B) force each transform close to the average}}.
+      \end{aligned}
+      $$
+    </div>
+
+    <div class="split2">
+      <div class="card">
+        <h4>(A) Discriminate</h4>
+        <p>This is multinomial logistic regression on the pairs $(\widehat{\mathbf{g}}_i,\,\mathbf{e}_i)$. Different seeds must stay separable in feature space — otherwise the classifier cannot assign the right surrogate label.</p>
+      </div>
+      <div class="card">
+        <h4>(B) Invariantize</h4>
+        <p>Because $\log\|\exp(\cdot)\|_1$ is convex, Jensen says (B) $\ge 0$, with equality only when $h(T_{\boldsymbol{\alpha}}\mathbf{x}_i)$ is essentially constant across $\boldsymbol{\alpha}$. So (B) is a regularizer that rewards transform-invariance.</p>
+      </div>
+    </div>
+
+    <h3>Why is (B) nonnegative?</h3>
+
+    <p>Jensen’s inequality for a convex function $Z$:</p>
+
+    $$
+    \mathbb{E}[Z(\mathbf{u})]\;\ge\;Z(\mathbb{E}[\mathbf{u}]).
+    $$
+
+    <p>Take $Z(\mathbf{z})=\log\|\exp(\mathbf{z})\|_1$ (log-sum-exp — convex; the appendix proves its Hessian is positive semidefinite with kernel $\mathrm{span}\{\mathbf{1}\}$). Set $\mathbf{u}=h(T_{\boldsymbol{\alpha}}\mathbf{x}_i)$. Then</p>
+
+    <div class="eq">
+      <p class="cap">Equation (7)</p>
+      $$
+      \mathbb{E}_{\boldsymbol{\alpha}}\big[\log\|\exp(h(T_{\boldsymbol{\alpha}}\mathbf{x}_i))\|_1\big]
+      -\log\|\exp(\mathbf{W}\widehat{\mathbf{g}}_i)\|_1\;\ge\;0.
+      $$
+    </div>
+
+    <p>Equality holds when the logits do not move (up to an additive constant shared across classes) as you transform the patch — i.e., when the representation is invariant. So the surrogate classification loss is secretly:</p>
+
+    <p style="text-align:center; font-style:italic; color:var(--ink-soft); margin:1.2rem 0;">
+      “Keep seeds separable” + “make each seed’s transforms look the same.”
+    </p>
+
+    <div class="q">
+      <p class="qlabel">Could we have written those two terms by hand?</p>
+      <p>Yes — and later papers effectively do (contrastive losses, VICReg’s variance/invariance/covariance split, BYOL’s predict-the-other-view). Exemplar-CNN’s contribution is realizing that <em>ordinary cross-entropy on augmented exemplars already contains both pressures</em>, without an explicit reconstruction term or noise model.</p>
+    </div>
+
+    <h3>Contrast with autoencoders</h3>
+
+    <p>An autoencoder says: represent $\mathbf{x}$ so you can rebuild it. That forces the code to keep almost everything — including details irrelevant to recognition. Exemplar-CNN says: represent $\mathbf{x}$ so you can tell it apart from other seeds after distortion. Reconstruction is unnecessary; those degrees of freedom can be spent on useful invariances instead.</p>
+  </div>
+</section>
+
+<!-- ========== 6 ========== -->
+<section id="s6">
+  <div class="wrap prose">
+    <p class="chap-num">06</p>
+    <h2 class="chap">What they actually showed</h2>
+
+    <p>Training details that matter: thousands of surrogate classes (sweet spot around 8k–16k), on the order of 100 samples per class, ordinary SGD + dropout, then freeze the net and train a linear SVM on pooled features for the real task.</p>
+
+    <h3>Classification</h3>
+
+    <p>On STL-10, CIFAR-10, Caltech-101, Caltech-256, their best Exemplar-CNN beat prior unsupervised methods — sometimes by a large margin (STL-10: <strong>74.2%</strong>). Still below fully supervised SOTA where labels are abundant, which is honest and expected: class labels are a stronger signal for class prediction.</p>
+
+    <h3>Ablations that teach</h3>
+
+    <ul>
+      <li><strong>Too many surrogate classes hurt.</strong> Seeds collide; the “labels” become noisy. Clustering seeds first helps — an early hint that pure instance discrimination wants structure among instances.</li>
+      <li><strong>Too few samples per class hurt.</strong> You under-approximate the expectation over transforms; invariance does not get learned.</li>
+      <li><strong>Which transforms matter depends on the dataset.</strong> Caltech’s well-aligned objects care less about spatial jitter than STL/CIFAR.</li>
+    </ul>
+
+    <h3>Matching — where unsupervised can beat supervised</h3>
+
+    <p>For geometric matching, AlexNet features (trained on ImageNet classes) were often <em>worse</em> than Exemplar-CNN, and with blur augmentation Exemplar-CNN beat SIFT on most pairs. The punchline: when the downstream task does not care about object categories, category supervision is not sacred — and can be the wrong teacher.</p>
+
+    <div class="why">
+      <p class="wl">What was “solved”</p>
+      <p>Not “unsupervised features beat supervised forever.” Solved: a practical, end-to-end discriminative pretext that yields transferable CNN features from unlabeled images, with a clear invariance story — and evidence that the right pretext depends on the target task.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 7 ========== -->
+<section id="s7">
+  <div class="wrap prose">
+    <p class="chap-num">07</p>
+    <h2 class="chap">Push back — what should we doubt?</h2>
+
+    <div class="q">
+      <p class="qlabel">Is this really unsupervised?</p>
+      <p>No human labels, yes. But the transform family and the gradient-based sampling prior are strong human-designed signals. Later contrastive work still depends on augmentation design in the same way. “Unsupervised” here means “no semantic annotation,” not “no inductive bias.”</p>
+    </div>
+
+    <div class="q">
+      <p class="qlabel">Is $N$-way classification over instances scalable?</p>
+      <p>With 16k classes you already feel collisions. With a million images, a softmax over a million logits is ugly. Later methods (Instance Discrimination with a memory bank, MoCo’s queue, SimCLR’s in-batch negatives) keep the same spirit — “each image is its own class” — but replace the giant softmax with contrastive comparisons. Exemplar-CNN is the conceptual parent; it is not the scalable form.</p>
+    </div>
+
+    <div class="q">
+      <p class="qlabel">Does invariance always help?</p>
+      <p>Their own contrast ablation hints no: too much contrast jitter can erase a cue (strong vs weak edges) that classification wants. Perfect invariance to everything is collapse by another name. You want invariance to <em>nuisance</em> variation, not to the signal.</p>
+    </div>
+
+    <div class="q">
+      <p class="qlabel">Did the formal split (A)+(B) change practice?</p>
+      <p>Mostly as understanding, not as an implemented loss. Practitioners just ran cross-entropy on surrogate labels. The decomposition is there to explain <em>why</em> that works — and to connect to tangent-prop-style invariance ideas without explicitly penalizing Jacobians.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 8 ========== -->
+<section id="s8">
+  <div class="wrap prose">
+    <p class="chap-num">08</p>
+    <h2 class="chap">What this paper planted in the field</h2>
+
+    <p>Read the Steeped timeline again with this paper in mind. The seed it planted is one sentence:</p>
+
+    <p style="font-size:1.15em; color:var(--accent-deep); font-style:italic; max-width:var(--measure);">
+      Different views of one image should mean the same thing — and different images should remain distinguishable.
+    </p>
+
+    <p>Everything that follows elaborates that sentence:</p>
+
+    <ul>
+      <li><strong>Instance Discrimination (2018)</strong> — make the “class” the whole image, contrast against a memory bank instead of a giant softmax.</li>
+      <li><strong>CPC / MoCo / SimCLR</strong> — same pull-together / push-apart geometry, cleaner losses, better engineering for negatives.</li>
+      <li><strong>BYOL / SimSiam / DINO</strong> — keep the “views must agree” half; find other ways to stop collapse without explicit negatives.</li>
+      <li><strong>Barlow / VICReg</strong> — make the discrimination–invariance split statistically explicit again (correlation, variance, covariance).</li>
+    </ul>
+
+    <div class="seed">
+      <p class="sl">Carry forward</p>
+      <p>When you open the next paper, ask: what plays the role of the <em>seed</em>? what plays the role of $T_{\boldsymbol{\alpha}}$? how do they enforce (A) discrimination and (B) invariance — and what happens if either force fails?</p>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="nav-papers">
+    <a class="muted" href="#">← previous paper</a>
+    <a href="../index.html#m-context">next · Context Prediction →</a>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <p><a href="https://arxiv.org/abs/1406.6909">arXiv:1406.6909</a> · <a href="https://ar5iv.labs.arxiv.org/html/1406.6909">HTML on ar5iv</a> · <a href="../index.html">Back to Steeped</a></p>
+    <p class="colophon">First-principles notes for <strong>Steeped</strong>. Equations follow Dosovitskiy et al. (2014/2016); commentary questions the assumptions rather than replacing the paper. Read the original.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var root = document.documentElement;
+  var btn = document.getElementById("themeBtn");
+  var ico = document.getElementById("themeIco");
+  function currentDark(){
+    var t = root.getAttribute("data-theme");
+    if(t) return t === "dark";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  function syncIco(){ ico.textContent = currentDark() ? "☾" : "☀"; }
+  btn.addEventListener("click", function(){
+    root.setAttribute("data-theme", currentDark() ? "light" : "dark");
+    syncIco();
+  });
+  syncIco();
+})();
+</script>
+</body>
+</html>

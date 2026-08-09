@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>06 · Policy Gradients — Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="why.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl</span>
+    </a>
+            <nav class="chapter-nav" aria-label="Chapters">
+      <a href="why.html">00 · Why</a>
+      <a href="index.html">01 · MDP</a>
+      <a href="value.html">02 · Value</a>
+      <a href="practice.html">Practice</a>
+      <a href="dp.html">03 · DP</a>
+      <a href="td.html">04 · TD</a>
+      <a href="qlearning.html">05 · DQN</a>
+      <a class="active" href="pg.html">06 · PG</a>
+      <a href="trpo.html">07 · TRPO</a>
+      <a href="ppo.html">08 · PPO</a>
+      <a href="grpo.html">09 · GRPO</a>
+      <span class="locked">10 · SAC</span>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#overview">1. Overview</a></li>
+        <li><a href="#why">2. Why leave Q</a></li>
+        <li><a href="#objective">3. Objective \(J(\theta)\)</a></li>
+        <li><a href="#logderiv">4. Log-derivative trick</a></li>
+        <li><a href="#theorem">5. Policy gradient theorem</a></li>
+        <li><a href="#reinforce">6. REINFORCE</a></li>
+        <li><a href="#baseline">7. Baselines &amp; advantage</a></li>
+        <li><a href="#actorcritic">8. Actor–Critic</a></li>
+        <li><a href="#gae">9. GAE (preview)</a></li>
+        <li><a href="#natural">10. Toward TRPO</a></li>
+        <li><a href="#lab">11. Laboratory</a></li>
+        <li><a href="#worked">12. Worked gradient</a></li>
+        <li><a href="#next">13. What follows</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Chapter 06 · Policy optimization</p>
+      <h1 class="study-title">Policy <em>Gradients</em></h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Policy gradient methods parameterize the policy \(\pi_\theta(a\mid s)\) directly and
+        ascend the expected return \(J(\theta)\) in parameter space. The policy gradient
+        theorem — via the log-derivative identity — yields a gradient that does not require
+        differentiating through the environment. This chapter derives REINFORCE, shows why
+        baselines (advantages) cut variance without bias, introduces actor–critic as TD
+        bootstrapping inside the policy gradient, previews GAE, and motivates natural
+        gradients / trust regions as the bridge to TRPO and PPO. The laboratory trains a
+        tabular softmax policy with REINFORCE, baseline, and one-step actor–critic on a
+        small grid.
+      </div>
+
+      <section class="study-section" id="overview">
+        <h2>1. Overview</h2>
+        <div class="prose-study">
+          <p class="lead">
+            Chapters&nbsp;04–05 optimized behavior by learning \(Q\) and reading
+            \(\pi(s)=\arg\max_a Q(s,a)\). That recipe breaks for continuous actions and
+            struggles when the optimal policy is inherently stochastic. Policy gradients
+            flip the approach: parameterize \(\pi_\theta\) and push \(\theta\) uphill on
+            expected return.
+          </p>
+          <p>
+            Everything from here through PPO and (with a fork) SAC is “policy gradients, made
+            stabler or more sample-efficient.” This chapter is the spine.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="why">
+        <h2>2. Why leave value-based methods?</h2>
+        <div class="prose-study">
+          <ol>
+            <li>
+              <strong>Continuous actions.</strong> \(\arg\max_a Q(s,a)\) over \(a\in\mathbb{R}^m\)
+              is an optimization problem at every timestep — expensive and awkward. A Gaussian
+              policy \(\pi_\theta(a\mid s)=\mathcal{N}(\mu_\theta(s),\Sigma_\theta(s))\) outputs
+              actions by sampling, no inner \(\arg\max\).
+            </li>
+            <li>
+              <strong>Stochastic optima.</strong> Rock–paper–scissors, mixed strategies, or
+              robots that must inject noise to avoid getting stuck: the optimal policy need
+              not be deterministic. Softmax / Gaussian policies express that naturally;
+              greedy Q does not (unless you add external \(\varepsilon\)).
+            </li>
+            <li>
+              <strong>Direct optimization.</strong> You optimize the thing you care about
+              \(J(\theta)\) rather than solving a fixed-point for \(Q^*\) and hoping greedy
+              readout is well-behaved under approximation.
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="objective">
+        <h2>3. The objective</h2>
+        <div class="def-box">
+          <span class="box-label">Definition 3.1 · Expected return</span>
+          <p>
+            Let \(\theta\) parameterize \(\pi_\theta\). Write trajectories
+            \(\tau=(s_0,a_0,r_1,\ldots)\) with density \(p_\theta(\tau)\). Then
+            \[
+              J(\theta)
+              =
+              \mathbb{E}_{\tau\sim p_\theta}\big[R(\tau)\big],
+              \qquad
+              R(\tau)=\sum_{t\ge 0}\gamma^t r_{t+1}.
+            \]
+            Equivalently \(J(\theta)=\mathbb{E}_{s_0\sim\mu}[V^{\pi_\theta}(s_0)]\).
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            We want \(\nabla_\theta J(\theta)\). The difficulty: \(R(\tau)\) depends on states
+            visited under \(\pi_\theta\), and the transition kernel \(P(s'|s,a)\) is an opaque
+            black box — you cannot backprop through physics in the general RL setting.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="logderiv">
+        <h2>4. The log-derivative trick</h2>
+        <div class="prose-study">
+          <p>
+            For any density \(p_\theta(x)\) with \(p_\theta(x)&gt;0\),
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            \nabla_\theta p_\theta(x)
+            =
+            p_\theta(x)\,
+            \nabla_\theta \log p_\theta(x).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Therefore
+            \(\nabla_\theta \mathbb{E}_{x\sim p_\theta}[f(x)]
+            = \mathbb{E}_{x\sim p_\theta}\big[f(x)\,\nabla_\theta\log p_\theta(x)\big]\)
+            when \(f\) does not depend on \(\theta\) explicitly. Apply this with
+            \(x=\tau\) and \(f=R\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            \nabla_\theta J(\theta)
+            =
+            \mathbb{E}_{\tau\sim p_\theta}
+            \big[
+              R(\tau)\,
+              \nabla_\theta \log p_\theta(\tau)
+            \big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Factor the trajectory density (Chapter&nbsp;01):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            p_\theta(\tau)
+            =
+            \mu(s_0)
+            \prod_t
+            \pi_\theta(a_t\mid s_t)\,
+            P(s_{t+1}\mid s_t,a_t).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Take \(\log\), then \(\nabla_\theta\): every \(P(\cdot)\) term drops out — it does
+            not depend on \(\theta\). What remains is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            \nabla_\theta \log p_\theta(\tau)
+            =
+            \sum_t \nabla_\theta \log \pi_\theta(a_t\mid s_t).
+          \]
+        </div>
+        <div class="note-box">
+          <span class="box-label">Punchline</span>
+          <p>
+            You never differentiate the environment. You only need to sample trajectories and
+            evaluate \(\nabla_\theta\log\pi_\theta(a\mid s)\) — a property of your own policy
+            network (or softmax table).
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="theorem">
+        <h2>5. Policy gradient theorem</h2>
+        <div class="prose-study">
+          <p>
+            Combining (2) and (4), and refining the credit so that action \(a_t\) is weighted
+            only by <em>future</em> return from \(t\) (rewards before \(t\) are independent of
+            \(a_t\) given the past), one obtains the standard form:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            \nabla_\theta J(\theta)
+            =
+            \mathbb{E}_{s\sim d^{\pi_\theta},\, a\sim\pi_\theta}
+            \big[
+              \nabla_\theta \log \pi_\theta(a\mid s)\,
+              Q^{\pi_\theta}(s,a)
+            \big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Equivalently with advantages \(A^{\pi}=Q^{\pi}-V^{\pi}\) (same expectation —
+            Section&nbsp;7). Here \(d^{\pi}\) is the discounted occupancy from Chapter&nbsp;01.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Theorem 5.1 · Policy gradient theorem (statement)</span>
+          <p>
+            For differentiable \(\pi_\theta\) in a finite MDP (or suitable continuous setups),
+            \(\nabla_\theta J(\theta)\) equals (5). The environment Jacobian never appears.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="reinforce">
+        <h2>6. REINFORCE</h2>
+        <div class="prose-study">
+          <p>
+            Replace \(Q^{\pi}(s_t,a_t)\) by the Monte Carlo return \(G_t\) and use a single
+            sampled trajectory:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            \theta
+            \leftarrow
+            \theta
+            + \alpha
+            \sum_{t=0}^{T-1}
+            \nabla_\theta \log \pi_\theta(a_t\mid s_t)\,
+            G_t.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Intuition: if the episode went well (large \(G_t\)), increase the log-probability
+            of the actions you took; if it went poorly, decrease them. This is Monte Carlo
+            applied to policies — unbiased (for the true gradient, in expectation) but
+            <strong>high variance</strong>. You must wait until the episode ends to form \(G_t\).
+          </p>
+        </div>
+
+        <div class="remark-box">
+          <span class="box-label">Remark · Softmax policy (discrete lab)</span>
+          <p>
+            For logits \(h(s,a)\), \(\pi(a\mid s)=\mathrm{softmax}_a(h(s,a))\). Then
+            \(\nabla_{h(s,\cdot)}\log\pi(a\mid s) = \mathbf{1}_a - \pi(\cdot\mid s)\).
+            The laboratory uses exactly this identity on a per-state logit table.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="baseline">
+        <h2>7. Baselines and the advantage</h2>
+        <div class="prose-study">
+          <p>
+            Subtract any action-independent baseline \(b(s_t)\) from \(G_t\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            \theta
+            \leftarrow
+            \theta
+            + \alpha
+            \sum_t
+            \nabla_\theta \log \pi_\theta(a_t\mid s_t)\,
+            \big(G_t - b(s_t)\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This does <strong>not</strong> change the expected gradient:
+            \(\mathbb{E}_{a\sim\pi}[\nabla\log\pi(a\mid s)\,b(s)]=b(s)\nabla\sum_a\pi(a\mid s)=0\).
+            Choosing \(b(s)=V^{\pi}(s)\) yields the advantage
+            \(A_t \approx G_t - V(s_t)\): not “was return good?” but “was it better than usual
+            from this state?” — much lower variance.
+          </p>
+        </div>
+
+        <div class="def-box">
+          <span class="box-label">Definition 7.1 · Advantage</span>
+          <p>
+            \(A^{\pi}(s,a)=Q^{\pi}(s,a)-V^{\pi}(s)\). Then
+            \(\mathbb{E}_{a\sim\pi}[A^{\pi}(s,a)]=0\), and
+            \[
+              \nabla_\theta J(\theta)
+              =
+              \mathbb{E}\big[
+                \nabla_\theta\log\pi_\theta(a\mid s)\,
+                A^{\pi}(s,a)
+              \big].
+            \]
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="actorcritic">
+        <h2>8. Actor–Critic</h2>
+        <div class="prose-study">
+          <p>
+            REINFORCE still needs full \(G_t\). Replace the Monte Carlo advantage by a
+            one-step TD advantage — the TD error from Chapter&nbsp;04:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            \delta_t
+            =
+            r_{t+1} + \gamma V_w(s_{t+1}) - V_w(s_t),
+            \qquad
+            \theta
+            \leftarrow
+            \theta + \alpha\,
+            \nabla_\theta\log\pi_\theta(a_t\mid s_t)\,
+            \delta_t.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Two learners in parallel:
+          </p>
+          <ul>
+            <li><strong>Actor</strong> \(\pi_\theta\) — updated by (8).</li>
+            <li><strong>Critic</strong> \(V_w\) — updated by ordinary TD(0):
+              \(w \leftarrow w + \beta\,\delta_t\,\nabla_w V_w(s_t)\) (tabular: \(V(s)\leftarrow V(s)+\beta\delta_t\)).</li>
+          </ul>
+          <p>
+            The same \(\delta_t\) trains both. This is the skeleton of A2C/A3C and, with GAE
+            and trust regions, of TRPO/PPO. SAC is also an actor–critic, but off-policy with
+            an entropy-augmented critic target.
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · Bias returns</span>
+          <p>
+            Using \(V_w\) instead of \(V^{\pi}\) biases the gradient unless compatibility
+            conditions hold (compatible function approximation). Deep actor–critics usually
+            accept that bias as an empirical trade-off — the same honesty we owed DQN about
+            the deadly triad.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="gae">
+        <h2>9. Generalized Advantage Estimation (preview)</h2>
+        <div class="prose-study">
+          <p>
+            Define \(\delta_t = r_{t+1}+\gamma V(s_{t+1})-V(s_t)\). The \(k\)-step advantage is
+            \(\hat A_t^{(k)}=\sum_{l=0}^{k-1}\gamma^l\delta_{t+l}\). GAE exponentially averages
+            all \(k\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            \hat A_t^{\mathrm{GAE}(\gamma,\lambda)}
+            =
+            \sum_{l=0}^{\infty}(\gamma\lambda)^l\,
+            \delta_{t+l}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            \(\lambda=0\): pure one-step TD advantage (low variance, more bias).
+            \(\lambda=1\): Monte Carlo advantage (unbiased if \(V\) correct only at end,
+            high variance). Typical deep RL: \(\lambda\approx 0.95\). GAE is the advantage
+            estimator inside standard PPO implementations.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="natural">
+        <h2>10. Why vanilla PG is fragile — bridge to TRPO</h2>
+        <div class="prose-study">
+          <p>
+            The update \(\theta\leftarrow\theta+\alpha\nabla_\theta J\) is steepest ascent in
+            <em>Euclidean parameter space</em>. A small step in \(\theta\) can be a huge step
+            in policy distribution space (KL divergence) — or almost no step — depending on
+            which weights you touch. One bad update collapses an on-policy method: all new
+            data comes from the broken policy.
+          </p>
+          <p>
+            The <strong>natural policy gradient</strong> preconditions with the Fisher information
+            matrix \(F(\theta)=\mathbb{E}[\nabla\log\pi\,\nabla\log\pi^\top]\), which locally
+            approximates KL:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            \theta
+            \leftarrow
+            \theta + \alpha\, F(\theta)^{-1}\nabla_\theta J(\theta).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            TRPO enforces a hard KL trust region and solves the constrained step approximately
+            with conjugate gradients. PPO approximates the same “don’t move \(\pi\) too far”
+            idea with a clipped surrogate — cheap, no Fisher matrix. That is the next chapter.
+          </p>
+        </div>
+      </section>
+
+      <!-- LAB -->
+      <section class="study-section lab-wide" id="lab">
+        <h2>11. Laboratory · softmax policy on a grid</h2>
+        <div class="prose-study">
+          <p>
+            4×4 grid, goal at bottom-right (\(+1\)), step cost \(0\), \(\gamma\) set below.
+              Policy: per-state logits → softmax. Train with REINFORCE, REINFORCE + learned
+              \(V\) baseline, or one-step actor–critic. Watch episode return and a sample
+              \(\nabla\log\pi\cdot\) signal in the ledger.
+            </p>
+            <p class="caption tight">
+              Note: the lab omits the usual \(\gamma^t\) discount on \(\nabla\log\pi\) (common
+              practical shortcut when advantages are already discounted via \(G_t\) /
+              \(\delta_t\)). The textbook REINFORCE form sometimes writes
+              \(\sum_t \gamma^t \nabla\log\pi\, G_t\).
+            </p>
+            <p class="caption tight">
+              π greedy arrows · V shown only for baseline / actor–critic (REINFORCE has no critic).
+            </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Policy gradient trainers</h3>
+            <span>REINFORCE · baseline · actor–critic</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.85rem;margin-bottom:1rem">
+            <div class="control-block">
+              <span class="control-label">Method</span>
+              <div class="btn-row">
+                <button type="button" class="btn small" id="pgModeR">REINFORCE</button>
+                <button type="button" class="btn small ghost" id="pgModeB">+ baseline</button>
+                <button type="button" class="btn small ghost" id="pgModeAC">Actor–Critic</button>
+              </div>
+              <p class="caption tight" id="pgModeL">Active: REINFORCE (MC return)</p>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Rates</span>
+              <label class="slider-label">α (actor) <input type="range" id="pgAlpha" min="0.05" max="1" step="0.05" value="0.25" /><strong id="pgAlphaL">0.25</strong></label>
+              <label class="slider-label">β (critic) <input type="range" id="pgBeta" min="0.05" max="1" step="0.05" value="0.35" /><strong id="pgBetaL">0.35</strong></label>
+              <label class="slider-label">γ <input type="range" id="pgGamma" min="0.5" max="0.99" step="0.01" value="0.95" /><strong id="pgGammaL">0.95</strong></label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Run</span>
+              <div class="btn-row">
+                <button type="button" class="btn small" id="pgEp">1 episode</button>
+                <button type="button" class="btn small ghost" id="pgMany">50 episodes</button>
+                <button type="button" class="btn small ghost" id="pgReset">Reset</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="split" style="grid-template-columns:1fr 1fr;gap:1rem">
+            <div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:0 0 0.5rem">
+                π greedy (argmax) · V
+              </h4>
+              <div class="dp-grid" id="pgGrid"></div>
+              <p class="caption tight">Arrow = argmax π(·|s). V shown for baseline/AC only.</p>
+            </div>
+            <div>
+              <div class="stat-strip">
+                <div><span>Episodes</span><strong id="pgEpN">0</strong></div>
+                <div><span>Last G₀</span><strong id="pgLastG">—</strong></div>
+                <div><span>Avg G₂₀</span><strong id="pgAvgG">—</strong></div>
+                <div><span>|Δlogits|</span><strong id="pgDlog">—</strong></div>
+              </div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:1rem 0 0.5rem">
+                Gradient ledger
+              </h4>
+              <div class="bellman-trace" id="pgTrace">Run an episode. We’ll print G_t, advantage/δ, and a sample logit update.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>12. Worked gradient step</h2>
+        <div class="prose-study">
+          <p>
+            Two actions, \(\pi=(\pi_1,\pi_2)=(0.2,0.8)\), took \(a=1\), advantage \(A=2\),
+            learning rate \(\alpha=0.1\). Softmax score-function gradient for the taken action:
+            \(\partial\log\pi_1/\partial h_1 = 1-\pi_1=0.8\),
+            \(\partial\log\pi_1/\partial h_2 = -\pi_2=-0.8\).
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            h
+            \leftarrow
+            h + 0.1\cdot 2\cdot (0.8,-0.8)
+            =
+            h + (0.16,-0.16).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            After the update, renormalising the softmax increases \(\pi_1\) — we reinforced
+            the action that had positive advantage.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Sample a ~ π; observe reward / return / δ.</li>
+            <li class="hidden-step">Form weight w = G (REINFORCE), G−V (baseline), or δ (AC).</li>
+            <li class="hidden-step">Compute ∇ log π(a|s) (softmax: 1_a − π).</li>
+            <li class="hidden-step">θ ← θ + α w ∇ log π.</li>
+            <li class="hidden-step">If critic: V(s) ← V(s) + β δ.</li>
+            <li class="hidden-step">Repeat; optionally replace w by GAE(λ).</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>13. What follows</h2>
+        <div class="prose-study">
+          <p>
+            Vanilla policy gradients work but are brittle in deep nets. Next: <strong>TRPO</strong>
+            (trust-region / natural gradient done carefully), then <strong>PPO</strong> (clipped
+            surrogate), then the off-policy continuous-control line toward <strong>SAC</strong>.
+            Optionally, an imitation-learning detour (behavioral cloning, DAgger) can sit
+            between Phase&nbsp;1 and those algorithms — your original roadmap allowed either order.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Sutton &amp; Barto, Ch. 13 — policy gradient methods.</li>
+            <li>Williams, 1992 — REINFORCE.</li>
+            <li>Schulman et al. — GAE; TRPO; PPO papers.</li>
+            <li><a href="qlearning.html">Chapter 05</a> — the value-based discrete alternative.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="qlearning.html" style="color:inherit;text-decoration:none">← Q-learning &amp; DQN</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next chapter</p>
+            <h3>TRPO</h3>
+            <p>Trust regions, Fisher metric, conjugate gradients.</p>
+          </div>
+          <a class="btn primary" href="trpo.html">Continue →</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Chapter 06 · Policy Gradients</p>
+    <p class="muted">Log-derivative trick · REINFORCE · advantages · actor–critic · bridge to TRPO.</p>
+  </footer>
+
+  <script src="pg.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

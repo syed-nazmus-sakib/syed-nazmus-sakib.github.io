@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>04 · Temporal-Difference Learning — Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="why.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl</span>
+    </a>
+            <nav class="chapter-nav" aria-label="Chapters">
+      <a href="why.html">00 · Why</a>
+      <a href="index.html">01 · MDP</a>
+      <a href="value.html">02 · Value</a>
+      <a href="practice.html">Practice</a>
+      <a href="dp.html">03 · DP</a>
+      <a class="active" href="td.html">04 · TD</a>
+      <a href="qlearning.html">05 · DQN</a>
+      <a href="pg.html">06 · PG</a>
+      <a href="trpo.html">07 · TRPO</a>
+      <a href="ppo.html">08 · PPO</a>
+      <a href="grpo.html">09 · GRPO</a>
+      <span class="locked">10 · SAC</span>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#overview">1. Overview</a></li>
+        <li><a href="#spectrum">2. DP · MC · TD</a></li>
+        <li><a href="#td0">3. TD(0) prediction</a></li>
+        <li><a href="#delta">4. The TD error</a></li>
+        <li><a href="#biasvar">5. Bias–variance</a></li>
+        <li><a href="#sarsa">6. SARSA</a></li>
+        <li><a href="#qlearn">7. Q-learning</a></li>
+        <li><a href="#explore">8. Exploration</a></li>
+        <li><a href="#nstep">9. n-step &amp; TD(λ)</a></li>
+        <li><a href="#deadly">10. Deadly triad</a></li>
+        <li><a href="#lab">11. Laboratory</a></li>
+        <li><a href="#worked">12. Worked update</a></li>
+        <li><a href="#next">13. What follows</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Chapter 04 · Foundations</p>
+      <h1 class="study-title">Temporal-<em>Difference</em> Learning</h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Temporal-difference (TD) learning estimates value functions from sampled experience
+        while bootstrapping — updating a guess using another guess — instead of waiting for
+        a full Monte Carlo return or summing over a known model. This chapter derives TD(0)
+        from the Bellman expectation equation, interprets the TD error \(\delta_t\), contrasts
+        on-policy SARSA with off-policy Q-learning, discusses exploration, sketches n-step
+        returns and TD(\(\lambda\)), and flags the deadly triad that appears once function
+        approximation enters. The laboratory runs SARSA and Q-learning side by side on a
+        cliff-style grid so the on-/off-policy split is visible in behavior, not only in
+        formulas.
+      </div>
+
+      <section class="study-section" id="overview">
+        <h2>1. Overview</h2>
+        <div class="prose-study">
+          <p class="lead">
+            Dynamic Programming needed \(P\) and a full sweep of \(S\). Real agents have
+            neither. Temporal-difference learning is the practical middle path: interact,
+            observe \((s,a,r,s')\), and apply a <em>sample</em> Bellman backup.
+          </p>
+          <p>
+            Almost every value-based deep RL method — DQN, Rainbow, the critic in SAC —
+            is a neural approximation of ideas in this chapter. Actor–critic methods reuse
+            the same \(\delta_t\) as an advantage signal. If DP was “Bellman with a model,”
+            TD is “Bellman with a trajectory.”
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="spectrum">
+        <h2>2. The spectrum: DP, Monte Carlo, TD</h2>
+        <div class="prose-study">
+          <p>
+            All three methods target the same fixed point \(V^{\pi}\) (or \(Q^{\pi}\)/\(Q^*\)).
+            They differ in how they form the <em>target</em> in the incremental update
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            \text{estimate}
+            \;\leftarrow\;
+            \text{estimate}
+            + \alpha\,
+            \big[\underbrace{\text{target}}_{\text{what we aim at}} - \text{estimate}\big].
+          \]
+        </div>
+        <div class="prose-study">
+          <dl class="dl-inline">
+            <div>
+              <dt>DP</dt>
+              <dd>Target \(=\mathbb{E}_\pi[r+\gamma V(s')]\). Full backup, needs \(P\). No sampling.</dd>
+            </div>
+            <div>
+              <dt>MC</dt>
+              <dd>Target \(=G_t\). Unbiased sample of return. Wait until episode ends. High variance.</dd>
+            </div>
+            <div>
+              <dt>TD</dt>
+              <dd>Target \(=r_{t+1}+\gamma V(s_{t+1})\). One real step + bootstrap. Online, low variance, biased until \(V\) is correct.</dd>
+            </div>
+          </dl>
+          <p>
+            Monte Carlo is deferred to a short companion note in your roadmap; here we need
+            only enough MC to place TD on the bias–variance dial.
+          </p>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">Bootstrapping</span>
+          <p>
+            An update <strong>bootstraps</strong> when its target depends on the current
+            value estimate rather than only on observed rewards. DP and TD bootstrap; pure
+            Monte Carlo does not. Bootstrapping enables learning before an episode ends and
+            on continuing tasks — at the cost of coupling errors across states.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="td0">
+        <h2>3. TD(0) for prediction</h2>
+        <div class="prose-study">
+          <p>
+            <em>Prediction</em> means: evaluate a fixed policy \(\pi\) — learn \(V^{\pi}\),
+            not yet control. After taking \(a_t\sim\pi(\cdot\mid s_t)\) and observing
+            \(r_{t+1},s_{t+1}\),
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            V(s_t)
+            \;\leftarrow\;
+            V(s_t)
+            + \alpha
+            \Big[
+              \underbrace{r_{t+1} + \gamma V(s_{t+1})}_{\text{TD target}}
+              - V(s_t)
+            \Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Compare to the DP evaluation backup (Chapter&nbsp;03): DP replaces
+            \(r_{t+1}+\gamma V(s_{t+1})\) by its expectation under \(P\) and \(\pi\).
+            TD(0) uses a single sample of that expectation. Under standard step-size
+            conditions (Robbins–Monro: \(\sum\alpha_t=\infty\), \(\sum\alpha_t^2&lt;\infty\))
+            and a tabular representation with adequate exploration of states under \(\pi\),
+            \(V\to V^{\pi}\) with probability 1.
+          </p>
+        </div>
+
+        <div class="def-box">
+          <span class="box-label">Definition 3.1 · TD(0)</span>
+          <p>
+            The one-step tabular TD algorithm for policy evaluation using target
+            \(r+\gamma V(s')\) and learning rate \(\alpha\in(0,1]\). Terminal states are
+            usually assigned \(V(\text{terminal})=0\) and do not bootstrap beyond the episode.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="delta">
+        <h2>4. The TD error \(\delta_t\)</h2>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            \delta_t
+            =
+            r_{t+1} + \gamma V(s_{t+1}) - V(s_t).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            \(\delta_t\) is a one-step prediction error:
+          </p>
+          <ul>
+            <li>\(\delta_t &gt; 0\): the transition was better than \(V(s_t)\) predicted — raise \(V(s_t)\).</li>
+            <li>\(\delta_t &lt; 0\): worse than predicted — lower \(V(s_t)\).</li>
+            <li>\(\delta_t = 0\): local consistency with the current table on this sample.</li>
+          </ul>
+          <p>
+            The same scalar reappears as the one-step advantage estimate in actor–critic
+            (\(\hat A_t \approx \delta_t\)) and as the building block of GAE. Treat
+            \(\delta_t\) as a first-class object, not a notational convenience.
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · Sample of the Bellman residual</span>
+          <p>
+            The Bellman residual at \(s\) is
+            \(V(s) - \mathbb{E}[r+\gamma V(s')\mid s]\).
+            TD’s \(\delta_t\) is a noisy measurement of the <em>negative</em> residual along
+            one transition. Driving average \(\delta\) to zero along the visitation
+            distribution is what “solving” the Bellman equation means empirically.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="biasvar">
+        <h2>5. Bias–variance trade-off</h2>
+        <div class="prose-study">
+          <p>
+            Monte Carlo’s target \(G_t\) is unbiased for \(V^{\pi}(s_t)\) but depends on the
+            entire future — high variance. TD’s target is biased whenever \(V\neq V^{\pi}\),
+            yet only one step of environment noise enters — low variance. As \(V\) converges,
+            TD’s bias vanishes. In finite-data regimes, variance usually hurts more, which
+            is why TD often learns faster than MC in practice.
+          </p>
+          <p>
+            n-step TD and TD(\(\lambda\)) (Section&nbsp;9) interpolate: longer backups reduce
+            bias toward MC and increase variance.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="sarsa">
+        <h2>6. SARSA — on-policy control</h2>
+        <div class="prose-study">
+          <p>
+            <em>Control</em> means learning a good policy, typically via \(Q(s,a)\). SARSA
+            updates using the action that was <strong>actually taken</strong> next:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            Q(s_t,a_t)
+            \leftarrow
+            Q(s_t,a_t)
+            + \alpha
+            \Big[
+              r_{t+1} + \gamma Q(s_{t+1}, a_{t+1}) - Q(s_t,a_t)
+            \Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The name is the tuple \((s_t,a_t,r_{t+1},s_{t+1},a_{t+1})\). Because the target
+            uses \(a_{t+1}\sim\pi(\cdot\mid s_{t+1})\) from the same behavior policy that
+            collected the data, SARSA is <strong>on-policy</strong>: it learns \(Q^{\pi}\) for
+            the exploring policy you are following (e.g. \(\varepsilon\)-greedy), not for the
+            pure greedy policy.
+          </p>
+        </div>
+
+        <div class="remark-box">
+          <span class="box-label">Remark · Cliff walking intuition</span>
+          <p>
+            On a cliff grid, \(\varepsilon\)-greedy SARSA learns to walk a safe path away
+            from the cliff because its Q-values include the risk of occasional exploratory
+            steps off the edge. Q-learning (next section) can learn values for the optimal
+            greedy path along the cliff — then suffer falls at execution if you still explore.
+            The laboratory reproduces a miniature version of this contrast.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="qlearn">
+        <h2>7. Q-learning — off-policy control</h2>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            Q(s_t,a_t)
+            \leftarrow
+            Q(s_t,a_t)
+            + \alpha
+            \Big[
+              r_{t+1} + \gamma \max_{a'} Q(s_{t+1}, a') - Q(s_t,a_t)
+            \Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            One word changes everything: \(Q(s_{t+1},a_{t+1})\) becomes
+            \(\max_{a'}Q(s_{t+1},a')\). The target is a sample of the Bellman
+            <em>optimality</em> backup \(\mathcal{T}^*\) (Chapter&nbsp;02–03), not of
+            \(\mathcal{T}^{\pi}\). You may behave with an exploratory policy while learning
+            about the greedy/optimal policy — that is <strong>off-policy</strong> learning.
+          </p>
+          <p>
+            Off-policy control is what later enables experience replay: store transitions and
+            reuse them even after the behavior policy has changed. DQN is Q-learning with a
+            neural \(Q_\theta\), a replay buffer, and a lagged target network.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Theorem 7.1 · Tabular Q-learning (informal)</span>
+          <p>
+            In a finite MDP, with all state–action pairs visited infinitely often, Robbins–Monro
+            step sizes, and \(\gamma&lt;1\), tabular Q-learning converges to \(Q^*\) with
+            probability 1. (Watkins &amp; Dayan, 1992; refined analyses since.)
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">On-policy vs off-policy — the fork that lasts</span>
+          <p>
+            SARSA / on-policy actor–critic / TRPO / PPO: learn about the policy that generated
+            the data; discard or carefully correct old data.<br/>
+            Q-learning / DQN / DDPG / TD3 / SAC: learn about a different (often greedy or
+            entropy-regularized optimal) policy while behaving otherwise; replay becomes natural.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="explore">
+        <h2>8. Exploration</h2>
+        <div class="prose-study">
+          <p>
+            DP never explores — it backs up every \((s,a)\) from the model. TD only sees what
+            it tries. If the behavior policy is purely greedy from a bad initialization, it
+            may never discover better actions.
+          </p>
+        </div>
+        <div class="def-box">
+          <span class="box-label">Definition 8.1 · ε-greedy</span>
+          <p>
+            With probability \(\varepsilon\), draw \(a\) uniformly from \(A\); otherwise
+            \(a\in\arg\max_{a'}Q(s,a')\). Guarantees every action is tried infinitely often
+            if \(\varepsilon&gt;0\) is held fixed (or decays sufficiently slowly).
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            Cruder than necessary, but the right conceptual placeholder. Softmax / Boltzmann
+            exploration, UCB-style bonuses, parameter noise, and SAC’s entropy term are
+            later refinements of the same tension: exploit what \(Q\) knows vs visit what it
+            does not.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="nstep">
+        <h2>9. n-step returns and TD(\(\lambda\))</h2>
+        <div class="prose-study">
+          <p>
+            The n-step target bootstraps after \(n\) real rewards:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            G_t^{(n)}
+            =
+            r_{t+1} + \gamma r_{t+2} + \cdots + \gamma^{n-1} r_{t+n} + \gamma^n V(s_{t+n}).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            \(n=1\) recovers TD(0); \(n\to\infty\) recovers Monte Carlo (episodic).
+            TD(\(\lambda\)) averages all \(n\) with weights proportional to \(\lambda^{n-1}\),
+            implemented efficiently with eligibility traces rather than storing every n-step
+            return. Remember the dial exists; PPO-era methods use a related tool (GAE) on
+            advantages instead of values.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="deadly">
+        <h2>10. The deadly triad</h2>
+        <div class="prose-study">
+          <p>
+            Tabular TD is safe. Trouble starts when you combine:
+          </p>
+          <ol>
+            <li><strong>Function approximation</strong> (neural nets — not an independent entry per state),</li>
+            <li><strong>Bootstrapping</strong> (TD targets),</li>
+            <li><strong>Off-policy sampling</strong> (replay / behavior ≠ target).</li>
+          </ol>
+          <p>
+            Together these are the <strong>deadly triad</strong>: convergence guarantees
+            disappear; training can diverge. That is why DQN needed target networks and
+            replay design care, and part of why trust-region / clipped policy gradients
+            (TRPO/PPO) were developed as stabler alternatives to naive deep bootstrapped
+            updates. Flag now; it will click when we reach deep RL.
+          </p>
+        </div>
+      </section>
+
+      <!-- LAB -->
+      <section class="study-section lab-wide" id="lab">
+        <h2>11. Laboratory · SARSA vs Q-learning</h2>
+        <div class="prose-study">
+          <p>
+            Classic-style cliff (4×8): start bottom-left, goal bottom-right, cliff cells along
+            the bottom row between them; safe plateau on the three rows above. Stepping into
+            the cliff yields \(-100\) and a reset to start. Every other transition costs
+            \(-1\) (including entering the goal — Sutton &amp; Barto convention). Compare
+            learned greedy paths under SARSA vs Q-learning with \(\varepsilon=0.1\) and
+            decaying \(\alpha\).
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Control algorithms</h3>
+            <span>Sample backups · ε-greedy</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.85rem;margin-bottom:1rem">
+            <div class="control-block">
+              <span class="control-label">Algorithm</span>
+              <div class="btn-row">
+                <button type="button" class="btn small" id="algoSarsa">SARSA</button>
+                <button type="button" class="btn small ghost" id="algoQ">Q-learning</button>
+              </div>
+              <p class="caption tight" id="algoLabel">Active: SARSA (on-policy)</p>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Hyperparameters</span>
+              <label class="slider-label">α₀ <input type="range" id="tdAlpha" min="0.05" max="1" step="0.05" value="0.5" /><strong id="tdAlphaL">0.50</strong></label>
+              <label class="toggle"><input type="checkbox" id="tdAlphaDecay" checked /><span>Decay α ∼ 1/√episodes</span></label>
+              <label class="slider-label">γ <input type="range" id="tdGamma" min="0.5" max="0.99" step="0.01" value="0.90" /><strong id="tdGammaL">0.90</strong></label>
+              <label class="slider-label">ε <input type="range" id="tdEps" min="0" max="0.5" step="0.05" value="0.1" /><strong id="tdEpsL">0.10</strong></label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Run</span>
+              <div class="btn-row">
+                <button type="button" class="btn small" id="tdEp">1 episode</button>
+                <button type="button" class="btn small ghost" id="tdMany">50 episodes</button>
+                <button type="button" class="btn small ghost" id="tdReset">Reset Q</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="split" style="grid-template-columns:1fr 1fr;gap:1rem">
+            <div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:0 0 0.5rem">
+                Grid · greedy arrows from Q
+              </h4>
+              <div class="dp-grid" id="tdGrid"></div>
+              <p class="caption tight">Numbers = max<sub>a</sub> Q(s,a). Cliff = red. Goal = G.</p>
+            </div>
+            <div>
+              <div class="stat-strip">
+                <div><span>Episodes</span><strong id="tdEpsCount">0</strong></div>
+                <div><span>Last return</span><strong id="tdLastG">—</strong></div>
+                <div><span>Avg last 20</span><strong id="tdAvgG">—</strong></div>
+                <div><span>Last δ</span><strong id="tdLastD">—</strong></div>
+              </div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:1rem 0 0.5rem">
+                Update ledger
+              </h4>
+              <div class="bellman-trace" id="tdTrace">Run episodes to see SARSA / Q-learning updates with explicit δ.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>12. Worked update</h2>
+        <div class="prose-study">
+          <p>
+            Suppose \(Q(s,a)=2.0\), \(\alpha=0.5\), \(\gamma=0.9\), reward \(r=−1\), and
+            next estimates \(Q(s',a_{\mathrm{taken}})=3.0\),
+            \(\max_{a'}Q(s',a')=4.0\).
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            \begin{aligned}
+              \delta^{\mathrm{SARSA}} &= -1 + 0.9\cdot 3 - 2 = -0.3,\\
+              Q &\leftarrow 2 + 0.5(-0.3) = 1.85.\\[6pt]
+              \delta^{\mathrm{QL}} &= -1 + 0.9\cdot 4 - 2 = 0.6,\\
+              Q &\leftarrow 2 + 0.5(0.6) = 2.3.
+            \end{aligned}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Same transition, different targets — SARSA pulls toward the action you took;
+            Q-learning pulls toward the best action in the table. That is the entire
+            on-/off-policy distinction in one numerical example.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Write δ = target − Q(s,a).</li>
+            <li class="hidden-step">SARSA target = r + γ Q(s′, a′); QL target = r + γ max Q(s′,·).</li>
+            <li class="hidden-step">Plug in numbers → δ_S = −0.3, δ_Q = +0.6.</li>
+            <li class="hidden-step">Apply Q ← Q + α δ.</li>
+            <li class="hidden-step">Interpret: exploratory a′ can make SARSA more conservative near hazards.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>13. What follows</h2>
+        <div class="prose-study">
+          <p>
+            Next: a dedicated deep dive into <strong>Q-learning and Deep Q-Networks</strong> —
+            convergence, maximisation bias, experience replay, target networks, Double DQN,
+            and Rainbow. Policy gradients follow after that.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Sutton &amp; Barto, Ch. 6 — TD learning.</li>
+            <li><a href="dp.html">Chapter 03</a> — the full backups TD approximates.</li>
+            <li><a href="value.html">Chapter 02</a> — \(\mathcal{T}^{\pi}\) vs \(\mathcal{T}^*\).</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="dp.html" style="color:inherit;text-decoration:none">← Dynamic Programming</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next chapter</p>
+            <h3>Q-learning &amp; Deep Q-Networks</h3>
+            <p>Off-policy control in depth — then DQN, Double DQN, Rainbow.</p>
+          </div>
+          <a class="btn primary" href="qlearning.html">Continue →</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Chapter 04 · Temporal-Difference Learning</p>
+    <p class="muted">Sample Bellman backups. On-policy SARSA vs off-policy Q-learning.</p>
+  </footer>
+
+  <script src="td.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

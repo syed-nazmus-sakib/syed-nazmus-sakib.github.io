@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>01 · Scalar Reward Model · Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl · Rewards</span>
+    </a>
+    <nav class="chapter-nav" aria-label="Chapters">
+      <a href="index.html">00 · Overview</a>
+      <a class="active" href="scalar.html">01 · Scalar</a>
+      <a href="pointwise.html">02 · Pointwise</a>
+      <a href="pairwise.html">03 · Pairwise</a>
+      <a href="listwise.html">04 · Listwise</a>
+      <a href="orm.html">05 · ORM</a>
+      <a href="prm.html">06 · PRM</a>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#overview">1. The basic problem</a></li>
+        <li><a href="#architecture">2. Architecture: transformer to scalar</a></li>
+        <li><a href="#ht">3. What is the final-token hidden state \(h_T\)?</a></li>
+        <li><a href="#training">4. Training on winner and loser pairs</a></li>
+        <li><a href="#numerical">5. A numerical example</a></li>
+        <li><a href="#loss">6. The loss function</a></li>
+        <li><a href="#relative">7. The score is relative, not absolute</a></li>
+        <li><a href="#uses">8. How is it used?</a></li>
+        <li><a href="#learns">9. What the model actually learns</a></li>
+        <li><a href="#weaknesses">10. Weaknesses of the scalar RM</a></li>
+        <li><a href="#lab">11. Laboratory</a></li>
+        <li><a href="#worked">12. Worked example, step by step</a></li>
+        <li><a href="#next">13. What comes next</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Reward Models · Chapter 01</p>
+      <h1 class="study-title">The scalar <em>discriminative</em> reward model</h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        This is the reward model from classical RLHF: InstructGPT, the original
+        Anthropic HH work, and most PPO-based fine-tuning pipelines. It takes a
+        prompt and a response and returns one number. It is trained on pairs of
+        responses where a human said "this one is better," using a simple
+        pairwise model called Bradley-Terry. This chapter builds the architecture,
+        the loss, and the intuition from scratch, with a full numerical walkthrough
+        and an interactive playground.
+      </div>
+
+      <section class="study-section" id="overview">
+        <h2>1. The basic problem</h2>
+        <div class="prose-study">
+          <p class="lead">
+            We want a function that looks at a prompt and an answer and returns a
+            number saying how good that answer is.
+          </p>
+          <p>
+            Take a simple prompt:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            x = \text{"Explain why the sky appears blue."}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>Two candidate answers:</p>
+        </div>
+
+        <div class="board-grid" style="grid-template-columns:repeat(2,1fr);max-width:44rem" aria-label="Two candidate responses">
+          <div class="board-cell" style="min-height:auto;padding:0.9rem 1rem;align-items:flex-start;text-align:left">
+            <span class="cell-label">Response A</span>
+            <strong style="font-size:0.95rem;font-weight:500;color:var(--ink-soft)">Blue light is scattered more strongly than red light by molecules in the atmosphere.</strong>
+          </div>
+          <div class="board-cell" style="min-height:auto;padding:0.9rem 1rem;align-items:flex-start;text-align:left">
+            <span class="cell-label">Response B</span>
+            <strong style="font-size:0.95rem;font-weight:500;color:var(--ink-soft)">The sky reflects the blue color of the ocean.</strong>
+          </div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            A human reads both and says A is better: \(A \succ B\). Response A is
+            correct physics. Response B sounds plausible but is wrong.
+          </p>
+          <p>
+            The scalar reward model's whole job is to turn that human judgment into
+            a function \(r_\theta(x,y)\) that assigns a real number to any
+            \((x,y)\) pair, such that:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            r_\theta(x, A) > r_\theta(x, B)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Once we have that function, we can use it to pick good answers, filter
+            bad ones, or steer a policy toward higher-scoring answers with RL. The
+            rest of this chapter is about how \(r_\theta\) is built and trained.
+          </p>
+        </div>
+
+        <div class="def-box">
+          <span class="box-label">One-sentence definition</span>
+          <p>
+            A scalar reward model is a neural network that reads a prompt and a
+            full response and outputs one real number: an overall quality score
+            for that response, nothing more.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="architecture">
+        <h2>2. Architecture: transformer to scalar</h2>
+        <div class="prose-study">
+          <p>
+            The scalar RM reuses a pretrained transformer, the same kind of
+            backbone used for language modeling. The only change is what sits on
+            top of it.
+          </p>
+          <p>
+            Concatenate the prompt and the response into one sequence of tokens,
+            \(x \oplus y\), and run it through the transformer. Take the hidden
+            state at the final token, call it \(h_T\). Feed \(h_T\) into a small
+            linear layer with a single output:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            r_\theta(x, y) = w^\top h_T + b
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            \(w\) is a weight vector the same size as the hidden state, \(b\) is a
+            single bias scalar. The language modeling head (the part that predicts
+            the next token over a huge vocabulary) is thrown away and replaced by
+            this one-output head. Everything else, the token embeddings and the
+            transformer layers, is usually initialized from a pretrained or
+            SFT-tuned checkpoint and then fine-tuned further.
+          </p>
+        </div>
+
+        <div class="flow-steps" style="max-width:32rem">
+          <div class="flow-step">Input: prompt and response tokens, concatenated: \(x \oplus y\)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Transformer backbone (same architecture as the base language model)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">Take the hidden state at the last token: \(h_T\)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Linear head: one neuron, weights \(w\), bias \(b\)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">Output: a single number, \(r_\theta(x,y)\)</div>
+        </div>
+
+        <div class="bellman-trace" style="max-width:34rem">
+<pre style="margin:0;font-family:inherit;white-space:pre-wrap">
+   x = "Explain why the sky appears blue."
+   y = "Blue light is scattered more..."
+
+   [ x ⊕ y ]  (one token sequence)
+        |
+        v
+   Transformer  (12, 24, ... layers)
+        |
+        v
+   h_T          (hidden vector, last token)
+        |
+        v
+   Linear head: w^T h_T + b
+        |
+        v
+   r(x, y) = 2.7    <- one real number, done
+</pre>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">Why the last token?</span>
+          <p>
+            By the time the transformer has processed the whole prompt and the
+            whole response, the hidden state at the final position has attended to
+            everything before it. It is a reasonable summary of "what was just
+            read," which is why it is a common choice for the pooling point. Some
+            implementations use a special end-of-sequence token instead of the
+            literal last token, or average over positions, but the idea is the
+            same: compress the full \((x,y)\) pair into one vector, then map that
+            vector to one number.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="ht">
+        <h2>3. What is the final-token hidden state \(h_T\)?</h2>
+        <div class="prose-study">
+          <p class="lead">
+            \(h_T\) is not the last word itself. It is the transformer's numerical,
+            context-aware representation of the whole sequence at the final position.
+          </p>
+          <p>
+            Suppose the input is:
+          </p>
+          <blockquote>
+            The answer is 42.
+          </blockquote>
+          <p>
+            After tokenization:
+          </p>
+        </div>
+        <div class="eq-block">
+          \[
+            [
+              t_1=\text{The},\quad
+              t_2=\text{answer},\quad
+              t_3=\text{is},\quad
+              t_4=\text{42},\quad
+              t_5=\langle\text{EOS}\rangle
+            ]
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Here \(T = 5\): there are five tokens. The transformer produces one
+            hidden-state vector for every token:
+          </p>
+        </div>
+        <div class="eq-block">
+          \[
+            h_1,\; h_2,\; h_3,\; h_4,\; h_5
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Each \(h_t\) is a list of numbers representing what the model understands
+            at that position. For example:
+          </p>
+        </div>
+        <div class="eq-block">
+          \[
+            h_5 = [0.21,\; -0.47,\; 0.83,\; \ldots]
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Because the last token, usually an end-of-sequence token, can attend to
+            all previous tokens, its hidden state contains information about the
+            entire prompt and response:
+          </p>
+        </div>
+        <div class="bellman-trace" style="max-width:34rem">
+<pre style="margin:0;font-family:inherit;white-space:pre-wrap">
+Prompt + Response + &lt;EOS&gt;
+                      |
+                      v
+                     h_T
+       contextual representation of everything before it
+</pre>
+        </div>
+        <div class="def-box">
+          <span class="box-label">Definition</span>
+          \[
+            \boxed{h_T=\text{the Transformer's internal representation at the final token}}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The reward head then converts this large vector into one number:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3b)</span>
+          \[
+            r = w^\top h_T + b
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            For example, a 4096-dimensional hidden state collapses to a single score:
+          </p>
+        </div>
+        <div class="eq-block">
+          \[
+            h_T \in \mathbb{R}^{4096}
+            \quad\longrightarrow\quad
+            r = 3.7
+          \]
+        </div>
+        <div class="flow-steps" style="max-width:32rem">
+          <div class="flow-step">Complete prompt and answer</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Transformer creates contextual vectors</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">Take vector at final / EOS token: \(h_T\)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Linear reward head</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">One reward score</div>
+        </div>
+        <div class="note-box">
+          <span class="box-label">Key point</span>
+          <p>
+            \(h_T\) is not the final word itself. It is the model's numerical,
+            context-aware representation of the whole sequence at the final position.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="training">
+        <h2>4. Training on winner and loser pairs</h2>
+        <div class="prose-study">
+          <p>
+            We do not have absolute quality labels like "this answer is a 7 out of
+            10." What we have is comparisons: for a prompt \(x\), a human (or
+            another model) is shown two responses and picks the better one.
+          </p>
+          <p>
+            Call the chosen response the <strong>winner</strong>, \(y_w\), and the
+            rejected one the <strong>loser</strong>, \(y_l\). Each training example
+            is a triple \((x, y_w, y_l)\). Run both responses through the same
+            reward model to get two scores:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            r_w = r_\theta(x, y_w), \qquad r_l = r_\theta(x, y_l)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            We want \(r_w > r_l\) most of the time. To turn that into a
+            trainable probability, classical RLHF borrows the
+            <strong>Bradley-Terry model</strong>, an old idea from ranking chess
+            players and sports teams from pairwise match results. It says the
+            probability that \(y_w\) is preferred over \(y_l\) is a sigmoid of the
+            score difference:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            P(y_w \succ y_l) = \sigma(r_w - r_l), \qquad
+            \sigma(z) = \frac{1}{1 + e^{-z}}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The sigmoid function \(\sigma\) squashes any real number into the
+            range \((0, 1)\), so this is a valid probability. If \(r_w\) is much
+            bigger than \(r_l\), the model is very confident the winner is better.
+            If the two scores are close, the model is unsure. If \(r_l\) is bigger,
+            the model thinks the loser is actually better, which is the mistake we
+            want training to correct.
+          </p>
+        </div>
+
+        <div class="def-box">
+          <span class="box-label">Bradley-Terry model</span>
+          <p>
+            Given two items with hidden "strength" scores \(r_1\) and \(r_2\), the
+            probability item 1 beats item 2 in a head-to-head comparison is
+            \(\sigma(r_1 - r_2)\). It only depends on the difference of the two
+            strengths, never on either score alone. This one assumption is the
+            entire statistical backbone of the classical RLHF reward model.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="numerical">
+        <h2>5. A numerical example</h2>
+        <div class="prose-study">
+          <p>
+            Suppose the reward model, after seeing our sky example, outputs:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            r_w = r_\theta(x, A) = 3, \qquad r_l = r_\theta(x, B) = 1
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The difference is \(\Delta = r_w - r_l = 2\). Plugging into the
+            sigmoid:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            \sigma(2) = \frac{1}{1 + e^{-2}} \approx 0.881
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The model assigns about an 88.1% probability that A is preferred over
+            B. That matches the human label, so this is a good prediction. Now
+            look at what happens if the model has the ranking backwards.
+          </p>
+        </div>
+
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Correct ranking</h4>
+            <p>\(r_w = 3\), \(r_l = 1\), so \(\Delta = 2\).</p>
+            <p>\(P(y_w \succ y_l) = \sigma(2) \approx 0.881\)</p>
+            <p class="mono-line">Confident and right. Small loss.</p>
+          </div>
+          <div class="compare-card">
+            <h4>Flipped ranking</h4>
+            <p>\(r_w = 1\), \(r_l = 3\), so \(\Delta = -2\).</p>
+            <p>\(P(y_w \succ y_l) = \sigma(-2) \approx 0.119\)</p>
+            <p class="mono-line">Confident and wrong. Large loss.</p>
+          </div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            In the flipped case, the model puts only 11.9% probability on the
+            correct winner. It has effectively decided the loser is better. This
+            is exactly the situation the loss function in the next section is
+            built to punish hard.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="loss">
+        <h2>6. The loss function</h2>
+        <div class="prose-study">
+          <p>
+            Training uses the negative log-likelihood of the Bradley-Terry
+            probability. For one preference pair:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            \mathcal{L}(\theta) = -\log \sigma(r_w - r_l)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This single line is the entire training objective of the classical
+            scalar reward model. Averaged over a batch of preference pairs, it
+            becomes the loss the optimizer minimizes. Three things to notice:
+          </p>
+          <ul>
+            <li>
+              If \(r_w - r_l\) is large and positive, \(\sigma(r_w - r_l)\) is
+              close to 1, \(\log\) of something close to 1 is close to 0, so the
+              loss is small. The model is already doing well and gets a weak
+              gradient signal.
+            </li>
+            <li>
+              If \(r_w - r_l\) is negative, \(\sigma(r_w - r_l)\) is small,
+              \(-\log\) of a small number is large, so the loss is large. The
+              model gets a strong gradient signal telling it to raise \(r_w\)
+              and lower \(r_l\).
+            </li>
+            <li>
+              The loss is never satisfied by "close enough." It keeps rewarding
+              a bigger margin between winner and loser, though the gradient
+              shrinks as the margin grows, so most of the pressure is on pairs
+              the model still gets wrong or is unsure about.
+            </li>
+          </ul>
+          <p>
+            Using the numbers from the previous section: the correct ranking
+            (\(\Delta = 2\)) gives loss \(-\log(0.881) \approx 0.127\), small. The
+            flipped ranking (\(\Delta = -2\)) gives loss \(-\log(0.119) \approx
+            2.13\), about 17 times larger. That gap is what drives learning: wrong
+            and confident pairs dominate the gradient.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="relative">
+        <h2>7. The score is relative, not absolute</h2>
+        <div class="prose-study">
+          <p>
+            Here is a property that surprises people the first time they see it.
+            Add the same constant \(c\) to both scores, and nothing about the
+            training signal changes:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            \sigma\big((r_w + c) - (r_l + c)\big) = \sigma(r_w - r_l)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The constant cancels inside the subtraction. The loss only ever sees
+            the difference \(r_w - r_l\), never \(r_w\) or \(r_l\) by themselves.
+          </p>
+        </div>
+
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Original scores</h4>
+            <p>\(r_w = 3\), \(r_l = 1\)</p>
+            <p>\(\Delta = 2\), \(P \approx 0.881\), loss \(\approx 0.127\)</p>
+          </div>
+          <div class="compare-card">
+            <h4>Shift both by +100</h4>
+            <p>\(r_w = 103\), \(r_l = 101\)</p>
+            <p>\(\Delta = 2\), \(P \approx 0.881\), loss \(\approx 0.127\)</p>
+          </div>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">What this means in practice</span>
+          <p>
+            A single score like \(r_\theta(x,y) = 2.7\) has no meaning by itself.
+            There is no fixed zero point and no fixed unit. The number 2.7 only
+            means something when compared against another score produced by the
+            <em>same</em> reward model on a <em>related</em> response, usually for
+            the same prompt.
+          </p>
+          <p>
+            This is why you cannot compare raw reward scores across two different
+            reward models, or even meaningfully compare \(r_\theta(x_1, y)\)
+            against \(r_\theta(x_2, y')\) for two unrelated prompts. Only
+            differences within a comparable set carry information.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="uses">
+        <h2>8. How is it used?</h2>
+        <div class="prose-study">
+          <p>
+            Once trained, \(r_\theta\) is used in two main ways.
+          </p>
+        </div>
+
+        <h3>A. Best-of-N selection</h3>
+        <div class="prose-study">
+          <p>
+            Generate several responses:
+          </p>
+        </div>
+        <div class="eq-block">
+          \[
+            y_1,\; y_2,\; \ldots,\; y_N
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Score all of them:
+          </p>
+        </div>
+        <div class="eq-block">
+          \[
+            r_1,\; r_2,\; \ldots,\; r_N
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Select the response with the maximum predicted reward:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            y^\ast = \arg\max_{y_i}\, r_\theta(x, y_i)
+          \]
+        </div>
+        <div class="note-box">
+          <span class="box-label">Meaning</span>
+          <p>
+            Choose the response with the maximum predicted reward. No policy
+            training is required: this is pure selection at inference time.
+          </p>
+        </div>
+
+        <h3>B. Reinforcement learning</h3>
+        <div class="prose-study">
+          <p>
+            The policy generates a response:
+          </p>
+        </div>
+        <div class="eq-block">
+          \[
+            y \sim \pi_\phi(\cdot \mid x)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The reward model supplies:
+          </p>
+        </div>
+        <div class="eq-block">
+          \[
+            r_\theta(x, y)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            PPO or another RL algorithm updates the policy so that higher-reward
+            responses become more likely.
+          </p>
+        </div>
+        <div class="flow-steps" style="max-width:32rem">
+          <div class="flow-step">Policy generates answer</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">Reward model assigns score</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">RL increases probability of high-score answers</div>
+        </div>
+        <div class="prose-study">
+          <p>
+            This was the central reward-model role in classical RLHF pipelines
+            such as InstructGPT. Best-of-N gets more expensive as \(N\) grows,
+            since every candidate needs a full generation and a reward-model pass.
+            RL bakes the preference into the policy's weights, so inference stays
+            cheap (one generation), but training is more complex and can overfit
+            to the reward model's blind spots, which is the topic of the
+            weaknesses section below.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="learns">
+        <h2>9. What the model actually learns</h2>
+        <div class="prose-study">
+          <p>
+            It is tempting to think a reward model trained on "A is better than
+            B" learns something like truth or correctness. It does not, not
+            directly. It learns to predict <strong>what the labelers preferred</strong>,
+            which is a pattern in the training data, not a definition of quality.
+          </p>
+          <p>
+            Most of the time these overlap: labelers usually prefer accurate,
+            helpful, well-organized answers, so the reward model does end up
+            rewarding those things too. But the reward model has no independent
+            way to check if an answer is factually correct. It only knows what
+            tended to get chosen in its training set.
+          </p>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">A concrete failure mode</span>
+          <p>
+            If labelers historically preferred longer, more confident-sounding
+            answers, even when a shorter answer was equally correct, the reward
+            model will learn to reward length and confidence. It will happily
+            give a high score to a long, fluent, wrong answer, because from its
+            point of view, "long and fluent" is what winners tend to look like.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="weaknesses">
+        <h2>10. Weaknesses of the scalar reward model</h2>
+        <div class="prose-study">
+          <p>
+            The scalar architecture is simple and it works, which is why it
+            powered the first wave of RLHF systems. It also has real limits.
+          </p>
+        </div>
+
+        <table class="practice-table">
+          <caption>Four structural weaknesses</caption>
+          <thead>
+            <tr><th>Weakness</th><th>What happens</th><th>Why it matters</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>No localization</td>
+              <td>One number covers the entire response.</td>
+              <td>Cannot say which sentence, step, or word caused a low score.</td>
+            </tr>
+            <tr>
+              <td>Inherited biases</td>
+              <td>Learns whatever patterns were in labeler choices.</td>
+              <td>Length, tone, and formatting biases get baked in as if they were quality.</td>
+            </tr>
+            <tr>
+              <td>Reward hacking</td>
+              <td>RL policy finds inputs that score high without being good.</td>
+              <td>Optimizing hard against an imperfect judge tends to find its blind spots.</td>
+            </tr>
+            <tr>
+              <td>Single dimension</td>
+              <td>Helpfulness, honesty, and safety are all mixed into one number.</td>
+              <td>No way to see or control the trade-off between competing goals.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="prose-study">
+          <p>
+            <strong>No localization.</strong> If a math answer gets the final
+            number wrong because of one bad step in the middle, the scalar RM
+            can only say "this whole response scored low." It cannot point at
+            the bad step. Process reward models, covered later in this course,
+            exist specifically to fix this.
+          </p>
+          <p>
+            <strong>Biases from training data.</strong> If human raters (or an
+            AI judge standing in for them) have a systematic preference, for
+            example favoring longer answers, more hedging language, or answers
+            that agree with the user, the reward model absorbs that preference
+            as if it were genuine quality.
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Reward hacking</span>
+          <p>
+            When you run RL against a fixed, imperfect reward model, the policy
+            is not optimizing for "actually good answers." It is optimizing for
+            "answers that score high on \(r_\theta\)." Push hard enough and the
+            policy finds the gap between the two: repeating certain phrases, padding
+            length, or adopting a confident tone the RM associates with quality,
+            all without actually improving the answer. This is Goodhart's law in
+            action: once a measure becomes a target, it stops being a reliable
+            measure.
+          </p>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            <strong>Single dimension.</strong> Real answers trade off multiple
+            goals: being maximally helpful can conflict with being maximally
+            careful or safe. A single scalar collapses all of that into one
+            number, so the RM (and the policy trained on it) has no explicit way
+            to represent "very helpful but slightly risky" versus "very safe but
+            less useful." Multi-head reward models, covered later in this
+            course, address this directly.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section lab-wide" id="lab">
+        <h2>11. Laboratory: Bradley-Terry playground</h2>
+        <div class="prose-study">
+          <p>
+            Move the two sliders to set the winner score \(r_w\) and the loser
+            score \(r_l\). Watch the margin \(\Delta\), the predicted preference
+            probability, and the loss update live.
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Winner vs. loser scores</h3>
+            <span>Bradley-Terry model</span>
+          </div>
+
+          <div class="demo-controls" style="margin-bottom:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem">
+            <div class="control-block">
+              <span class="control-label">Winner score</span>
+              <label class="slider-label">
+                r_w
+                <input type="range" id="rwScore" min="-2" max="6" step="0.1" value="3" />
+                <strong id="rwScoreL">3.0</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Loser score</span>
+              <label class="slider-label">
+                r_l
+                <input type="range" id="rlScore" min="-2" max="6" step="0.1" value="1" />
+                <strong id="rlScoreL">1.0</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Quick examples</span>
+              <div class="btn-row">
+                <button type="button" class="btn small" id="scalarExampleGood">Correct ranking</button>
+                <button type="button" class="btn small ghost" id="scalarExampleBad">Flipped ranking</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="stat-strip" style="grid-template-columns:repeat(3,1fr)">
+            <div><span>Δ = r_w − r_l</span><strong id="btDiff">2.00</strong></div>
+            <div><span>P(winner) = σ(Δ)</span><strong id="btProb">88.1%</strong></div>
+            <div><span>Loss = −log σ(Δ)</span><strong id="btLoss">0.1269</strong></div>
+          </div>
+
+          <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:1rem 0 0.5rem">
+            What is happening
+          </h4>
+          <div class="bellman-trace" id="scalarTrace">Move a slider to see the trace.</div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Try pushing \(r_l\) above \(r_w\). The probability drops below 50%
+            and the loss climbs quickly. That is the reward model actively
+            being wrong, and it is exactly the signal that drives the biggest
+            gradient updates during training.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>12. Worked example, step by step</h2>
+        <div class="prose-study">
+          <p>
+            Suppose after a training step the reward model gives \(r_w = 1.5\)
+            for the winning response and \(r_l = 0.9\) for the losing one.
+            Reveal the steps to compute the loss by hand.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Start with the two raw scores: \(r_w = 1.5\), \(r_l = 0.9\).</li>
+            <li class="hidden-step">Compute the margin: \(\Delta = r_w - r_l = 1.5 - 0.9 = 0.6\).</li>
+            <li class="hidden-step">Convert the margin to a probability: \(P = \sigma(0.6) = \dfrac{1}{1+e^{-0.6}} \approx 0.646\).</li>
+            <li class="hidden-step">Compute the loss: \(\mathcal{L} = -\log(0.646) \approx 0.437\).</li>
+            <li class="hidden-step">Interpret: the model already favors the winner (\(P > 0.5\)) but is not confident. Training will keep pushing \(r_w\) up and \(r_l\) down to widen the margin.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>13. What comes next</h2>
+        <div class="prose-study">
+          <p>
+            The scalar discriminative reward model is the workhorse of classical
+            RLHF: simple to train, cheap to run, and good enough to power
+            systems like InstructGPT. Its main cost is exactly what we listed in
+            the weaknesses section: one blurry number per response, prone to
+            picking up the wrong patterns, and vulnerable to being gamed by RL.
+          </p>
+          <p>
+            Next we look at a different framing: pointwise binary verifiers,
+            which trade "which response is better" for a sharper, easier
+            question: "is this response correct, yes or no."
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Key loss to remember</span>
+          <div class="eq-block tight" style="margin:0.5rem 0 0">
+            \[
+              \mathcal{L}(\theta) = -\log \sigma(r_\theta(x,y_w) - r_\theta(x,y_l))
+            \]
+          </div>
+          <p style="margin-top:0.75rem">
+            Everything in this chapter reduces to this one line: score the
+            winner, score the loser, take the sigmoid of the difference, and
+            push that probability toward 1 with a log loss.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Christiano et al., 2017, deep RL from human preferences (the original pairwise setup).</li>
+            <li>Stiennon et al., 2020, learning to summarize with human feedback.</li>
+            <li>Ouyang et al., 2022, InstructGPT (the scalar RM plus PPO recipe this chapter follows).</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Next chapter</p>
+            <h3>Pointwise binary verifier</h3>
+            <p>One question per answer: correct, or not.</p>
+          </div>
+          <a class="btn primary" href="pointwise.html">Start →</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Reward Models · Chapter 01, Scalar discriminative RM</p>
+    <p class="muted">One number per answer. Learned from A beats B.</p>
+  </footer>
+
+  <script src="scalar.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

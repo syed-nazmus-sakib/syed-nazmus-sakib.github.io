@@ -1,0 +1,265 @@
+RL COURSE NOTES
+================================================================
+Roadmap confirmed: TD → value functions → greedy policy improvement
+(not "gridworlds" specifically — though gridworlds are used as demos).
+
+Phase 1 (foundations):
+  MDP → Value functions/Bellman equations → Dynamic Programming
+  (Policy/Value Iteration, greedy improvement) → TD learning
+  (TD(0), SARSA, Q-learning) → Policy Gradients (REINFORCE, Actor-Critic)
+
+Phase 2: Imitation Learning → Behavioral Cloning → DAgger/GAIL
+
+Phase 3: TRPO → PPO → SAC → GRPO → RLVR
+
+Style: intuition first, then light math, then (on signal) heavy math.
+Heavy math comes as a bundled pass later.
+
+
+================================================================
+1. MARKOV DECISION PROCESS
+================================================================
+
+--- The intuition ---
+Picture your robot at time t. It's got some state s — everything it
+currently knows (joint angles, position, whatever sensors give it).
+It picks an action a. The world reacts: it lands in a new state s'
+and gets a reward r — a scalar saying "that was good" or "that was bad."
+Repeat forever (or until the episode ends).
+
+That's the whole loop: s → a → (s', r) → a → (s'', r') → …
+
+--- The lightweight math ---
+An MDP is the tuple (S, A, P, R, γ):
+  S  — set of possible states
+  A  — set of possible actions
+  P(s' | s, a) — probability you land in s' if you take action a in state s
+                 (the world can be stochastic — same action, different outcome)
+  R(s, a) — reward you get for that transition
+  γ ∈ [0, 1) — discount factor: how much you care about future vs immediate reward
+
+A policy π(a | s) is your strategy — the probability of taking action a
+when in state s. (Could be deterministic: π(s) = a.)
+
+The return is the total discounted reward from time t onward:
+  G_t = r_{t+1} + γ r_{t+2} + γ² r_{t+3} + … = Σ_{k=0}^∞ γ^k r_{t+k+1}
+
+Why discount?
+  (1) without it, infinite-horizon sums can diverge — can't compare policies
+  (2) a reward tomorrow is worth less than the same reward now
+  γ close to 1 = patient/far-sighted; γ close to 0 = greedy/short-sighted
+
+The entire goal of RL is: find the π that maximizes E_π[G_0] —
+the expected return, averaged over all randomness in env and policy.
+
+--- Why "Markov"? ---
+The Markov property: the future depends only on the current state,
+not the full history. s_t must fully summarize everything relevant.
+
+State design matters: if a joint-angle reading doesn't capture velocity,
+the state isn't Markovian, and Bellman/TD math technically breaks unless
+you stack velocity/history. Same reason for Atari frame-stacking / LSTMs.
+
+
+================================================================
+2. VALUE FUNCTIONS & BELLMAN EQUATIONS
+================================================================
+
+Two flavors:
+  V^π(s) — expected return from state s following π
+  Q^π(s,a) — expected return if forced to take a now, then follow π
+
+Q is more useful in practice: compare Q(s,a1) vs Q(s,a2) without a model.
+
+Bellman intuition: value of where you are = immediate reward +
+discounted value of wherever you end up next. Recursive identity.
+
+Lightweight math:
+  V^π(s) = E_π[G_t | s_t = s]
+  Q^π(s,a) = E_π[G_t | s_t = s, a_t = a]
+
+Bellman expectation:
+  V^π(s) = Σ_a π(a|s) Σ_{s'} P(s'|s,a) [R(s,a) + γ V^π(s')]
+  Q^π(s,a) = R(s,a) + γ Σ_{s'} P(s'|s,a) Σ_{a'} π(a'|s') Q^π(s',a')
+
+Bellman optimality:
+  V*(s) = max_a [ R(s,a) + γ Σ_{s'} P(s'|s,a) V*(s') ]
+  Q*(s,a) = R(s,a) + γ Σ_{s'} P(s'|s,a) max_{a'} Q*(s',a')
+  π*(s) = argmax_a Q*(s,a)
+
+Greedy policy improvement: given any Q^π, acting greedily produces a
+policy at least as good as π.
+
+
+================================================================
+3. DYNAMIC PROGRAMMING
+================================================================
+
+DP = planning with a known model (exact P and R). Not learning yet.
+TD/Q-learning later are "DP but estimated from samples."
+
+Policy Iteration:
+  1. Policy Evaluation — freeze π, compute V^π
+  2. Policy Improvement — greedily switch to best action per state
+  Guaranteed never worse (Policy Improvement Theorem).
+
+Value Iteration:
+  Impatient version — one greedy Bellman step per sweep, extract
+  policy only at the end.
+
+Policy Evaluation update:
+  V_{k+1}(s) ← Σ_a π(a|s) Σ_{s'} P(s'|s,a) [R(s,a) + γ V_k(s')]
+
+Policy Improvement:
+  π'(s) = argmax_a [R(s,a) + γ Σ_{s'} P(s'|s,a) V^π(s')]
+
+Value Iteration:
+  V_{k+1}(s) ← max_a [R(s,a) + γ Σ_{s'} P(s'|s,a) V_k(s')]
+
+Catch: needs exact P,R and ability to sweep every state — fails for
+continuous robotics. TD fills that gap.
+
+
+================================================================
+4. TEMPORAL DIFFERENCE LEARNING
+================================================================
+
+DP = model, no sampling.
+Monte Carlo = sample full trajectory, wait for episode end.
+TD = sample like MC, update after one step using bootstrapping.
+
+TD(0):
+  V(s_t) ← V(s_t) + α [ r_{t+1} + γ V(s_{t+1}) − V(s_t) ]
+  δ_t = TD error = TD target − old estimate
+
+SARSA (on-policy):
+  Q(s_t,a_t) ← Q(s_t,a_t) + α [ r_{t+1} + γ Q(s_{t+1}, a_{t+1}) − Q(s_t,a_t) ]
+
+Q-learning (off-policy):
+  Q(s_t,a_t) ← Q(s_t,a_t) + α [ r_{t+1} + γ max_{a'} Q(s_{t+1},a') − Q(s_t,a_t) ]
+
+Exploration: ε-greedy. Later SAC uses entropy instead.
+
+TD error deeper:
+  δ_t > 0 → better than expected → nudge V up
+  δ_t < 0 → worse → nudge down
+  δ_t = 0 → locally converged
+
+General update shape:
+  estimate ← estimate + α [target − estimate]
+
+Targets:
+  Monte Carlo → G_t (unbiased, high variance)
+  TD(0) → r + γ V(s') (biased, low variance)
+  DP → E[r + γ V(s')] (expectation, no sampling)
+
+n-step TD / TD(λ) dial between MC and TD.
+Deadly triad: function approx + bootstrapping + off-policy → no guarantees.
+(Why DQN needed target nets + replay; why TRPO/PPO exist.)
+
+
+================================================================
+4b / 5. Q-LEARNING & DEEP Q-NETWORKS (dedicated chapter)
+================================================================
+
+Tabular Q-learning: sample backup of Bellman optimality operator.
+Convergence: Watkins & Dayan (tabular, infinite visitation, RM steps).
+Max operator ⇒ overestimation bias (Jensen); Double Q / Double DQN fix.
+
+Why naïve deep Q fails:
+  (1) correlated samples
+  (2) non-stationary bootstrap targets
+  (3) deadly triad
+
+DQN (Mnih et al.): experience replay + lagged target network θ⁻.
+Loss: E[(r + γ max_a' Q(s',a';θ⁻) − Q(s,a;θ))²] with stop-grad on y.
+Double DQN: a*=argmax Q_θ, evaluate with Q_θ⁻.
+Dueling: Q = V + (A − mean A).
+PER: sample by |δ|, IS weights.
+Rainbow: Double + dueling + PER + n-step + distributional + noisy nets.
+
+
+================================================================
+6. MONTE CARLO METHODS
+================================================================
+
+Average observed returns across episodes. No model, no bootstrapping.
+Only works for episodic tasks.
+
+First-visit vs every-visit MC.
+MC control needs exploring starts or ε-soft policies.
+Off-policy MC uses importance sampling ρ_t = Π π/b — high variance.
+REINFORCE is MC applied to policy learning.
+
+
+================================================================
+6. POLICY GRADIENTS
+================================================================
+
+Why leave value-based? Continuous actions make argmax hard; optimal
+policies can be stochastic.
+
+Policy gradient theorem / log-derivative trick — environment dynamics
+drop out of the gradient.
+
+REINFORCE: θ ← θ + α Σ_t ∇ log π_θ(a_t|s_t) · G_t
+Baseline: G_t − b(s_t) (advantage) reduces variance, no bias.
+Actor-Critic: replace G_t − V with TD error δ_t.
+  Actor = π_θ; Critic = V_w (TD-trained).
+
+
+================================================================
+7. TRPO (Trust Region Policy Optimization)
+================================================================
+
+Problem: Euclidean PG steps unstable in deep policy space.
+Performance difference / CPI → surrogate L_π(π') using A^π under d^π.
+Importance ratio form: L = E[(π_θ/π_old) A].
+Constraint: mean KL(π_old || π_θ) ≤ δ.
+Local QP: max gᵀx s.t. ½ xᵀ F x ≤ δ → x ∝ F⁻¹g (natural PG).
+Fisher-vector products + conjugate gradients (never form F).
+Backtracking line search for true KL ≤ δ and surrogate improvement.
+GAE advantages in practice. Bridge: PPO clips the ratio instead of CG.
+
+
+================================================================
+8. PPO (Proximal Policy Optimization)
+================================================================
+
+TRPO idea without CG: clipped importance-ratio surrogate.
+ρ_t = π_θ(a|s) / π_old(a|s).
+L^CLIP = E[ min(ρ A, clip(ρ, 1−ε, 1+ε) A) ].
+A>0: clip binds when ρ > 1+ε (stop rewarding further increase).
+A<0: clip binds when ρ < 1−ε (stop rewarding further decrease).
+Total loss: −L^CLIP + c_v L^VF − c_e entropy.
+Multi-epoch minibatch reuse on same rollout; clipping keeps ratios near 1.
+GAE(γ,λ) for advantages. Monitor clip fraction & approx KL.
+Vs TRPO: first-order Adam, weaker theory, usually better engineering.
+
+
+================================================================
+9. GRPO (Group Relative Policy Optimization)
+================================================================
+
+DeepSeekMath-style: PPO clip without a value critic.
+For prompt q, sample group {o_1..o_G} ~ π_old; rewards R_i.
+Â_i = (R_i − mean(R)) / std(R) — broadcast to tokens of o_i.
+Same clipped surrogate as PPO; KL to π_ref often in the loss (not reward).
+Equal rewards ⇒ std=0 ⇒ Â=0 ⇒ no policy gradient.
+Compared to RLOO (leave-one-out mean), DPO (offline prefs), PPO (+V_φ).
+View: contextual bandit per prompt + token-level autoregressive MDP.
+
+
+================================================================
+10. ACTOR-CRITIC DEEP PASS (see also Ch 06)
+================================================================
+
+Advantage: A^π(s,a) = Q^π(s,a) − V^π(s); E_a[A] = 0.
+GAE(γ,λ): exponentially weighted sum of TD residuals.
+Compatible Function Approximation Theorem (Sutton et al. 2000).
+On-policy branch: A2C/A3C/TRPO/PPO/GRPO.
+Off-policy branch: DPG → DDPG → TD3 → SAC.
+Natural policy gradient / Fisher info → motivates TRPO.
+PPO approximates trust region via clipped surrogate.
+GRPO approximates advantages via group-relative rewards (no critic).
+

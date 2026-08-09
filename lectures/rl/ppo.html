@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>08 · PPO — Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="why.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl</span>
+    </a>
+            <nav class="chapter-nav" aria-label="Chapters">
+      <a href="why.html">00 · Why</a>
+      <a href="index.html">01 · MDP</a>
+      <a href="value.html">02 · Value</a>
+      <a href="practice.html">Practice</a>
+      <a href="dp.html">03 · DP</a>
+      <a href="td.html">04 · TD</a>
+      <a href="qlearning.html">05 · DQN</a>
+      <a href="pg.html">06 · PG</a>
+      <a href="trpo.html">07 · TRPO</a>
+      <a class="active" href="ppo.html">08 · PPO</a>
+      <a href="grpo.html">09 · GRPO</a>
+      <span class="locked">10 · SAC</span>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#overview">1. Overview</a></li>
+        <li><a href="#motivation">2. Motivation from TRPO</a></li>
+        <li><a href="#ratio">3. The probability ratio</a></li>
+        <li><a href="#clip">4. The clipped surrogate</a></li>
+        <li><a href="#binding">5. When the clip binds</a></li>
+        <li><a href="#losses">6. Value loss, entropy, total objective</a></li>
+        <li><a href="#epochs">7. Multi-epoch reuse of a batch</a></li>
+        <li><a href="#gae">8. Advantages: the GAE pointer</a></li>
+        <li><a href="#algo">9. Full algorithm</a></li>
+        <li><a href="#hyper">10. Hyperparameters</a></li>
+        <li><a href="#vs-trpo">11. PPO vs TRPO</a></li>
+        <li><a href="#failure">12. Failure modes</a></li>
+        <li><a href="#grpo-bridge">13. Bridge to GRPO</a></li>
+        <li><a href="#lab">14. Laboratory</a></li>
+        <li><a href="#worked">15. Worked calculations</a></li>
+        <li><a href="#next">16. What follows</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Chapter 08 · Proximal policy optimization</p>
+      <h1 class="study-title"><em>PPO</em></h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Proximal Policy Optimization (Schulman et al., 2017) keeps TRPO's importance-sampled
+        surrogate and its concern for trust regions, but discards the constrained quadratic
+        program entirely. In its place sits a single first-order trick: clip the probability
+        ratio \(\rho_t(\theta)\) so that the surrogate objective stops rewarding updates that
+        move too far from the data-collecting policy. The result is a plain stochastic-gradient
+        algorithm — no Fisher-vector products, no conjugate gradients, no line search — that
+        matches or beats TRPO empirically while being dramatically simpler to implement, and
+        that scales to the largest policy networks in use today, including the actor networks
+        behind modern RLHF and reasoning-model post-training. This chapter derives
+        \(L^{\mathrm{CLIP}}\) term by term, works both signs of the advantage, assembles the
+        full \(L^{\mathrm{PPO}}\) objective with value and entropy terms, and closes with the
+        multi-epoch training loop that makes PPO so sample-efficient in practice. The
+        laboratory lets you drag \(\rho\) and \(\hat A\) by hand to watch the clip engage, then
+        run clipped vs. unclipped policy-gradient steps on a small gridworld.
+      </div>
+
+      <!-- 1 -->
+      <section class="study-section" id="overview">
+        <h2>1. Overview</h2>
+        <div class="prose-study">
+          <p class="lead">
+            PPO is, by a wide margin, the most-deployed on-policy deep RL algorithm of the last
+            decade: continuous-control robotics, Dota 2 and StarCraft II agents, and — in a
+            reincarnation few expected in 2017 — the reinforcement-learning-from-human-feedback
+            (RLHF) stage of nearly every modern instruction-tuned language model. All of that
+            success traces back to one design choice: replace TRPO's hard KL constraint with a
+            <em>soft, differentiable</em> surrogate that a plain Adam optimizer can climb.
+          </p>
+          <p>
+            Two variants appear in the literature. <strong>PPO-Penalty</strong> keeps an
+            unconstrained KL term with an adaptively tuned coefficient \(\beta\) — closer in
+            spirit to a Lagrangian relaxation of TRPO's constraint. <strong>PPO-Clip</strong>,
+            the version that won out in practice and the subject of this chapter, uses no KL
+            term at all: it clips the probability ratio directly inside the objective. Unless
+            stated otherwise, "PPO" in this course means PPO-Clip.
+          </p>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section class="study-section" id="motivation">
+        <h2>2. Motivation from TRPO</h2>
+        <div class="prose-study">
+          <p>
+            Recall Chapter&nbsp;07's surrogate, defined relative to a fixed data-collecting
+            policy \(\pi_{\theta_{\mathrm{old}}}\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            L^{\mathrm{CPI}}(\theta)
+            =
+            \mathbb{E}_t
+            \left[
+              \frac{\pi_\theta(a_t\mid s_t)}{\pi_{\theta_{\mathrm{old}}}(a_t\mid s_t)}
+              \hat A_t
+            \right]
+            =
+            \mathbb{E}_t\big[\rho_t(\theta)\,\hat A_t\big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            "CPI" stands for <em>conservative policy iteration</em>, the Kakade–Langford result
+            that justifies this linearization. Left unconstrained, maximizing \(L^{\mathrm{CPI}}\)
+            drives \(\rho_t\to\infty\) wherever \(\hat A_t>0\) and \(\rho_t\to 0\) wherever
+            \(\hat A_t<0\) — an excessively large policy update that TRPO prevented with a hard
+            trust-region constraint on mean KL, solved via natural gradients, conjugate
+            gradients, and a backtracking line search.
+          </p>
+          <p>
+            That machinery is expensive: every update needs several Hessian-vector products
+            (each a full backward pass through the KL Hessian), is awkward to combine with
+            architectures that share parameters between policy and value heads, and does not
+            trivially support minibatched, multi-epoch training the way ordinary deep-learning
+            optimizers do. PPO's question: <em>can a term inside the objective itself do the
+            job the constraint was doing?</em>
+          </p>
+        </div>
+
+        <div class="remark-box">
+          <span class="box-label">Remark · Same data, same estimator</span>
+          <p>
+            PPO changes nothing about how advantages are estimated or how rollouts are
+            collected — both chapters are on-policy, both typically use GAE. The only change is
+            what happens to \(\rho_t\hat A_t\) before it is averaged and differentiated.
+          </p>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section class="study-section" id="ratio">
+        <h2>3. The probability ratio \(\rho_t(\theta)\)</h2>
+        <div class="def-box">
+          <span class="box-label">Definition 3.1 · Probability ratio</span>
+          <p>
+            For timestep \(t\) sampled under \(\pi_{\theta_{\mathrm{old}}}\), define
+            \[
+              \rho_t(\theta)
+              \;=\;
+              \frac{\pi_\theta(a_t\mid s_t)}{\pi_{\theta_{\mathrm{old}}}(a_t\mid s_t)}.
+            \]
+            By construction \(\rho_t(\theta_{\mathrm{old}})=1\) for every \(t\): at the moment
+            of collection the ratio is exactly \(1\), and it only moves away from \(1\) as
+            \(\theta\) is updated during subsequent epochs on the same batch.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            Two implementation details matter enough to state explicitly.
+          </p>
+          <ul>
+            <li>
+              <strong>Log-space computation.</strong> Networks output
+              \(\log\pi_\theta(a_t\mid s_t)\) directly (log-softmax for discrete actions,
+              Gaussian log-density for continuous ones). The ratio is formed as
+              \(\rho_t=\exp\big(\log\pi_\theta(a_t\mid s_t)-\log\pi_{\theta_{\mathrm{old}}}(a_t\mid s_t)\big)\),
+              which is numerically stable even when the raw probabilities are tiny.
+            </li>
+            <li>
+              <strong>\(\log\pi_{\theta_{\mathrm{old}}}\) is a stored constant.</strong> It is
+              computed once, at rollout time, and cached alongside \(s_t,a_t,\hat A_t\) in the
+              batch. During the \(K\) epochs of gradient updates that follow, only
+              \(\log\pi_\theta\) changes; \(\theta_{\mathrm{old}}\) never does, until the next
+              rollout phase begins.
+            </li>
+          </ul>
+          <p>
+            For continuous control, \(\pi_\theta(\cdot\mid s)\) is usually a diagonal Gaussian
+            \(\mathcal N(\mu_\theta(s), \Sigma_\theta(s))\), and the ratio is the ratio of joint
+            densities across action dimensions — a single scalar per timestep, exactly as in
+            the discrete case.
+          </p>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">Reading \(\rho_t\)</span>
+          <p>
+            \(\rho_t>1\) means the current policy is now <em>more</em> likely than the old one
+            to take the action that was actually taken; \(\rho_t<1\) means less likely.
+            Whether that is desirable depends entirely on the sign of \(\hat A_t\) — which is
+            exactly what the clipped objective below encodes.
+          </p>
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section class="study-section" id="clip">
+        <h2>4. The clipped surrogate \(L^{\mathrm{CLIP}}\)</h2>
+        <div class="prose-study">
+          <p>
+            PPO-Clip replaces (1) with the minimum of two candidate terms: the unclipped CPI
+            term, and a version where the ratio has first been clamped to an interval around 1.
+          </p>
+        </div>
+        <div class="def-box">
+          <span class="box-label">Definition 4.1 · Clipped surrogate objective</span>
+          <p>
+            \[
+              L^{\mathrm{CLIP}}(\theta)
+              =
+              \mathbb{E}_t
+              \Big[
+                \min\big(
+                  \rho_t(\theta)\,\hat A_t,\;\;
+                  \operatorname{clip}\!\big(\rho_t(\theta),\,1-\varepsilon,\,1+\varepsilon\big)\,\hat A_t
+                \big)
+              \Big],
+            \]
+            where \(\varepsilon\) is a small hyperparameter (commonly \(0.1\)–\(0.3\)) and
+            \(\operatorname{clip}(x,\ell,u)=\max(\ell,\min(u,x))\) clamps \(x\) into
+            \([\ell,u]\).
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            \(L^{\mathrm{CLIP}}\) is a pointwise minimum of two terms, hence
+            \(L^{\mathrm{CLIP}}(\theta)\le L^{\mathrm{CPI}}(\theta)\) for every \(\theta\) and
+            every sample: it is a <strong>pessimistic (lower) bound</strong> on the unclipped
+            surrogate, in the same spirit as TRPO's improvement lower bound
+            (Theorem&nbsp;3.1 of Chapter&nbsp;07). The two cases of \(\hat A_t\)'s sign behave
+            very differently and are worth working through separately.
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · Case \(\hat A_t>0\) (good action, reinforce it — but not too much)</span>
+          <p>
+            Both \(\rho_t\hat A_t\) and \(\operatorname{clip}(\rho_t)\hat A_t\) are
+            non-decreasing in \(\rho_t\) (multiplying by a positive constant preserves
+            monotonicity). For \(\rho_t\le 1+\varepsilon\) the clip has not engaged, so the two
+            terms coincide and \(L^{\mathrm{CLIP}}=\rho_t\hat A_t\). For \(\rho_t>1+\varepsilon\),
+            the clipped term flattens at \((1+\varepsilon)\hat A_t\) while the unclipped term
+            keeps climbing, so the minimum locks onto the flat clipped branch:
+          </p>
+          \[
+            L^{\mathrm{CLIP}}(\theta)
+            =
+            \begin{cases}
+              \rho_t(\theta)\,\hat A_t & \rho_t(\theta) \le 1+\varepsilon \\[2pt]
+              (1+\varepsilon)\,\hat A_t & \rho_t(\theta) > 1+\varepsilon
+            \end{cases}
+            \qquad (\hat A_t>0).
+          \]
+          <p>
+            Interpretation: increasing the probability of a good action is rewarded up to a
+            point, then the reward is capped. There is no further incentive to push
+            \(\pi_\theta(a_t\mid s_t)\) arbitrarily higher than
+            \((1+\varepsilon)\,\pi_{\theta_{\mathrm{old}}}(a_t\mid s_t)\) in a single update.
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · Case \(\hat A_t &lt; 0\) (bad action, suppress it — but not without limit)</span>
+          <p>
+            Now both terms are non-<em>increasing</em> in \(\rho_t\) (multiplying by a negative
+            constant flips monotonicity). For \(\rho_t\ge 1-\varepsilon\) the clip has not
+            engaged and \(L^{\mathrm{CLIP}}=\rho_t\hat A_t\). For \(\rho_t&lt;1-\varepsilon\), the
+            clipped term flattens at \((1-\varepsilon)\hat A_t\), which — because \(\hat A_t<0\)
+            — is <em>more negative</em> than the still-shrinking-in-magnitude unclipped term, so
+            the minimum again locks onto the flat clipped branch:
+          </p>
+          \[
+            L^{\mathrm{CLIP}}(\theta)
+            =
+            \begin{cases}
+              (1-\varepsilon)\,\hat A_t & \rho_t(\theta) < 1-\varepsilon \\[2pt]
+              \rho_t(\theta)\,\hat A_t & \rho_t(\theta) \ge 1-\varepsilon
+            \end{cases}
+            \qquad (\hat A_t<0).
+          \]
+          <p>
+            Interpretation: decreasing the probability of a bad action below a floor of
+            \((1-\varepsilon)\,\pi_{\theta_{\mathrm{old}}}(a_t\mid s_t)\) earns no further credit
+            in the objective. Note the asymmetry with the previous case — here the unclipped
+            branch is used for <em>large</em> \(\rho_t\) (i.e. \(\rho_t>1+\varepsilon\) is
+            <em>not</em> clipped when \(\hat A_t<0\)); the objective keeps penalizing an update
+            that makes an already-bad action even more likely, with no floor on how negative
+            the surrogate can get. Clipping only removes incentive in the direction that would
+            otherwise run away — it never protects a genuinely harmful update.
+          </p>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">One-line summary</span>
+          <p>
+            \(L^{\mathrm{CLIP}}\) tracks \(L^{\mathrm{CPI}}=\rho_t\hat A_t\) exactly inside the
+            trust band \(\rho_t\in[1-\varepsilon,1+\varepsilon]\), and flattens to a constant
+            exactly on the side where moving further would be "cheating" — i.e. exploiting the
+            linear surrogate's blindness to how far \(\pi_\theta\) has actually drifted from
+            \(\pi_{\theta_{\mathrm{old}}}\).
+          </p>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section class="study-section" id="binding">
+        <h2>5. When the clip binds</h2>
+        <div class="prose-study">
+          <p>
+            Say the clip <em>binds</em> on sample \(t\) if
+            \(L^{\mathrm{CLIP}}\)'s value at \(t\) comes from the clipped branch rather than the
+            raw \(\rho_t\hat A_t\) branch — equivalently, if
+            \(\operatorname{clip}(\rho_t,1-\varepsilon,1+\varepsilon)\hat A_t &lt; \rho_t\hat A_t\).
+            Combining the two cases above:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            \text{clip binds at } t
+            \iff
+            \big(\hat A_t>0 \text{ and } \rho_t>1+\varepsilon\big)
+            \;\;\text{or}\;\;
+            \big(\hat A_t<0 \text{ and } \rho_t<1-\varepsilon\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The <strong>clip fraction</strong> — the empirical fraction of a minibatch on which
+            (2) holds — is one of the most useful scalars to log during PPO training. It is
+            reported by essentially every serious implementation (OpenAI Baselines, Stable
+            Baselines3, RLlib, CleanRL) precisely because it is a cheap, direct readout of how
+            hard the trust region is working.
+          </p>
+          <ul>
+            <li><strong>Clip fraction ≈ 0.</strong> Ratios never leave the band; the clip is
+              inactive and PPO is behaving like unclipped CPI with a well-behaved step size —
+              possibly the step size (or number of epochs) could be increased for faster
+              learning.</li>
+            <li><strong>Clip fraction moderate (5–30%).</strong> Typical healthy PPO training;
+              the clip is doing real work on a meaningful slice of the batch each epoch.</li>
+            <li><strong>Clip fraction very high (&gt;50%).</strong> Most of the batch has
+              already drifted outside the trust band; further epochs on this batch mostly hit
+              the flat region and contribute little gradient signal — a sign to reduce epochs,
+              reduce learning rate, or increase \(\varepsilon\) with caution.</li>
+          </ul>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Note · Gradient in the binding region</span>
+          <p>
+            On the flat branch, \(L^{\mathrm{CLIP}}\) as a function of \(\rho_t\) is locally
+            constant, so \(\partial L^{\mathrm{CLIP}}/\partial \rho_t = 0\) there and the sample
+            contributes <em>zero</em> gradient through this term for as long as it stays
+            clipped. (The value-function and entropy terms of Section&nbsp;6 still receive
+            gradient from that sample — only the policy surrogate term goes quiet.) This is the
+            precise mechanism by which PPO throttles further movement of already-far-moved
+            probabilities without ever computing a KL divergence or a Hessian.
+          </p>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section class="study-section" id="losses">
+        <h2>6. Value loss, entropy bonus, and the total objective</h2>
+        <div class="prose-study">
+          <p>
+            Deep RL implementations of PPO almost always share a single network trunk between
+            the policy head \(\pi_\theta\) and a value head \(V_\phi\) (often \(\phi\subset\theta\)),
+            trained jointly. The full loss combines three terms.
+          </p>
+        </div>
+        <div class="def-box">
+          <span class="box-label">Definition 6.1 · Value function loss</span>
+          <p>
+            \[
+              L^{\mathrm{VF}}(\theta)
+              =
+              \mathbb{E}_t\Big[\big(V_\theta(s_t) - V_t^{\mathrm{targ}}\big)^2\Big],
+            \]
+            where \(V_t^{\mathrm{targ}}=\hat A_t + V_{\theta_{\mathrm{old}}}(s_t)\) (GAE return)
+            is treated as a constant target. Many implementations additionally clip the value
+            update the same way the policy ratio is clipped:
+            \[
+              L^{\mathrm{VF-CLIP}}(\theta)
+              =
+              \mathbb{E}_t\Big[
+                \max\big(
+                  (V_\theta(s_t)-V_t^{\mathrm{targ}})^2,\;
+                  (V_{\mathrm{clip}}(s_t)-V_t^{\mathrm{targ}})^2
+                \big)
+              \Big],
+            \]
+            with \(V_{\mathrm{clip}}(s_t)=V_{\theta_{\mathrm{old}}}(s_t) +
+            \operatorname{clip}\big(V_\theta(s_t)-V_{\theta_{\mathrm{old}}}(s_t),-\varepsilon_V,\varepsilon_V\big)\)
+            — the same trust-region philosophy applied to the critic, though its benefit is
+            debated in the literature and it is off by default in some modern codebases.
+          </p>
+        </div>
+        <div class="def-box">
+          <span class="box-label">Definition 6.2 · Entropy bonus</span>
+          <p>
+            \[
+              S[\pi_\theta](s_t) = -\sum_a \pi_\theta(a\mid s_t)\log\pi_\theta(a\mid s_t)
+            \]
+            (or the differential entropy of the Gaussian, for continuous actions). Added with a
+            small positive coefficient, it discourages premature collapse to a deterministic
+            policy and keeps some exploration alive during training.
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            L^{\mathrm{PPO}}(\theta)
+            =
+            \mathbb{E}_t
+            \Big[
+              L^{\mathrm{CLIP}}_t(\theta)
+              \;-\;
+              c_1\, L^{\mathrm{VF}}_t(\theta)
+              \;+\;
+              c_2\, S[\pi_\theta](s_t)
+            \Big],
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            maximized by gradient ascent (equivalently, minimize \(-L^{\mathrm{PPO}}\) with
+            Adam). Typical coefficients: \(c_1\approx 0.5\), \(c_2\in[0, 0.01]\) — the entropy
+            bonus is frequently annealed to zero or omitted entirely in RLHF settings where a
+            KL-to-reference-policy penalty already discourages collapse (foreshadowing
+            Chapter&nbsp;09).
+          </p>
+        </div>
+
+        <div class="remark-box">
+          <span class="box-label">Remark · Sign convention</span>
+          <p>
+            Written as a maximization, \(L^{\mathrm{VF}}\) enters with a <em>minus</em> sign
+            (we want to minimize squared value error) while \(L^{\mathrm{CLIP}}\) and the
+            entropy bonus enter with a plus sign (we want to maximize both). Implementations
+            that frame everything as loss-minimization simply flip every sign and minimize
+            \(-L^{\mathrm{CLIP}} + c_1 L^{\mathrm{VF}} - c_2 S\).
+          </p>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section class="study-section" id="epochs">
+        <h2>7. Multi-epoch reuse of a batch</h2>
+        <div class="prose-study">
+          <p>
+            This is PPO's other major practical win over TRPO. Because \(L^{\mathrm{CLIP}}\) is
+            an ordinary differentiable function of \(\theta\) — no constrained optimization
+            required — nothing stops you from taking multiple SGD/Adam steps on the
+            <em>same</em> rollout batch before collecting new data, the way a standard
+            supervised-learning epoch loop would.
+          </p>
+        </div>
+        <div class="eq-block tight">
+          <pre style="margin:0;font-family:var(--font-mono);font-size:0.72rem;line-height:1.5;color:var(--ink-soft);white-space:pre-wrap">for iteration = 1, 2, …:
+  Roll out π_θ_old for T timesteps (across N parallel actors)
+  Compute Â_t via GAE(γ, λ); cache log π_θ_old(a_t|s_t)
+  for epoch = 1 … K:
+    for minibatch ⊂ batch (shuffled):
+      ρ_t(θ) = exp(log π_θ(a_t|s_t) − log π_θ_old(a_t|s_t))
+      ascend ∇_θ L^PPO(θ) on the minibatch (Adam)
+  θ_old ← θ</pre>
+        </div>
+        <div class="prose-study">
+          <p>
+            Typical \(K\) is \(3\)–\(10\); minibatch size divides the full batch
+            \(N\times T\) into several chunks per epoch. Reusing data \(K\) times is exactly
+            what the clip is protecting: without it, \(K\) full-strength CPI gradient steps on
+            fixed data would very plausibly push some \(\rho_t\) far outside any reasonable
+            trust region well before the epoch loop finishes, causing the next rollout to be
+            collected under a badly-degraded policy.
+          </p>
+          <p>
+            The clip does not make this <em>perfectly</em> safe — flat gradient on a sample
+            stops <em>that sample's</em> policy term from pushing further, but other samples in
+            the same minibatch (via shared parameters) and the value/entropy terms keep
+            updating \(\theta\), so \(\rho_t\) for a previously-unclipped sample can drift into
+            the clipped region as training proceeds through the epochs. This is why clip
+            fraction and (optionally) an approximate mean KL are tracked <em>during</em> the
+            epoch loop, and why some implementations add an early-stopping rule:
+          </p>
+        </div>
+        <div class="note-box">
+          <span class="box-label">Common trick · Target-KL early stopping</span>
+          <p>
+            Estimate \(\overline{\mathrm{KL}}(\pi_{\theta_{\mathrm{old}}}\Vert\pi_\theta)\)
+            after each minibatch (cheaply, from the same log-probabilities already computed for
+            \(\rho_t\)) and abort the remaining epochs for this batch if it exceeds a threshold
+            (e.g. \(1.5\times\) a target value). This borrows TRPO's monitoring signal without
+            its solver, and is used in Stable Baselines3, RLlib, and OpenAI's original
+            baselines under names like <code>target_kl</code>.
+          </p>
+        </div>
+      </section>
+
+      <!-- 8 -->
+      <section class="study-section" id="gae">
+        <h2>8. Advantages: the GAE pointer</h2>
+        <div class="prose-study">
+          <p>
+            PPO says nothing new about how \(\hat A_t\) is computed — it inherits Generalized
+            Advantage Estimation from Chapter&nbsp;06 wholesale:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            \hat A_t^{\mathrm{GAE}(\gamma,\lambda)}
+            =
+            \sum_{l=0}^{T-t-1} (\gamma\lambda)^l\, \delta_{t+l},
+            \qquad
+            \delta_t = r_t + \gamma V_\phi(s_{t+1}) - V_\phi(s_t).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            \(\lambda=0\) recovers the one-step TD advantage (low variance, high bias from an
+            imperfect \(V_\phi\)); \(\lambda=1\) recovers the Monte-Carlo advantage (unbiased,
+            high variance). PPO papers and popular baselines default to \(\gamma\approx 0.99\),
+            \(\lambda\approx 0.95\). Advantage <strong>batch normalization</strong> — subtract
+            the batch mean, divide by the batch standard deviation, right before forming
+            \(\rho_t\hat A_t\) — is close to universal in practice; it keeps the scale of
+            \(\hat A_t\) comparable across iterations regardless of raw reward scale, which
+            interacts directly with how meaningful a fixed \(\varepsilon\) is.
+          </p>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section class="study-section" id="algo">
+        <h2>9. Full algorithm</h2>
+        <div class="eq-block tight">
+          <pre style="margin:0;font-family:var(--font-mono);font-size:0.72rem;line-height:1.5;color:var(--ink-soft);white-space:pre-wrap">Initialize θ (shared or separate policy/value nets)
+for iteration = 1, 2, …:
+  Run π_θ in the environment for T timesteps × N actors ⇒ batch of N·T transitions
+  Bootstrap V_θ(s_T); compute Â_t via GAE(γ,λ); compute V_t^targ = Â_t + V_θ_old(s_t)
+  Normalize Â_t across the batch
+  Cache log π_θ_old(a_t|s_t) for every t
+  θ_old ← θ                                    (freeze the ratio's denominator)
+  for epoch = 1 … K:
+    shuffle the N·T transitions into minibatches
+    for each minibatch:
+      ρ_t(θ) = exp(log π_θ(a_t|s_t) − log π_θ_old(a_t|s_t))
+      L^CLIP = mean_t[ min(ρ_t Â_t, clip(ρ_t, 1−ε, 1+ε) Â_t) ]
+      L^VF   = mean_t[ (V_θ(s_t) − V_t^targ)² ]
+      S      = mean_t[ entropy of π_θ(·|s_t) ]
+      L^PPO  = L^CLIP − c₁·L^VF + c₂·S
+      θ ← θ + α ∇_θ L^PPO                        (Adam; grad-norm clip ~0.5)
+      (optional) if mean KL(π_θ_old‖π_θ) > target_kl: break epoch loop</pre>
+        </div>
+        <div class="prose-study">
+          <p>
+            Contrast the line count and dependency footprint with Chapter&nbsp;07's algorithm
+            box: no Hessian-vector products, no CG solve, no line search — every line is a
+            standard forward/backward pass or an elementwise tensor operation, which is exactly
+            why PPO is the default "just works" on-policy baseline in virtually every RL
+            library.
+          </p>
+        </div>
+      </section>
+
+      <!-- 10 -->
+      <section class="study-section" id="hyper">
+        <h2>10. Hyperparameters</h2>
+        <div class="prose-study">
+          <p>
+            PPO trades TRPO's one delicate hyperparameter (\(\delta\), the KL budget) for a
+            slightly longer list of milder ones. Representative ranges, drawn from the original
+            paper and widely-used baselines:
+          </p>
+          <ul>
+            <li><strong>Clip range \(\varepsilon\).</strong> \(0.1\)–\(0.3\); \(0.2\) is the
+              most common default. Often linearly annealed to \(0\) over training.</li>
+            <li><strong>Epochs \(K\).</strong> \(3\)–\(10\) for continuous control;
+              smaller (even \(1\)–\(4\)) for large LLM policies where each epoch is expensive
+              and off-policy drift is a bigger concern.</li>
+            <li><strong>Minibatch size.</strong> Divides the full rollout batch
+              \(N\!\times\!T\); e.g. batch \(2048\)–\(32000\), minibatch \(64\)–\(4096\).</li>
+            <li><strong>Learning rate \(\alpha\).</strong> \(1\text{e-}4\)–\(3\text{e-}4\)
+              (Adam), frequently linearly annealed to \(0\) by the end of training.</li>
+            <li><strong>Discount \(\gamma\), GAE \(\lambda\).</strong> \(\gamma\approx 0.99\),
+              \(\lambda\approx 0.95\) — task-dependent; longer-horizon tasks want \(\gamma\)
+              closer to \(1\).</li>
+            <li><strong>Value / entropy coefficients \(c_1,c_2\).</strong>
+              \(c_1\approx 0.5\); \(c_2\) from \(0\) up to \(\sim 0.01\).</li>
+            <li><strong>Gradient norm clipping.</strong> Global norm clip around \(0.5\), a
+              second, orthogonal stabilizer on top of the ratio clip.</li>
+            <li><strong>Rollout length \(T\) / parallel actors \(N\).</strong> \(T\) from tens
+              to a few thousand steps; \(N\) from \(1\) to thousands of vectorized
+              environments, trading wall-clock time for batch size.</li>
+          </ul>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">Practical note</span>
+          <p>
+            None of these values are load-bearing in the way \(\delta\) is for TRPO — PPO
+            degrades gracefully as most of them move within their typical ranges, which is
+            itself one of the algorithm's chief practical virtues. The exceptions are
+            \(\varepsilon\) too large (Section&nbsp;12) and \(K\) too large relative to
+            \(\varepsilon\) and \(\alpha\).
+          </p>
+        </div>
+      </section>
+
+      <!-- 11 -->
+      <section class="study-section" id="vs-trpo">
+        <h2>11. PPO vs TRPO</h2>
+        <div class="prose-study">
+          <p>
+            A side-by-side of the two chapters' machinery:
+          </p>
+          <ul>
+            <li><strong>Trust-region mechanism.</strong> TRPO: hard KL constraint solved
+              per-iteration via CG + line search. PPO: soft, differentiable ratio clip inside
+              an ordinary loss.</li>
+            <li><strong>Per-update cost.</strong> TRPO needs several Hessian-vector products
+              (extra backward passes) plus a line search with repeated KL/objective
+              re-evaluation. PPO needs one forward/backward pass per minibatch, identical in
+              shape to supervised training.</li>
+            <li><strong>Data reuse.</strong> TRPO's guarantee is tied to a single natural-gradient
+              step per batch; PPO is explicitly designed for \(K\) epochs of reuse per batch.</li>
+            <li><strong>Guarantees.</strong> TRPO inherits a (idealized) monotonic-improvement
+              argument from the KL trust region. PPO's clip is a heuristic surrogate — it has
+              no equivalent monotonic-improvement proof, only the empirical observation that it
+              behaves like a trust region in practice.</li>
+            <li><strong>Implementation complexity.</strong> TRPO requires Fisher-vector product
+              code, CG, and line search machinery layered on top of autodiff. PPO is roughly
+              20–30 extra lines over vanilla actor-critic.</li>
+            <li><strong>Empirical performance.</strong> Comparable-to-better across the
+              MuJoCo/Atari benchmarks in the original PPO paper, at a fraction of the compute —
+              the reason PPO, not TRPO, became the field's default.</li>
+          </ul>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · Is the clip "the same" as the KL constraint?</span>
+          <p>
+            Not exactly, and it's worth being precise about the difference. TRPO bounds the
+            <em>average</em> KL divergence over the whole state distribution to \(\delta\) —
+            one global scalar. PPO's clip acts <em>per-timestep</em>, on the ratio at the
+            specific action actually taken, with no direct handle on the resulting KL at all.
+            Two policies can have identical clip fractions and very different mean KLs. In
+            practice the clip is a cheap, local proxy that empirically correlates with KL
+            staying small — which is why implementations that want a firmer guarantee still log
+            (and sometimes early-stop on) an approximate KL, as in Section&nbsp;7.
+          </p>
+        </div>
+      </section>
+
+      <!-- 12 -->
+      <section class="study-section" id="failure">
+        <h2>12. Failure modes</h2>
+        <div class="prose-study">
+          <ul>
+            <li>
+              <strong>\(\varepsilon\) too large.</strong> The trust band is wide enough that the
+              clip rarely binds — PPO degenerates toward unconstrained CPI, reintroducing
+              TRPO's original instability (large, destructive updates from stale data).
+            </li>
+            <li>
+              <strong>\(\varepsilon\) too small, or \(K\) too small.</strong> Learning is
+              needlessly slow: the policy is barely allowed to move per batch, wasting the
+              expensive rollout data.
+            </li>
+            <li>
+              <strong>Too many epochs \(K\) for a given \(\varepsilon\), \(\alpha\).</strong>
+              Clip fraction creeps toward \(1\) partway through the epoch loop; remaining
+              gradient steps are mostly wasted compute on flat-gradient samples, or — worse —
+              parameters drift via the value/entropy terms while the clip masks the policy
+              term, producing a policy that has moved further than the diagnostics suggest.
+            </li>
+            <li>
+              <strong>Shared network, mis-tuned \(c_1\).</strong> If the value loss dominates
+              the shared trunk's gradient, the policy head is starved of signal; conversely a
+              too-small \(c_1\) leaves \(V_\phi\) poorly fit, which corrupts \(\hat A_t\) via
+              GAE and indirectly destabilizes the "stable" clipped objective.
+            </li>
+            <li>
+              <strong>Reward / advantage scale sensitivity.</strong> \(\varepsilon\) is a
+              constraint on the <em>ratio</em>, not on \(\hat A_t\); without advantage
+              normalization, a rescaled reward function changes how much a fixed clip band
+              actually restricts learning, even though nothing "physical" about the task
+              changed.
+            </li>
+            <li>
+              <strong>Seed / implementation sensitivity.</strong> Henderson et al. (2018) and
+              follow-up reproducibility studies documented that "PPO" results vary substantially
+              across codebases due to under-documented implementation details (advantage
+              normalization, reward scaling, orthogonal initialization, learning-rate
+              annealing) that are not part of the equations above but materially affect
+              outcomes — a caution for treating any single PPO result as definitive.
+            </li>
+            <li>
+              <strong>Off-policy drift beyond one rollout.</strong> PPO is on-policy: reusing a
+              batch across \(K\) epochs is already a mild controlled violation of that
+              assumption. Attempting to reuse data across multiple <em>rollout</em> iterations
+              (as in a replay buffer) breaks the \(\rho_t(\theta_{\mathrm{old}})=1\) anchoring
+              that the clip's geometry relies on.
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 13 -->
+      <section class="study-section" id="grpo-bridge">
+        <h2>13. Bridge to GRPO</h2>
+        <div class="prose-study">
+          <p>
+            PPO's remaining expensive ingredient is the learned critic \(V_\phi(s)\): a second
+            network, trained jointly, needed only to produce a low-variance baseline for
+            \(\hat A_t\). For large language model policies — where a single forward pass is
+            already costly and the "state" is an entire token prefix — training and serving a
+            full value network purely for variance reduction is a significant overhead, and the
+            value network is notoriously hard to fit well early in RLHF training.
+          </p>
+          <p>
+            <strong>Group Relative Policy Optimization</strong> (GRPO; DeepSeekMath, 2024) keeps
+            PPO's ratio and clip <em>exactly as derived in this chapter</em> — Definition&nbsp;4.1
+            is unchanged — but replaces the critic-based advantage with a
+            <em>group-relative</em> one: sample a group of \(G\) completions for the same
+            prompt, score each with a reward model (or verifiable reward), and set
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            \hat A_i
+            =
+            \frac{r_i - \operatorname{mean}(r_1,\ldots,r_G)}{\operatorname{std}(r_1,\ldots,r_G)},
+            \qquad i=1,\ldots,G,
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            broadcast to every token of completion \(i\) (or combined with a per-token or
+            per-step variant). No value network, no GAE, no \(V_\phi\) loss term — the "group"
+            itself supplies the baseline that \(V_\phi(s)\) supplied in PPO. Everything else —
+            the log-ratio, the clip, the min, multi-epoch reuse, KL monitoring (often against a
+            frozen reference policy rather than \(\pi_{\theta_{\mathrm{old}}}\)) — carries over
+            directly. Chapter&nbsp;09 derives (5) from first principles and works through why it
+            is an unbiased, if higher-variance, drop-in replacement for a learned critic in the
+            specific regime of sampling many completions per prompt.
+          </p>
+        </div>
+      </section>
+
+      <!-- 14 LAB -->
+      <section class="study-section lab-wide" id="lab">
+        <h2>14. Laboratory · clipping in action</h2>
+        <div class="prose-study">
+          <p>
+            Two linked experiments. The first isolates a single \((\rho,\hat A)\) pair so you
+            can see exactly how \(L^{\mathrm{CLIP}}\) is built from the min of two lines. The
+            second runs full clipped-PPO epochs on a small softmax-policy gridworld — the same
+            environment used in Chapters&nbsp;06 and&nbsp;07 — so you can compare clipped
+            multi-epoch updates against an unclipped CPI step on identical data.
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Clip playground · single (ρ, Â) pair</h3>
+            <span>\(L^{\mathrm{CLIP}}\) vs \(\rho\)</span>
+          </div>
+          <div class="split" style="grid-template-columns:1fr 1fr;gap:1rem">
+            <div>
+              <div class="control-block">
+                <span class="control-label">Ratio &amp; advantage</span>
+                <label class="slider-label">ρ = π_θ / π_old <input type="range" id="ppoRho" min="0.05" max="2" step="0.01" value="1" /><strong id="ppoRhoL">1.00</strong></label>
+                <label class="slider-label">Â <input type="range" id="ppoAdv" min="-2" max="2" step="0.05" value="1" /><strong id="ppoAdvL">1.00</strong></label>
+                <label class="slider-label">ε <input type="range" id="ppoEpsPlay" min="0.05" max="0.5" step="0.01" value="0.2" /><strong id="ppoEpsPlayL">0.20</strong></label>
+              </div>
+              <div class="stat-strip">
+                <div><span>ρÂ (unclipped)</span><strong id="ppoUnc">—</strong></div>
+                <div><span>clip(ρ)·Â</span><strong id="ppoClp">—</strong></div>
+                <div><span>min (L^CLIP term)</span><strong id="ppoMin">—</strong></div>
+                <div><span>Clip status</span><strong id="ppoBind">—</strong></div>
+              </div>
+              <p class="caption tight">
+                Drag Â negative and watch which side of ρ=1 the flat region jumps to — that flip
+                is Section&nbsp;4's two cases made visible.
+              </p>
+            </div>
+            <div>
+              <canvas id="ppoClipCanvas" width="420" height="200" style="width:100%;max-width:420px;height:auto;border:1px solid var(--line);border-radius:10px;background:rgba(0,0,0,0.28)"></canvas>
+              <p class="caption tight">
+                Rust = unclipped \(\rho\hat A\). Gold = \(L^{\mathrm{CLIP}}=\min(\rho\hat A,\,
+                \operatorname{clip}(\rho,1{-}\varepsilon,1{+}\varepsilon)\hat A)\). Mint band =
+                trust interval \([1-\varepsilon,1+\varepsilon]\). Dot = current sample.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Clipped PPO on a gridworld softmax policy</h3>
+            <span>Multi-epoch reuse · clip fraction · KL drift</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.85rem;margin-bottom:1rem">
+            <div class="control-block">
+              <span class="control-label">PPO hyperparameters</span>
+              <label class="slider-label">ε (clip) <input type="range" id="ppoEps" min="0.05" max="0.5" step="0.01" value="0.2" /><strong id="ppoEpsL">0.20</strong></label>
+              <label class="slider-label">γ <input type="range" id="ppoGamma" min="0.8" max="0.99" step="0.01" value="0.95" /><strong id="ppoGammaL">0.95</strong></label>
+              <label class="slider-label">Epochs K <input type="range" id="ppoEpochs" min="1" max="10" step="1" value="4" /><strong id="ppoEpochsL">4</strong></label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Actions</span>
+              <div class="btn-row">
+                <button type="button" class="btn small" id="ppoRoll">Collect batch</button>
+                <button type="button" class="btn small ghost" id="ppoOnce">Run 1 epoch</button>
+              </div>
+              <div class="btn-row" style="margin-top:0.4rem">
+                <button type="button" class="btn small ghost" id="ppoMany">Run K epochs</button>
+                <button type="button" class="btn small ghost" id="ppoUnclip">Unclipped CPI step</button>
+              </div>
+              <div class="btn-row" style="margin-top:0.4rem">
+                <button type="button" class="btn small ghost" id="ppoReset">Reset π</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="split" style="grid-template-columns:1fr 1fr;gap:1rem">
+            <div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:0 0 0.5rem">Policy (greedy)</h4>
+              <div class="dp-grid" id="ppoGrid"></div>
+              <p class="caption tight">Collect a batch, then run PPO epochs on the same frozen π_old.</p>
+            </div>
+            <div>
+              <div class="stat-strip">
+                <div><span>Batch eps</span><strong id="ppoBatchN">0</strong></div>
+                <div><span>Avg G₀</span><strong id="ppoG">—</strong></div>
+                <div><span>Clip fraction</span><strong id="ppoClipFrac">—</strong></div>
+                <div><span>Mean KL</span><strong id="ppoKL">—</strong></div>
+                <div><span>L^CLIP</span><strong id="ppoL">—</strong></div>
+              </div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:1rem 0 0.5rem">Update ledger</h4>
+              <div class="bellman-trace" id="ppoTrace">Collect batch → run epochs. Ledger shows clip fraction and KL drift.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 15 -->
+      <section class="study-section" id="worked">
+        <h2>15. Worked calculations</h2>
+        <div class="prose-study">
+          <p>
+            <strong>Clip binds, \(\hat A>0\).</strong> Let \(\pi_{\mathrm{old}}(a|s)=0.20\),
+            \(\pi_\theta(a|s)=0.30\), \(\hat A=1.5\), \(\varepsilon=0.2\). Then
+            \(\rho=0.30/0.20=1.5\). Unclipped: \(\rho\hat A = 1.5\cdot1.5=2.25\).
+            \(\operatorname{clip}(1.5,0.8,1.2)=1.2\), so clipped term \(=1.2\cdot1.5=1.8\).
+            \(L^{\mathrm{CLIP}}=\min(2.25,1.8)=1.8\) — the clip binds (\(\rho=1.5>1+\varepsilon=1.2\)),
+            and the gradient of this sample's contribution with respect to \(\rho\) (hence
+            \(\theta\)) is zero at this point.
+          </p>
+          <p>
+            <strong>Clip inactive, \(\hat A&lt;0\).</strong> Same policies, \(\hat A=-1.5\).
+            Unclipped: \(1.5\cdot(-1.5)=-2.25\). Clipped: \(1.2\cdot(-1.5)=-1.8\).
+            \(L^{\mathrm{CLIP}}=\min(-2.25,-1.8)=-2.25\) — the <em>unclipped</em> branch wins,
+            because for \(\hat A&lt;0\) the clip only ever binds when \(\rho&lt;1-\varepsilon\),
+            and here \(\rho=1.5\) is on the "no ceiling" side (Section&nbsp;4's second case).
+            The full gradient still flows — this update is being penalized as strongly as CPI
+            would, exactly as intended.
+          </p>
+          <p>
+            <strong>Boundary check.</strong> With \(\varepsilon=0.2\), the flat value for
+            \(\hat A>0\) is \((1+\varepsilon)\hat A=1.2\hat A\); for \(\hat A&lt;0\) it is
+            \((1-\varepsilon)\hat A=0.8\hat A\). At exactly \(\rho=1\pm\varepsilon\) the two
+            branches meet by continuity of \(\operatorname{clip}\): \(L^{\mathrm{CLIP}}\) is
+            continuous in \(\rho\) everywhere, though not differentiable exactly at the two
+            kink points \(\rho=1-\varepsilon\) and \(\rho=1+\varepsilon\).
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Roll out π_old for T steps; cache log π_old(a_t|s_t) and compute Â_t via GAE.</li>
+            <li class="hidden-step">Freeze θ_old ← θ. This is the fixed denominator for every ρ_t during the epoch loop.</li>
+            <li class="hidden-step">For each minibatch: ρ_t = exp(log π_θ(a_t|s_t) − log π_θ_old(a_t|s_t)).</li>
+            <li class="hidden-step">L^CLIP = mean_t min(ρ_t Â_t, clip(ρ_t, 1−ε, 1+ε) Â_t); track clip fraction from (2).</li>
+            <li class="hidden-step">L^PPO = L^CLIP − c₁ L^VF + c₂ S; ascend with Adam; clip grad norm.</li>
+            <li class="hidden-step">Repeat for K epochs on this batch; (optional) early-stop epoch loop on target KL.</li>
+            <li class="hidden-step">Collect a fresh batch under the new π_θ; discard the old one entirely.</li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- 16 -->
+      <section class="study-section" id="next">
+        <h2>16. What follows</h2>
+        <div class="prose-study">
+          <p>
+            <strong>GRPO</strong> keeps every piece of PPO's clipped surrogate derived in this
+            chapter — the ratio, the clip, the min, the multi-epoch loop — and removes only the
+            learned critic, replacing \(\hat A_t\) with a group-relative, reward-model-based
+            baseline suited to sampling many completions per prompt. That substitution is the
+            algorithmic core of modern LLM RLHF and reasoning-model post-training, and is where
+            this course's policy-optimization arc concludes.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Schulman et al., 2017 — Proximal Policy Optimization Algorithms.</li>
+            <li>Schulman et al., 2015 — Trust Region Policy Optimization (Chapter&nbsp;07).</li>
+            <li>Schulman et al. — High-dimensional continuous control using generalized advantage estimation.</li>
+            <li>Henderson et al., 2018 — Deep reinforcement learning that matters (implementation-sensitivity caution).</li>
+            <li><a href="trpo.html">Chapter 07</a> — the surrogate, the trust region, and the machinery PPO replaces.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="trpo.html" style="color:inherit;text-decoration:none">← TRPO</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Up next</p>
+            <h3><a href="grpo.html" style="color:inherit;text-decoration:none">GRPO →</a></h3>
+            <p>No critic, no problem — group-relative baselines for LLM policy optimization.</p>
+          </div>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Chapter 08 · PPO</p>
+    <p class="muted">Probability ratio · clipped surrogate · value &amp; entropy terms · multi-epoch reuse · bridge to GRPO.</p>
+  </footer>
+
+  <script src="ppo.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

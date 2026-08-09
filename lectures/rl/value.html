@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>02 · Value Functions &amp; Bellman Equations — Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="why.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl</span>
+    </a>
+            <nav class="chapter-nav" aria-label="Chapters">
+      <a href="why.html">00 · Why</a>
+      <a href="index.html">01 · MDP</a>
+      <a class="active" href="value.html">02 · Value</a>
+      <a href="practice.html">Practice</a>
+      <a href="dp.html">03 · DP</a>
+      <a href="td.html">04 · TD</a>
+      <a href="qlearning.html">05 · DQN</a>
+      <a href="pg.html">06 · PG</a>
+      <a href="trpo.html">07 · TRPO</a>
+      <a href="ppo.html">08 · PPO</a>
+      <a href="grpo.html">09 · GRPO</a>
+      <span class="locked">10 · SAC</span>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#overview">1. Overview</a></li>
+        <li><a href="#definitions">2. Definitions of \(V\) &amp; \(Q\)</a></li>
+        <li><a href="#relation">3. Relating \(V\) and \(Q\)</a></li>
+        <li><a href="#visual-vq">· Visual \(V\) &amp; \(Q\) studio</a></li>
+        <li><a href="#bellman-expect">4. Bellman expectation</a></li>
+        <li><a href="#derivation">5. Derivation in detail</a></li>
+        <li><a href="#optimality">6. Bellman optimality</a></li>
+        <li><a href="#greedy">7. Greedy improvement</a></li>
+        <li><a href="#contraction">8. Contraction view</a></li>
+        <li><a href="#why-q">9. Why \(Q\) wins in practice</a></li>
+        <li><a href="#lab">10. Laboratory</a></li>
+        <li><a href="#worked">11. Worked Bellman backup</a></li>
+        <li><a href="#next">12. What follows</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Chapter 02 · Foundations</p>
+      <h1 class="study-title">Value functions &amp; <em>Bellman</em> equations</h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        An MDP specifies the rules of interaction. A value function measures how good it is
+        to be in a state — or to take an action in a state — under a given policy. The
+        Bellman equation is the recursive identity that makes values computable:
+        today’s value equals expected immediate reward plus discounted value of tomorrow.
+        This chapter defines \(V^{\pi}\) and \(Q^{\pi}\), derives expectation and optimality
+        equations line by line, states the policy improvement idea, and sketches why the
+        Bellman operator has a unique fixed point. The laboratory runs iterative policy
+        evaluation on a small grid so you can watch the numbers converge.
+      </div>
+
+      <section class="study-section" id="overview">
+        <h2>1. Overview</h2>
+        <div class="prose-study">
+          <p class="lead">
+            Chapter&nbsp;01 gave you the object \(\mathcal{M}=(S,A,P,R,\gamma)\) and the goal
+            \(\max_\pi \mathbb{E}_\pi[G_0]\). To optimize that goal you need a measuring stick:
+            for each situation, how much return should you expect?
+          </p>
+          <p>
+            That measuring stick is a <strong>value function</strong>. Once values exist, a
+            remarkable algebraic fact appears: they satisfy a self-consistency equation —
+            Bellman’s equation — relating the value at \(s\) to values at successors \(s'\).
+            Dynamic programming (next chapter) iterates that equation. Temporal-difference
+            learning estimates it from samples. Q-learning replaces expectation over
+            \(\pi\) by a \(\max\). Policy gradients still use values (or advantages) as
+            critics. The entire stack hangs on this chapter.
+          </p>
+          <p>
+            There is nothing mystical in the recursion. It is simply
+            \(G_t = r_{t+1} + \gamma G_{t+1}\) after taking expectations. Memorize that
+            one-line unrolling; every formula below is bookkeeping around it.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="definitions">
+        <h2>2. Definitions of \(V^{\pi}\) and \(Q^{\pi}\)</h2>
+
+        <div class="def-box">
+          <span class="box-label">Definition 2.1 · State-value function</span>
+          <p>
+            For a policy \(\pi\), the state-value function is the expected return starting
+            from \(s\) and following \(\pi\) thereafter:
+            \[
+              V^{\pi}(s)
+              \;=\;
+              \mathbb{E}_{\pi}\!\left[ G_t \,\middle|\, s_t = s \right].
+            \]
+          </p>
+        </div>
+
+        <div class="def-box">
+          <span class="box-label">Definition 2.2 · Action-value function</span>
+          <p>
+            The action-value (Q-function) is the expected return if the agent is forced to
+            take action \(a\) in \(s\) once, and follows \(\pi\) afterward:
+            \[
+              Q^{\pi}(s,a)
+              \;=\;
+              \mathbb{E}_{\pi}\!\left[ G_t \,\middle|\, s_t = s,\, a_t = a \right].
+            \]
+          </p>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Both are functions of the policy: change \(\pi\), change the values. We write
+            \(V^*\) and \(Q^*\) for values of an optimal policy \(\pi^*\). Because an optimal
+            deterministic policy exists in finite discounted MDPs (Chapter&nbsp;01,
+            Theorem&nbsp;7.1), these are well-defined and attained.
+          </p>
+          <p>
+            Intuition check: \(V^{\pi}(s)\) answers “how good is it to be here if I behave
+            like \(\pi\)?” while \(Q^{\pi}(s,a)\) answers “how good is it to try \(a\) right
+            now, then behave like \(\pi\)?” The second question is what you need to
+            <em>improve</em> a policy: compare actions without resimulating whole futures by
+            hand.
+          </p>
+        </div>
+
+        <div class="remark-box">
+          <span class="box-label">Remark · Randomness being averaged</span>
+          <p>
+            The expectation \(\mathbb{E}_{\pi}\) is over: (i) actions drawn from \(\pi\),
+            (ii) successors drawn from \(P\), (iii) any randomness in rewards. A single
+            episode’s return \(G_t\) is a random variable; \(V^{\pi}(s)\) is its conditional
+            mean. Monte Carlo methods estimate that mean by averaging observed \(G_t\);
+            TD methods estimate it by bootstrapping (Chapter&nbsp;04).
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="relation">
+        <h2>3. Relating \(V\) and \(Q\)</h2>
+        <div class="prose-study">
+          <p>
+            Averaging the Q-function under the policy’s action distribution recovers \(V\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            V^{\pi}(s)
+            =
+            \sum_{a} \pi(a\mid s)\, Q^{\pi}(s,a)
+            =
+            \mathbb{E}_{a\sim\pi(\cdot\mid s)}\!\left[Q^{\pi}(s,a)\right].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Conversely, one-step expansion of \(Q\) yields
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            Q^{\pi}(s,a)
+            =
+            \mathcal{R}(s,a)
+            +
+            \gamma
+            \sum_{s'} P(s'\mid s,a)\, V^{\pi}(s'),
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            where \(\mathcal{R}(s,a)=\sum_{s'}P(s'\mid s,a)R(s,a,s')\) as in Chapter&nbsp;01.
+            Equations&nbsp;(1)–(2) together say: values of states and state–actions are two
+            views of the same expected return, linked by one application of \(\pi\) or \(P\).
+          </p>
+        </div>
+
+        <div class="def-box">
+          <span class="box-label">Definition 3.1 · Advantage</span>
+          <p>
+            \(A^{\pi}(s,a) = Q^{\pi}(s,a) - V^{\pi}(s)\). By construction
+            \(\mathbb{E}_{a\sim\pi}[A^{\pi}(s,a)]=0\). Advantages measure whether an action
+            is better than average for that state — the scale used by modern actor–critic
+            methods (GAE, PPO).
+          </p>
+        </div>
+      </section>
+
+      <!-- VISUAL V / Q STUDIO -->
+      <section class="study-section lab-wide" id="visual-vq">
+        <h2>Visual studio · what \(V^{\pi}\) and \(Q^{\pi}\) mean</h2>
+        <div class="prose-study">
+          <p>
+            The equations above are two views of the same object. This studio makes that
+            literal: same 4×4 grid, same policy \(\pi\), same \(\gamma\). Switch modes to see
+            <strong>\(V^{\pi}(s)\)</strong> as “how good is it to <em>be</em> here?” and
+            <strong>\(Q^{\pi}(s,a)\)</strong> as “how good is this <em>move</em>?” Then watch
+            equations&nbsp;(1)–(2) rebuild one from the other with live arithmetic.
+          </p>
+        </div>
+
+        <div class="lab vq-studio">
+          <div class="lab-head">
+            <h3>\(V\) ↔ \(Q\) visual laboratory</h3>
+            <span>Click a cell · drag policy weights</span>
+          </div>
+
+          <div class="vq-mode-tabs" role="tablist" aria-label="Value function view">
+            <button type="button" class="vq-tab active" data-vq-mode="v" role="tab" aria-selected="true">
+              \(V^{\pi}(s)\) — state value
+            </button>
+            <button type="button" class="vq-tab" data-vq-mode="q" role="tab" aria-selected="false">
+              \(Q^{\pi}(s,a)\) — action value
+            </button>
+            <button type="button" class="vq-tab" data-vq-mode="vfromq" role="tab" aria-selected="false">
+              (1) \(V \leftarrow \sum_a \pi Q\)
+            </button>
+            <button type="button" class="vq-tab" data-vq-mode="qfromv" role="tab" aria-selected="false">
+              (2) \(Q \leftarrow R + \gamma V'\)
+            </button>
+            <button type="button" class="vq-tab" data-vq-mode="chain" role="tab" aria-selected="false">
+              Chain (1)+(2) → Bellman
+            </button>
+          </div>
+
+          <p class="lab-intro" id="vqModeBlurb">
+            <strong>State value.</strong> Each cell shows \(V^{\pi}(s)\): expected discounted
+            return if you <em>start</em> in that cell and follow \(\pi\). Brighter = better position.
+          </p>
+
+          <div class="split vq-split">
+            <div>
+              <label class="slider-label">
+                Discount γ
+                <input type="range" id="vqGamma" min="0" max="0.99" step="0.01" value="0.90" />
+                <strong id="vqGammaLabel">0.90</strong>
+              </label>
+              <div class="btn-row" style="margin:0 0 0.75rem">
+                <button type="button" class="btn small" id="vqSolve">Solve \(V^{\pi}, Q^{\pi}\)</button>
+                <button type="button" class="btn small ghost" id="vqRollout">One rollout from \(s\)</button>
+              </div>
+              <div class="vq-grid-wrap">
+                <div class="vq-grid" id="vqGrid" aria-label="Interactive value grid"></div>
+              </div>
+              <p class="caption tight" id="vqGridCaption">
+                Heat map of \(V^{\pi}(s)\). Goal at \((3,3)\), reward \(+1\) on entry.
+              </p>
+              <div class="vq-action-pick" id="vqActionPick" hidden>
+                <span class="control-label">Action for equation (2)</span>
+                <div class="btn-row" id="vqActionBtns"></div>
+              </div>
+              <div class="vq-policy-sliders" id="vqPolicySliders" hidden>
+                <span class="control-label">Policy at selected \(s\) — \(\pi(a\mid s)\)</span>
+                <div id="vqPiSliders"></div>
+                <p class="caption tight">Weights renormalize to sum to 1. Watch \(V(s)=\sum_a\pi Q\) change.</p>
+              </div>
+            </div>
+            <div>
+              <h4 class="vq-panel-title">Live equation</h4>
+              <div class="bellman-trace vq-equation" id="vqEquation">Press “Solve” to compute exact \(V^{\pi}\) and \(Q^{\pi}\).</div>
+              <div class="bar-chart" id="vqBars" hidden></div>
+              <div class="stat-strip" style="margin-top:0.75rem">
+                <div><span>Selected \(s\)</span><strong id="vqSel">(1,1)</strong></div>
+                <div><span>\(V^{\pi}(s)\)</span><strong id="vqVs">—</strong></div>
+                <div><span>\(Q^{\pi}(s,a)\)</span><strong id="vqQsa">—</strong></div>
+                <div><span>Best action</span><strong id="vqBest">—</strong></div>
+              </div>
+              <div class="vq-rollout-log" id="vqRolloutLog" hidden>
+                <h4 class="vq-panel-title">Sample trajectory</h4>
+                <div class="bellman-trace" id="vqRolloutText"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="analysis-box" style="margin-top:1.25rem">
+          <span class="box-label">How to read the modes</span>
+          <ul class="prose-study" style="margin:0.5rem 0 0;padding-left:1.2rem">
+            <li><strong>\(V^{\pi}(s)\)</strong> — one number per state; answers “how good is my current position?”</li>
+            <li><strong>\(Q^{\pi}(s,a)\)</strong> — one number per arrow; answers “how good is this particular move?”</li>
+            <li><strong>(1)</strong> — recover \(V\) by averaging \(Q\) with policy weights (your 0.3·left + 0.7·right example, generalized)</li>
+            <li><strong>(2)</strong> — recover \(Q\) from immediate reward plus discounted value of where you land</li>
+            <li><strong>Chain</strong> — substitute (2) into (1); you get the Bellman expectation equation (3) from Section&nbsp;4</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section" id="bellman-expect">
+        <h2>4. Bellman expectation equation</h2>
+        <div class="prose-study">
+          <p>
+            Substitute (2) into (1), or expand \(G_t\) directly (Section&nbsp;5). The
+            <strong>Bellman expectation equation</strong> for \(V^{\pi}\) is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            V^{\pi}(s)
+            =
+            \sum_{a}\pi(a\mid s)
+            \sum_{s'}P(s'\mid s,a)
+            \Big[
+              R(s,a,s') + \gamma V^{\pi}(s')
+            \Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>Read left to right:</p>
+          <ol>
+            <li>Average over the action the policy would take.</li>
+            <li>Average over the environment’s response.</li>
+            <li>Each branch contributes immediate reward plus discounted value of the landing state.</li>
+          </ol>
+          <p>The companion equation for \(Q^{\pi}\) is</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            Q^{\pi}(s,a)
+            =
+            \sum_{s'}P(s'\mid s,a)
+            \Big[
+              R(s,a,s')
+              +
+              \gamma
+              \sum_{a'}\pi(a'\mid s')\, Q^{\pi}(s',a')
+            \Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Equation&nbsp;(3) is a linear system in the unknowns \(\{V^{\pi}(s)\}_{s\in S}\):
+            \(|S|\) equations, \(|S|\) unknowns. For finite MDPs it has a unique solution.
+            Policy evaluation algorithms solve that system — by matrix inversion for tiny
+            MDPs, or by iterative backups for larger ones.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Proposition 4.1 · Unique solution for policy evaluation</span>
+          <p>
+            For fixed \(\pi\) and \(\gamma\in[0,1)\), there is a unique bounded function
+            \(V^{\pi}:S\to\mathbb{R}\) satisfying (3). Iterating the backup
+            \(V_{k+1} = \mathcal{T}^{\pi} V_k\) (defined in Section&nbsp;8) converges to
+            \(V^{\pi}\) from any initialization.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="derivation">
+        <h2>5. Derivation in detail</h2>
+        <div class="prose-study">
+          <p>
+            Start from the definition and the return recursion
+            \(G_t = r_{t+1} + \gamma G_{t+1}\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \begin{align*}
+            V^{\pi}(s)
+            &=
+            \mathbb{E}_{\pi}[G_t \mid s_t=s] \\
+            &=
+            \mathbb{E}_{\pi}[r_{t+1} + \gamma G_{t+1} \mid s_t=s] \\
+            &=
+            \mathbb{E}_{\pi}[r_{t+1} + \gamma V^{\pi}(s_{t+1}) \mid s_t=s],
+          \end{align*}
+        </div>
+        <div class="prose-study">
+          <p>
+            where the last step uses the law of total expectation and the fact that, given
+            \(s_{t+1}\), the expected remaining return under \(\pi\) is exactly
+            \(V^{\pi}(s_{t+1})\). Expand the outer expectation by enumerating \(a\) and \(s'\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            V^{\pi}(s)
+            =
+            \sum_a \pi(a\mid s)
+            \sum_{s'} P(s'\mid s,a)
+            \Big( R(s,a,s') + \gamma V^{\pi}(s') \Big),
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            which is (3). The same argument with a fixed first action produces (4).
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · Why this is computationally decisive</span>
+          <p>
+            Without Bellman, estimating \(V^{\pi}(s)\) seems to require averaging entire
+            futures from \(s\). With Bellman, local consistency is enough: if your table
+            satisfies (3) everywhere, it <em>is</em> \(V^{\pi}\). That reduces global return
+            estimation to local backups — the algorithmic heart of DP and TD.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="optimality">
+        <h2>6. Bellman optimality equations</h2>
+        <div class="prose-study">
+          <p>
+            Optimal values satisfy a different recursion: instead of averaging over
+            \(\pi\), take the best action. The <strong>Bellman optimality equation</strong> is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            V^*(s)
+            =
+            \max_{a}
+            \sum_{s'} P(s'\mid s,a)
+            \Big( R(s,a,s') + \gamma V^*(s') \Big).
+          \]
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            Q^*(s,a)
+            =
+            \sum_{s'} P(s'\mid s,a)
+            \Big(
+              R(s,a,s')
+              +
+              \gamma \max_{a'} Q^*(s',a')
+            \Big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Once \(Q^*\) is known, an optimal policy is a one-liner — no further planning:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            \pi^*(s) \in \arg\max_a Q^*(s,a).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Equation&nbsp;(9) is the seed of greedy policy improvement, Q-learning’s target,
+            and the “actor reads argmax of critic” design in discrete-action deep RL.
+          </p>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">Expectation vs optimality — do not confuse them</span>
+          <p>
+            \(\mathcal{T}^{\pi}\) (expectation backup) evaluates a fixed policy.
+            \(\mathcal{T}^*\) (optimality backup) characterizes the best policy’s values.
+            Policy iteration mixes both: evaluate with \(\mathcal{T}^{\pi}\), improve by
+            greedy readout. Value iteration applies \(\mathcal{T}^*\) repeatedly.
+            Q-learning samples a stochastic approximation of \(\mathcal{T}^*\).
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="greedy">
+        <h2>7. Greedy policy improvement</h2>
+        <div class="def-box">
+          <span class="box-label">Definition 7.1 · Greedy policy</span>
+          <p>
+            Given any action-value estimate \(Q\), the greedy policy is
+            \(\pi'(s) \in \arg\max_a Q(s,a)\) (ties broken arbitrarily).
+          </p>
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Theorem 7.2 · Policy improvement (statement)</span>
+          <p>
+            Let \(\pi\) be any policy and let \(\pi'\) be greedy with respect to \(Q^{\pi}\).
+            Then \(V^{\pi'}(s) \ge V^{\pi}(s)\) for all \(s\), with equality for all \(s\) iff
+            \(\pi\) is already optimal. (Proof idea: one-step improvement inequality
+            telescopes into an infinite-horizon improvement via repeated application of the
+            Bellman expectation operator.)
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            This is why “evaluate, then act greedy, repeat” is an escalator that never goes
+            down. Chapter&nbsp;03 turns the theorem into Policy Iteration. The same greedy
+            step appears inside Value Iteration and in the target of Q-learning — only the
+            source of \(Q\) (exact vs sampled) changes.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="contraction">
+        <h2>8. Contraction view (why uniqueness)</h2>
+        <div class="prose-study">
+          <p>
+            Define the Bellman expectation operator \(\mathcal{T}^{\pi}\) on value vectors by
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            (\mathcal{T}^{\pi} V)(s)
+            =
+            \sum_a\pi(a\mid s)
+            \sum_{s'}P(s'\mid s,a)
+            \big(R(s,a,s') + \gamma V(s')\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Then \(V^{\pi}\) is exactly the fixed point \(V = \mathcal{T}^{\pi} V\). In the
+            infinity norm,
+            \(\|\mathcal{T}^{\pi} V - \mathcal{T}^{\pi} U\|_\infty \le \gamma \|V-U\|_\infty\):
+            \(\mathcal{T}^{\pi}\) is a <strong>\(\gamma\)-contraction</strong>. By the Banach
+            fixed-point theorem there is a unique fixed point, and iterated application
+            converges exponentially fast with rate \(\gamma\).
+          </p>
+          <p>
+            The optimality operator \(\mathcal{T}^*\) (max instead of \(\pi\)-average) is
+            likewise a \(\gamma\)-contraction; its unique fixed point is \(V^*\). This is the
+            heavy-math guarantee behind Value Iteration. You do not need the full proof to
+            use the algorithms — but it explains why they do not oscillate forever.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="why-q">
+        <h2>9. Why \(Q\) wins in practice</h2>
+        <div class="prose-study">
+          <p>
+            If you know \(P\), knowing \(V^*\) is enough: choose
+            \(a\) maximizing the one-step lookahead in (7). If you do <em>not</em> know \(P\)
+            (robotics, Atari, the usual RL setting), you cannot evaluate that lookahead.
+            But if you know \(Q^*\), equation&nbsp;(9) needs no model — just compare numbers
+            \(Q^*(s,\cdot)\). That is why model-free control learns \(Q\) (or a policy
+            directly), not bare \(V\).
+          </p>
+          <p>
+            Actor–critic methods reintroduce \(V\) (or \(A\)) as a <em>baseline / critic</em>
+            for training a separate policy network — values assist gradients; they do not
+            replace the policy when actions are continuous.
+          </p>
+        </div>
+      </section>
+
+      <!-- LAB -->
+      <section class="study-section" id="lab">
+        <h2>10. Laboratory · iterative policy evaluation</h2>
+        <div class="prose-study">
+          <p>
+            Fix a simple policy on a 4×4 grid (no walls): always try to move toward the
+            bottom-right goal with a little randomness. Each click applies one synchronous
+            Bellman expectation backup \(V \leftarrow \mathcal{T}^{\pi} V\) for all states.
+            Watch values flow backward from the goal — the contraction in Section&nbsp;8 made
+            visible.
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Policy evaluation sweeps</h3>
+            <span>Operator \(\mathcal{T}^{\pi}\)</span>
+          </div>
+          <p class="lab-intro">
+            Goal at \((3,3)\) with reward \(+1\) on entering; step cost \(0\); \(\gamma\)
+            controllable. Terminal state value held at \(0\) after absorbing.
+          </p>
+
+          <div class="split" style="align-items:start">
+            <div>
+              <label class="slider-label">
+                Discount γ
+                <input type="range" id="valGamma" min="0" max="0.99" step="0.01" value="0.90" />
+                <strong id="valGammaLabel">0.90</strong>
+              </label>
+              <div class="btn-row" style="margin:0.75rem 0">
+                <button type="button" class="btn small" id="backupOnce">One backup sweep</button>
+                <button type="button" class="btn small ghost" id="backupMany">20 more sweeps</button>
+                <button type="button" class="btn small ghost" id="resetV">Reset \(V=0\)</button>
+              </div>
+              <div class="value-heat" id="valueHeat" aria-label="Value grid"></div>
+              <p class="caption tight">Cell color intensity ∝ value. Numbers are \(V_k(s)\).</p>
+            </div>
+            <div>
+              <h4 style="font-family:var(--font-mono);font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:0 0 0.5rem">
+                Backup log
+              </h4>
+              <div class="bellman-trace" id="bellmanTrace">Press “One backup sweep” to apply equation (3) everywhere.</div>
+              <div class="stat-strip" style="margin-top:0.75rem">
+                <div><span>Iteration</span><strong id="valIter">0</strong></div>
+                <div><span>‖Δ‖∞</span><strong id="valDelta">—</strong></div>
+                <div><span>max V</span><strong id="valMax">0.00</strong></div>
+                <div><span>V(start)</span><strong id="valStart">0.00</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="lab" style="margin-top:1.25rem">
+          <div class="lab-head">
+            <h3>Single-state backup inspector</h3>
+            <span>Expand equation (3) for one \(s\)</span>
+          </div>
+          <p class="lab-intro">
+            Choose a cell. We expand \(\sum_a\pi(a\mid s)\sum_{s'}P(\cdot)[R+\gamma V(s')]\)
+            using the current value table — the arithmetic behind one pixel of the heat map.
+          </p>
+          <label class="slider-label" for="inspectSelect">State</label>
+          <select id="inspectSelect" style="font-family:var(--font-mono);background:var(--panel-bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:0.4rem 0.6rem;margin-bottom:0.75rem"></select>
+          <div class="bellman-trace" id="inspectOut">Select a state.</div>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>11. Worked Bellman backup</h2>
+        <div class="prose-study">
+          <p>
+            Tiny two-state illustration. States \(\{s_0,s_G\}\) with \(s_G\) terminal,
+            \(V(s_G)=0\). From \(s_0\), action \(g\) reaches the goal with probability \(1\)
+            and reward \(+1\). Policy takes \(g\) always. Then
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            V(s_0)
+            =
+            1 + \gamma V(s_G)
+            =
+            1.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            If instead the goal is reached with probability \(0.5\) and otherwise we self-loop
+            with reward \(0\),
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(12)</span>
+          \[
+            V(s_0)
+            =
+            0.5\big(1 + \gamma\cdot 0\big) + 0.5\big(0 + \gamma V(s_0)\big)
+            =
+            0.5 + 0.5\gamma V(s_0).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Solve: \(V(s_0)(1 - 0.5\gamma) = 0.5\), hence
+            \(V(s_0) = 0.5 / (1 - 0.5\gamma)\). For \(\gamma=0.9\),
+            \(V(s_0)\approx 0.909\). Iterative policy evaluation discovers the same number
+            by repeating the backup without algebraically solving the linear system — that is
+            what the laboratory is doing on a larger grid.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Write Bellman for self-loop MDP: \(V = 0.5(1) + 0.5\gamma V\).</li>
+            <li class="hidden-step">Collect terms: \(V - 0.5\gamma V = 0.5\).</li>
+            <li class="hidden-step">Factor: \(V(1-0.5\gamma)=0.5\).</li>
+            <li class="hidden-step">Closed form: \(V=1/(2-\gamma)\).</li>
+            <li class="hidden-step">At \(\gamma=0.9\): \(V=1/1.1\approx 0.90909\).</li>
+            <li class="hidden-step">Iteration from \(V_0=0\): \(V_1=0.5\), \(V_2=0.5+0.5\cdot0.9\cdot0.5=0.725\), … → same limit.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>12. What follows</h2>
+        <div class="prose-study">
+          <p>
+            Dynamic Programming turns Bellman into algorithms you can run when \(P\) and \(R\)
+            are known: Policy Iteration (evaluate → greedy improve → repeat) and Value
+            Iteration (apply \(\mathcal{T}^*\) until convergence). Then TD learning removes
+            the need for \(P\) itself — same backup structure, sampled successors.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Sutton &amp; Barto, Ch. 3–4 — values and DP.</li>
+            <li>Chapter&nbsp;01 — MDP tuple, return, Markov property.</li>
+            <li><a href="practice.html">Practice notebook</a> — full PI / VI by hand on a \(2\times 3\) grid.</li>
+            <li><code>course-notes.txt</code> — condensed outline of the full course.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="index.html" style="color:inherit;text-decoration:none">← Markov Decision Processes</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next</p>
+            <h3>Practice · one gridworld</h3>
+            <p>Work the whole stack by hand before Dynamic Programming.</p>
+          </div>
+          <a class="btn primary" href="practice.html">Practice →</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Chapter 02 · Value functions &amp; Bellman equations</p>
+    <p class="muted">Equations first; laboratory second.</p>
+  </footer>
+
+  <script src="value.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

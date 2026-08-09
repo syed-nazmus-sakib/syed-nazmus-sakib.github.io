@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>09 · GRPO — Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="why.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl</span>
+    </a>
+        <nav class="chapter-nav" aria-label="Chapters">
+      <a href="why.html">00 · Why</a>
+      <a href="index.html">01 · MDP</a>
+      <a href="value.html">02 · Value</a>
+      <a href="practice.html">Practice</a>
+      <a href="dp.html">03 · DP</a>
+      <a href="td.html">04 · TD</a>
+      <a href="qlearning.html">05 · DQN</a>
+      <a href="pg.html">06 · PG</a>
+      <a href="trpo.html">07 · TRPO</a>
+      <a href="ppo.html">08 · PPO</a>
+      <a class="active" href="grpo.html">09 · GRPO</a>
+      <span class="locked">10 · SAC</span>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#overview">1. Overview</a></li>
+        <li><a href="#motivation">2. Motivation</a></li>
+        <li><a href="#setup">3. Problem setup</a></li>
+        <li><a href="#advantage">4. Group-relative advantage</a></li>
+        <li><a href="#no-critic">5. Why this replaces \(V_\phi\)</a></li>
+        <li><a href="#clip-kl">6. Clipped surrogate + KL to \(\pi_{\mathrm{ref}}\)</a></li>
+        <li><a href="#algo">7. Algorithm</a></li>
+        <li><a href="#comparison">8. Comparison: PPO / RLOO / DPO</a></li>
+        <li><a href="#failure">9. Failure modes</a></li>
+        <li><a href="#classic">10. Classic RL view</a></li>
+        <li><a href="#lab">11. Laboratory</a></li>
+        <li><a href="#worked">12. Worked example</a></li>
+        <li><a href="#next">13. What follows</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Chapter 09 · Group relative policy optimization</p>
+      <h1 class="study-title"><em>GRPO</em></h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Group Relative Policy Optimization (Shao et al., 2024 — DeepSeekMath; reused in
+        DeepSeek-R1) keeps PPO's clipped importance-ratio surrogate but deletes the learned
+        value network entirely. For each prompt it samples a <em>group</em> of \(G\)
+        completions from the old policy, scores them with a reward model or verifier, and
+        turns the raw rewards into advantages by standardizing <em>within the group</em>:
+        subtract the group mean, divide by the group standard deviation. This chapter derives
+        the group-relative advantage from first principles, shows precisely which piece of
+        PPO it replaces and why, works through the clipped objective plus an explicit KL
+        penalty to a frozen reference policy, and catalogs the failure modes that this
+        design trades in for its simplicity. The laboratory is a 4-action contextual bandit
+        — one fixed "prompt," four "answers" — small enough to watch every group, every
+        advantage, and every clipped update by hand.
+      </div>
+
+      <!-- 1 -->
+      <section class="study-section" id="overview">
+        <h2>1. Overview</h2>
+        <div class="prose-study">
+          <p class="lead">
+            Chapter&nbsp;08 built PPO around three ingredients: a policy \(\pi_\theta\), a
+            learned critic \(V_\phi\) supplying advantages via GAE, and a clipped surrogate
+            that keeps the policy near \(\pi_{\theta_{\mathrm{old}}}\). GRPO keeps the third
+            ingredient almost unchanged and <strong>throws away the second</strong>. In its
+            place: sample many completions per prompt and let the group itself estimate how
+            good "average" is.
+          </p>
+          <p>
+            This is not a generic RL trick — it is specifically shaped by how large language
+            models are post-trained. A prompt \(q\) is a state visited essentially once; a
+            full completion \(o\) is, from the reward model's point of view, a single action.
+            Fitting a separate neural critic to predict the value of a state you may never
+            revisit is expensive and often inaccurate. Resampling the same state many times
+            and averaging, on the other hand, is cheap: it costs a few extra forward passes
+            through the policy you already have.
+          </p>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section class="study-section" id="motivation">
+        <h2>2. Motivation: the critic is the expensive part</h2>
+        <div class="prose-study">
+          <p>
+            In PPO for LLM RLHF, \(V_\phi\) is usually a second copy of the policy network
+            (same transformer backbone, different head), trained jointly with \(\pi_\theta\).
+            This has three costs that matter enormously at scale:
+          </p>
+          <ol>
+            <li>
+              <strong>Memory and compute.</strong> A 70B-parameter critic roughly doubles
+              activation memory and optimizer state versus policy-only training, and doubles
+              the forward/backward passes per step.
+            </li>
+            <li>
+              <strong>Credit assignment is genuinely hard.</strong> Reward is usually given
+              only at the end of a generated sequence (a single scalar for the whole
+              response). \(V_\phi\) must learn to predict this terminal reward from every
+              intermediate token — a sparse, high-variance regression target that is easy to
+              overfit or underfit.
+            </li>
+            <li>
+              <strong>Bias from an imperfect critic propagates everywhere.</strong> GAE
+              advantages are only as good as \(V_\phi\); a poorly calibrated critic silently
+              corrupts every policy update, and diagnosing this in a multi-billion parameter
+              system is hard.
+            </li>
+          </ol>
+          <p>
+            GRPO's bet: for the "one action per prompt" structure of RLHF/RLVR fine-tuning,
+            a Monte Carlo estimate from a handful of resampled completions is a good enough
+            (and much cheaper, much more transparent) substitute for a learned baseline.
+          </p>
+        </div>
+
+        <div class="remark-box">
+          <span class="box-label">Remark · Not a general MDP claim</span>
+          <p>
+            This trade only makes sense because the "episode" is short relative to how many
+            times you can afford to resample the <em>same</em> state. It would be a poor fit
+            for, say, a long-horizon robotics MDP where every state is visited once and
+            resampling is physically expensive. Keep the LLM-specific setup in mind as you
+            read the rest of this chapter.
+          </p>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section class="study-section" id="setup">
+        <h2>3. Problem setup</h2>
+        <div class="prose-study">
+          <p>
+            Fix a prompt (context) \(q\), drawn from a prompt distribution. The current
+            policy \(\pi_{\theta_{\mathrm{old}}}\) is frozen for a moment and used to draw a
+            <strong>group</strong> of \(G\) independent completions:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            o_1, o_2, \ldots, o_G \;\sim\; \pi_{\theta_{\mathrm{old}}}(\,\cdot \mid q\,).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Each completion is scored by a reward model or a rule-based verifier (exact-match
+            checker for math/code — "RLVR"), producing one scalar per sample:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            R_i \;=\; r(q, o_i), \qquad i = 1,\ldots,G.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            That is the entire data-collection step. No bootstrapped targets, no discounted
+            returns along a trajectory of states — one prompt, \(G\) parallel "rollouts,"
+            \(G\) scalar rewards. The laboratory below makes this concrete with a literal
+            4-armed bandit: \(q\) is fixed, the four completions are labeled A/B/C/D, and
+            \(r(q,\cdot)\) is a fixed lookup table.
+          </p>
+        </div>
+
+        <div class="def-box">
+          <span class="box-label">Definition 3.1 · Group</span>
+          <p>
+            A <em>group</em> is the set \(\{(o_i, R_i)\}_{i=1}^G\) of completions and rewards
+            sampled for a single prompt \(q\) under a single frozen \(\pi_{\theta_{\mathrm{old}}}\).
+            All group statistics (mean, std) below are computed <em>within</em> this set —
+            never pooled across different prompts.
+          </p>
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section class="study-section" id="advantage">
+        <h2>4. The group-relative advantage</h2>
+        <div class="prose-study">
+          <p>
+            GRPO's central move is to standardize the rewards within the group instead of
+            subtracting a learned baseline:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            \hat A_i
+            \;=\;
+            \frac{R_i - \operatorname{mean}(R_1,\ldots,R_G)}
+                 {\operatorname{std}(R_1,\ldots,R_G) + \varepsilon},
+            \qquad \varepsilon \approx 10^{-8}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Read this the same way you read any advantage: \(\hat A_i &gt; 0\) means "better
+            than what this prompt typically produces," \(\hat A_i &lt; 0\) means "worse."
+            Dividing by the group standard deviation additionally makes \(\hat A_i\)
+            dimensionless and roughly unit-scale — it plays the same variance-control role
+            as advantage normalization in PPO (Chapter&nbsp;08), except the normalizing
+            statistics are recomputed <em>per prompt</em> rather than pooled over a whole
+            batch of unrelated states.
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · A baseline you get for free</span>
+          <p>
+            Subtracting \(\operatorname{mean}(R)\) is exactly a baseline subtraction — it does
+            not change the expected policy gradient (Chapter&nbsp;06's baseline lemma still
+            applies) but reduces variance whenever completions within a group are correlated
+            through the shared prompt. The baseline here is a <em>sample</em> mean over \(G\)
+            draws rather than a learned function \(V_\phi(q)\); no gradient descent on a
+            second network is required to obtain it.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Property 4.1 · Zero-signal groups</span>
+          <p>
+            If every \(R_i\) in a group is equal, then \(\operatorname{std}(R)=0\) and
+            \(\hat A_i = 0/\varepsilon \approx 0\) for every \(i\). The clipped surrogate
+            (Section&nbsp;6) then contributes exactly zero gradient for that prompt — the
+            update is a no-op regardless of how the raw rewards compare to other prompts.
+            Try this directly in the lab: sample a group after \(\pi\) has already collapsed
+            onto one action.
+          </p>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section class="study-section" id="no-critic">
+        <h2>5. Why this replaces \(V_\phi\), precisely</h2>
+        <div class="prose-study">
+          <p>
+            In the bandit view of a single-turn prompt, there are no intermediate states:
+            \(q\) is the only state, \(o\) is the only action, and the "episode" ends after
+            one action. The value function the critic would have learned is exactly
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            V^{\pi}(q) \;=\; \mathbb{E}_{o \sim \pi(\cdot\mid q)}\big[r(q,o)\big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The group mean is a Monte Carlo estimate of exactly this quantity:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            \operatorname{mean}(R_1,\ldots,R_G)
+            \;=\;
+            \frac1G\sum_{i=1}^G R_i
+            \;\xrightarrow[G\to\infty]{}\;
+            V^{\pi_{\theta_{\mathrm{old}}}}(q).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            So the group mean <em>is</em> a value estimate — just an unbiased, tabular,
+            zero-parameter one, valid for exactly this \(q\), refreshed every time a new
+            group is drawn. \(A(q,o) = R - V^{\pi}(q)\) is the textbook advantage; GRPO
+            estimates it by Monte Carlo instead of by regression, and additionally rescales
+            by the group std for numerical stability. No function approximator, no
+            bootstrapping, no separate optimizer — the "critic" is a running mean over the
+            current batch of samples.
+          </p>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">Trade-off, stated plainly</span>
+          <p>
+            This estimate is unbiased but high-variance for small \(G\) (typical values in
+            practice: \(G \in [4, 64]\)), whereas a well-trained \(V_\phi\) can in principle
+            have lower variance by pooling information <em>across</em> prompts. GRPO accepts
+            more variance per update in exchange for removing an entire network, its
+            training dynamics, and its failure modes.
+          </p>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section class="study-section" id="clip-kl">
+        <h2>6. Clipped surrogate + KL to a frozen reference</h2>
+        <div class="prose-study">
+          <p>
+            With \(\hat A_i\) in hand, GRPO reuses PPO's importance ratio and clip verbatim.
+            For a full sequence, the ratio is a per-token product; token index \(t\) of
+            completion \(i\) contributes
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            r_{i,t}(\theta)
+            \;=\;
+            \frac{\pi_\theta(o_{i,t}\mid q, o_{i,&lt;t})}
+                 {\pi_{\theta_{\mathrm{old}}}(o_{i,t}\mid q, o_{i,&lt;t})}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Crucially, the <em>same</em> sequence-level advantage \(\hat A_i\) is broadcast
+            to every token of completion \(o_i\) — there is no per-token value baseline, so
+            every token in a good completion is credited equally. The clipped, per-token
+            objective, averaged over the group and over tokens, is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            \mathcal{J}_{\mathrm{clip}}(\theta)
+            =
+            \mathbb{E}_{q,\,\{o_i\}}
+            \left[
+              \frac1G\sum_{i=1}^{G}\frac{1}{|o_i|}\sum_{t=1}^{|o_i|}
+              \min\!\Big(
+                r_{i,t}(\theta)\,\hat A_i,\;
+                \operatorname{clip}\!\big(r_{i,t}(\theta),\,1-\varepsilon,\,1+\varepsilon\big)\,\hat A_i
+              \Big)
+            \right].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            GRPO's second departure from RLHF-style PPO: the KL penalty against a frozen
+            reference policy \(\pi_{\mathrm{ref}}\) (typically the SFT checkpoint, or
+            \(\pi_{\theta_{\mathrm{old}}}\) at the start of training) is added
+            <strong>directly into the loss</strong>, not subtracted from the reward before
+            computing advantages. DeepSeekMath uses an unbiased, always-nonnegative
+            per-token estimator (the "k3" estimator) instead of the naive
+            \(\log(\pi_\theta/\pi_{\mathrm{ref}})\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            \widehat{D}_{\mathrm{KL}}\big[\pi_\theta \,\|\, \pi_{\mathrm{ref}}\big]
+            \;=\;
+            \frac{\pi_{\mathrm{ref}}(o_{i,t}\mid\cdot)}{\pi_\theta(o_{i,t}\mid\cdot)}
+            \;-\;
+            \log\frac{\pi_{\mathrm{ref}}(o_{i,t}\mid\cdot)}{\pi_\theta(o_{i,t}\mid\cdot)}
+            \;-\;1
+            \;\ge\;0.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The full GRPO objective is then
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            \mathcal{J}_{\mathrm{GRPO}}(\theta)
+            \;=\;
+            \mathcal{J}_{\mathrm{clip}}(\theta)
+            \;-\;
+            \beta\,\mathbb{E}\big[\widehat{D}_{\mathrm{KL}}[\pi_\theta\|\pi_{\mathrm{ref}}]\big].
+          \]
+        </div>
+
+        <div class="remark-box">
+          <span class="box-label">Remark · Two different reference points, on purpose</span>
+          <p>
+            \(\pi_{\theta_{\mathrm{old}}}\) (the sampling/ratio policy) drifts every
+            optimizer step or every few steps; \(\pi_{\mathrm{ref}}\) (the KL anchor) is
+            fixed for the whole run, or updated much more slowly. The ratio clip controls
+            <em>local</em> step size; the KL-to-reference term controls <em>global</em> drift
+            from the model's original behavior (style, safety, calibration). The laboratory
+            keeps both knobs — \(\varepsilon\) and \(\beta\) — separately adjustable.
+          </p>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section class="study-section" id="algo">
+        <h2>7. Algorithm</h2>
+        <div class="eq-block tight">
+          <pre style="margin:0;font-family:var(--font-mono);font-size:0.72rem;line-height:1.5;color:var(--ink-soft);white-space:pre-wrap">Initialize π_θ from an SFT checkpoint; set π_ref ← π_θ (frozen)
+For iteration k = 1, 2, …:
+  θ_old ← θ                                  (freeze sampling policy)
+  Sample a batch of prompts {q}
+  For each prompt q:
+    Sample group o_1..o_G ~ π_θ_old(·|q)
+    Score R_i = r(q, o_i)                    (reward model / verifier)
+    Compute Â_i = (R_i − mean(R)) / (std(R) + ε)
+  For several inner epochs over the collected groups:
+    Compute ratios r_{i,t}(θ) = π_θ / π_θ_old  (per token)
+    L = mean over groups & tokens of min(r·Â, clip(r,1±ε)·Â)
+    L ← L − β · D̂_KL[π_θ ‖ π_ref]
+    θ ← θ + α ∇_θ L
+  (no critic to fit — nothing else to update)</pre>
+        </div>
+        <div class="prose-study">
+          <p>
+            Compare this to TRPO/PPO's algorithm boxes (Chapters&nbsp;07–08): the entire
+            "fit \(V_\phi\) by regression" line is gone. Everything else — freeze
+            \(\theta_{\mathrm{old}}\), compute ratios, clip, take several inner epochs — is
+            structurally identical.
+          </p>
+        </div>
+      </section>
+
+      <!-- 8 -->
+      <section class="study-section" id="comparison">
+        <h2>8. Comparison: PPO / RLOO / DPO</h2>
+        <div class="prose-study">
+          <p>
+            GRPO sits in a family of "how do we get an advantage signal for LLM RL without
+            a full critic" answers. Three useful reference points:
+          </p>
+        </div>
+
+        <div class="compare-pair" style="grid-template-columns:repeat(3,1fr)">
+          <div class="compare-card">
+            <h4>PPO (RLHF-style)</h4>
+            <p>
+              Learned critic \(V_\phi\), GAE(\(\gamma,\lambda\)) advantages, KL penalty
+              usually folded into the per-token reward. On-policy, needs a second network,
+              most accurate credit assignment when \(V_\phi\) is well fit.
+            </p>
+            <p class="mono-line">Â from regression · extra network · per-token reward-KL</p>
+          </div>
+          <div class="compare-card">
+            <h4>RLOO</h4>
+            <p>
+              REINFORCE Leave-One-Out: baseline for sample \(i\) is the mean of the
+              <em>other</em> \(G{-}1\) samples' rewards, \(b_i=\frac1{G-1}\sum_{j\ne i}R_j\).
+              No clipping in the original formulation, no importance ratio (pure REINFORCE),
+              no critic. Very close in spirit to GRPO but skips both standardization by std
+              and the PPO-style clip.
+            </p>
+            <p class="mono-line">Â = R_i − b_i · leave-one-out · no clip, no critic</p>
+          </div>
+          <div class="compare-card">
+            <h4>DPO</h4>
+            <p>
+              Offline: no sampling loop, no reward model at training time. Uses fixed
+              preference pairs (chosen \(\succ\) rejected) and a closed-form loss derived
+              from the KL-regularized RL optimum via Bradley–Terry, collapsing RL into a
+              classification-style objective on log-probability ratios.
+            </p>
+            <p class="mono-line">no rollouts · no reward model at train time · offline pairs</p>
+          </div>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · Where GRPO sits</span>
+          <p>
+            GRPO is "RLOO plus PPO's clip plus explicit-in-loss KL," or equivalently
+            "PPO with the critic replaced by group statistics." It stays on-policy and
+            keeps a trust-region-flavored clip that RLOO lacks, while remaining far cheaper
+            than PPO because it never trains \(V_\phi\). DPO is a different branch entirely
+            — no online sampling at all — and is usually a separate, earlier or alternative
+            stage rather than a drop-in replacement for GRPO.
+          </p>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section class="study-section" id="failure">
+        <h2>9. Failure modes</h2>
+        <div class="prose-study">
+          <p>
+            Deleting the critic removes its failure modes but introduces new ones, most of
+            them traceable directly to Equation&nbsp;(3):
+          </p>
+          <ul>
+            <li>
+              <strong>Degenerate / zero-variance groups.</strong> As shown in
+              Property&nbsp;4.1, a group with identical rewards produces \(\hat A_i=0\) for
+              everyone. This is common late in training, once \(\pi\) has nearly collapsed
+              onto one high-reward completion per prompt — exactly when you might still want
+              gradient signal to sharpen further or to escape a locally-good-but-suboptimal
+              answer.
+            </li>
+            <li>
+              <strong>Length bias.</strong> Summing (or averaging) a per-token advantage over
+              sequences of very different lengths interacts badly with how rewards are
+              scored. If longer completions are systematically scored higher (or lower) by
+              the reward model, the group-relative advantage inherits that bias, and the
+              policy learns to change length rather than change quality — a widely reported
+              GRPO/PPO-for-LLM pathology.
+            </li>
+            <li>
+              <strong>Reward hacking, amplified by small \(G\).</strong> With no critic to
+              smooth over reward-model noise, a lucky high score for a low-quality
+              completion in a small group can produce a large \(\hat A_i\) and a
+              correspondingly large gradient. Larger \(G\) reduces this variance but costs
+              proportionally more inference compute per prompt.
+            </li>
+            <li>
+              <strong>Std collapse / division sensitivity.</strong> When
+              \(\operatorname{std}(R)\) is small but nonzero, dividing by
+              \(\operatorname{std}(R)+\varepsilon\) can amplify noise into large,
+              unreliable \(\hat A_i\) values — the opposite failure from the exact-zero case,
+              equally worth watching for.
+            </li>
+          </ul>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">Practical mitigation</span>
+          <p>
+            Common fixes in the literature: keep \(G\) reasonably large (16–64), monitor
+            per-prompt reward variance and mask/down-weight zero-variance groups, decouple
+            length from reward via explicit length penalties or length-conditioned
+            normalization, and keep \(\beta\) large enough that \(\pi_\theta\) cannot drift
+            far enough from \(\pi_{\mathrm{ref}}\) to fully exploit reward-model quirks.
+          </p>
+        </div>
+      </section>
+
+      <!-- 10 -->
+      <section class="study-section" id="classic">
+        <h2>10. Classic RL view: contextual bandit and token MDP, at once</h2>
+        <div class="prose-study">
+          <p>
+            GRPO is easiest to derive by squinting at LLM generation as a
+            <strong>contextual bandit</strong>: state = prompt \(q\), action = whole
+            completion \(o\), one-step episode, reward \(r(q,o)\). Every equation in
+            Sections&nbsp;3–5 is exactly the bandit-with-baseline story from
+            Chapter&nbsp;06, with the baseline computed by resampling instead of by
+            regression.
+          </p>
+          <p>
+            But the completion is not really atomic — it is generated one token at a time,
+            so the underlying process is a <strong>token-level MDP</strong>: state = (prompt,
+            tokens so far), action = next token, and reward is typically zero everywhere
+            except a single terminal bonus at end-of-sequence. GRPO's actual implementation
+            (Equations&nbsp;6–7) lives in this token MDP — the importance ratio and clip are
+            computed per token, exactly as in PPO — but the <em>advantage</em> it plugs in
+            is the bandit-level, whole-completion \(\hat A_i\), broadcast unchanged across
+            every token of that completion.
+          </p>
+          <p>
+            This chapter's laboratory deliberately uses the pure bandit view (one action per
+            sample, no token structure) so that every quantity — the sample, its reward, its
+            advantage, its ratio — is visible on screen at once. Real GRPO is this exact
+            same arithmetic, repeated once per token with a shared \(\hat A_i\).
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · Why broadcasting Â works reasonably well</span>
+          <p>
+            Broadcasting one sequence-level advantage to every token is a strong assumption
+            — it says every token contributed equally to the eventual reward, which is
+            rarely literally true. It is the same simplification classic REINFORCE makes
+            when it uses the total return \(G_0\) as the learning signal at every timestep
+            before any baseline or GAE is introduced (Chapter&nbsp;06). GRPO essentially
+            re-derives "REINFORCE with a resampled baseline," now for token sequences.
+          </p>
+        </div>
+      </section>
+
+      <!-- 11 LAB -->
+      <section class="study-section lab-wide" id="lab">
+        <h2>11. Laboratory · group-relative advantage on a 4-way bandit</h2>
+        <div class="prose-study">
+          <p>
+            One fixed "prompt," four "answers" \(\{A,B,C,D\}\) with a hidden-but-fixed
+            reward table \(R = [0.2,\,0.9,\,0.4,\,0.1]\) — B is the best answer. Sample a
+            group of \(G\) completions from the current softmax policy \(\pi_\theta\),
+            watch the group mean/std and per-sample \(\hat A_i\), then take a GRPO step:
+            a PPO-style clipped update using \(\hat A_i\) in place of a GAE advantage, plus
+            a KL penalty pulling \(\pi_\theta\) back toward the frozen reference policy
+            captured at reset. Push \(G\) down and \(\pi\) toward greedy to reproduce the
+            zero-variance failure mode from Section&nbsp;9 on purpose.
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Sample → standardize → clip</h3>
+            <span>Contextual bandit · no critic</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0.85rem;margin-bottom:1rem">
+            <div class="control-block">
+              <span class="control-label">Group &amp; clip</span>
+              <label class="slider-label">G (group size) <input type="range" id="grpoG" min="2" max="32" step="1" value="8" /><strong id="grpoGL">8</strong></label>
+              <label class="slider-label">ε clip <input type="range" id="grpoEps" min="0.05" max="0.5" step="0.01" value="0.2" /><strong id="grpoEpsL">0.20</strong></label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">KL to reference</span>
+              <label class="slider-label">β KL <input type="range" id="grpoBeta" min="0" max="0.2" step="0.005" value="0.04" /><strong id="grpoBetaL">0.040</strong></label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Actions</span>
+              <div class="btn-row">
+                <button type="button" class="btn small" id="grpoSample">Sample group</button>
+                <button type="button" class="btn small ghost" id="grpoStep">GRPO step</button>
+                <button type="button" class="btn small ghost" id="grpoReset">Reset</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="split" style="grid-template-columns:1fr 1fr;gap:1rem">
+            <div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:0 0 0.5rem">Policy π over {A,B,C,D}</h4>
+              <div class="bar-chart" id="grpoBars"></div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:1rem 0 0.5rem">Group samples (R, Â)</h4>
+              <div id="grpoGroup"></div>
+            </div>
+            <div>
+              <div class="stat-strip">
+                <div><span>mean(R)</span><strong id="grpoMean">—</strong></div>
+                <div><span>std(R)</span><strong id="grpoStd">—</strong></div>
+                <div><span>Clip fraction</span><strong id="grpoClipFrac">—</strong></div>
+                <div><span>KL(π‖π_ref)</span><strong id="grpoKL">—</strong></div>
+                <div><span>Entropy H(π)</span><strong id="grpoEnt">—</strong></div>
+              </div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:1rem 0 0.5rem">Ledger</h4>
+              <div class="bellman-trace" id="grpoTrace">Sample a group, then run a GRPO step.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 12 -->
+      <section class="study-section" id="worked">
+        <h2>12. Worked example</h2>
+        <div class="prose-study">
+          <p>
+            <strong>Group of four.</strong> Suppose a group of \(G=4\) returns rewards
+            \(R = [0.9,\, 0.4,\, 0.9,\, 0.2]\) (two samples happened to land on the best
+            answer B). Then \(\operatorname{mean}(R) = 0.6\) and
+            \(\operatorname{std}(R) = \sqrt{\tfrac14\sum (R_i-0.6)^2} \approx 0.309\).
+            Advantages: \(\hat A = [0.97,\,-0.65,\,0.97,\,-1.29]\) (using
+            \(\varepsilon\approx0\)) — the two B-samples get a healthy positive push, the two
+            worse answers get pushed down, and their magnitudes already reflect how far each
+            reward sits from the group's own average.
+          </p>
+          <p>
+            <strong>One clipped term.</strong> Take the first sample: \(\hat A_1 = 0.97\).
+            Suppose after one gradient sub-step the ratio for that sample is
+            \(r_1(\theta) = 1.31\) and \(\varepsilon = 0.2\), so the clip band is
+            \([0.8, 1.2]\). Unclipped term: \(1.31 \times 0.97 \approx 1.271\). Clipped term:
+            \(1.2 \times 0.97 \approx 1.164\). The objective takes
+            \(\min(1.271, 1.164) = 1.164\) — the clip is active, and because the unclipped
+            branch was <em>larger</em> (would keep pushing the ratio further from \(1\)), its
+            gradient contribution is zeroed for this sample this step.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Freeze θ_old; sample o_1..o_G ~ π_θ_old(·|q).</li>
+            <li class="hidden-step">Score R_i = r(q,o_i); compute mean(R) and std(R) over the group.</li>
+            <li class="hidden-step">Â_i = (R_i − mean(R)) / (std(R) + ε) — a per-prompt, zero-parameter baseline.</li>
+            <li class="hidden-step">If std(R) ≈ 0 (degenerate group), every Â_i ≈ 0 — no update this round.</li>
+            <li class="hidden-step">Otherwise: r_i(θ) = π_θ(o_i|q)/π_θ_old(o_i|q); form min(r·Â, clip(r,1±ε)·Â).</li>
+            <li class="hidden-step">Subtract β·D̂_KL[π_θ‖π_ref]; ascend θ. No critic was fit anywhere in this loop.</li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- 13 -->
+      <section class="study-section" id="next">
+        <h2>13. What follows</h2>
+        <div class="prose-study">
+          <p>
+            GRPO closes out this course's tour of on-policy, critic-light policy
+            optimization for structured/LLM-style tasks. <strong>SAC</strong> (soft
+            actor-critic) turns back to continuous-control RL in the classic sense:
+            off-policy, replay-buffer-based, with an explicit entropy-regularized objective
+            and — unlike GRPO — a pair of learned critics back in the loop, this time
+            trained for sample efficiency rather than trust-region stability.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Shao et al., 2024 — DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models (introduces GRPO).</li>
+            <li>DeepSeek-AI, 2025 — DeepSeek-R1: reasoning via large-scale GRPO-based RL.</li>
+            <li>Ahmadian et al., 2024 — Back to Basics: REINFORCE-style optimization for RLHF (RLOO).</li>
+            <li>Rafailov et al., 2023 — Direct Preference Optimization (DPO).</li>
+            <li><a href="ppo.html">Chapter 08</a> — clipped surrogate, GAE, and the critic GRPO removes.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="ppo.html" style="color:inherit;text-decoration:none">← PPO</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Up next</p>
+            <h3>SAC</h3>
+            <p>Off-policy, entropy-regularized actor-critic — the critic comes back.</p>
+          </div>
+          <span class="next-lock">Chapter 10 · soon</span>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Chapter 09 · GRPO</p>
+    <p class="muted">Group-relative advantages · no critic · clipped surrogate · KL to reference · failure modes.</p>
+  </footer>
+
+  <script src="grpo.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

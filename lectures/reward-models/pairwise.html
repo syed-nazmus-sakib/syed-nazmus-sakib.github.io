@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>03 · Direct Pairwise Comparator - Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl · Rewards</span>
+    </a>
+    <nav class="chapter-nav" aria-label="Chapters">
+      <a href="index.html">00 · Overview</a>
+      <a href="scalar.html">01 · Scalar</a>
+      <a href="pointwise.html">02 · Pointwise</a>
+      <a class="active" href="pairwise.html">03 · Pairwise</a>
+      <a href="listwise.html">04 · Listwise</a>
+      <a href="orm.html">05 · ORM</a>
+      <a href="prm.html">06 · PRM</a>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#idea">1. Idea</a></li>
+        <li><a href="#arch">2. Architecture</a></li>
+        <li><a href="#example">3. Example</a></li>
+        <li><a href="#train">4. Training</a></li>
+        <li><a href="#diff">5. vs scalar pairwise</a></li>
+        <li><a href="#why">6. Why direct can help</a></li>
+        <li><a href="#order">7. Order and bias</a></li>
+        <li><a href="#cycles">8. Transitivity</a></li>
+        <li><a href="#select">9. Selecting among many</a></li>
+        <li><a href="#judge">10. LLM judges</a></li>
+        <li><a href="#weak">11. Weaknesses</a></li>
+        <li><a href="#lab">12. Laboratory</a></li>
+        <li><a href="#next">13. Next</a></li>
+      </ol>
+    </nav>
+    <article class="study-main">
+      <p class="chapter-kicker">Architecture 03 · Joint comparison</p>
+      <h1 class="study-title">Direct <em>pairwise</em> comparator</h1>
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        A direct comparator sees the prompt and both answers in one forward pass.
+        It predicts \(P(A\succ B)\) without needing standalone scores \(r_A\) and \(r_B\).
+        Flexible for subtle contrasts. Awkward for global ranking and for PPO-style RL.
+      </div>
+
+      <section class="study-section" id="idea">
+        <h2>1. Idea</h2>
+        <div class="prose-study">
+          <p class="lead">Scalar RMs score A and B separately, then compare. A direct comparator asks the joint question: is A better than B?</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="arch">
+        <h2>2. Architecture</h2>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            P(A\succ B\mid x)=\sigma\big(g_\theta(x,y_A,y_B)\big).
+          \]
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">Prompt + Response A + Response B</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">One Transformer</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">Comparison head → \(P(A\) better\()\)</div>
+        </div>
+      </section>
+
+      <section class="study-section" id="example">
+        <h2>3. Example</h2>
+        <div class="prose-study">
+          <p>Prompt: explain gradient descent simply.</p>
+          <p><strong>A:</strong> Repeatedly move parameters to reduce loss.</p>
+          <p><strong>B:</strong> Randomly change parameters until accuracy improves.</p>
+          <p>Comparator may output \(P(A\succ B)=0.96\).</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="train">
+        <h2>4. Training</h2>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            z=\mathbf{1}[A\text{ preferred}],\qquad
+            \mathcal{L}=-[z\log p+(1-z)\log(1-p)],\quad p=P(A\succ B).
+          \]
+        </div>
+      </section>
+
+      <section class="study-section" id="diff">
+        <h2>5. vs scalar pairwise RM</h2>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Scalar RM</h4>
+            <p>\(r_A\), \(r_B\) independent. \(P=\sigma(r_A-r_B)\).</p>
+            <p class="mono-line">has standalone scores</p>
+          </div>
+          <div class="compare-card">
+            <h4>Direct comparator</h4>
+            <p>\(P=\sigma(g(x,A,B))\). Can depend on interactions. May have no \(r_A\).</p>
+            <p class="mono-line">joint judgment</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="study-section" id="why">
+        <h2>6. Why direct can help</h2>
+        <div class="prose-study">
+          <p>Absolute clarity is hard. Relative clarity is easier: "Compared with B, is A clearer?" Humans annotate that way too. The model can notice specific contrasts (missing detail, better format, same correctness but different clarity).</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="order">
+        <h2>7. Order and bias</h2>
+        <div class="prose-study">
+          <p>Ideally \(P(A\succ B)+P(B\succ A)=1\). Position bias can break this. Train and evaluate with both orders, then average.</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="cycles">
+        <h2>8. Transitivity</h2>
+        <div class="prose-study">
+          <p>Scalar scores force transitive rankings. Direct comparators can create cycles \(A\succ B\succ C\succ A\). That can match messy human taste. It makes a single global ranking harder.</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="select">
+        <h2>9. Selecting among many</h2>
+        <div class="prose-study">
+          <p>No \(\arg\max r_i\). Use a tournament, round-robin (\(\frac{N(N-1)}{2}\) pairs), or win-rate scores. For \(N=10\), round-robin needs 45 comparisons.</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="judge">
+        <h2>10. LLM judges</h2>
+        <div class="prose-study">
+          <p>Many "LLM-as-a-judge" prompts are generative direct comparators: they read A and B and output A, B, or Tie (often with a critique first).</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="weak">
+        <h2>11. Weaknesses</h2>
+        <div class="prose-study">
+          <ul>
+            <li>Expensive for large \(N\).</li>
+            <li>No natural scalar for PPO.</li>
+            <li>Position, length, and style biases.</li>
+            <li>Possible preference cycles.</li>
+          </ul>
+          <p>For RL, people often distill the comparator into a scalar RM, or compare against a fixed baseline.</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="lab">
+        <h2>12. Laboratory</h2>
+        <div class="lab">
+          <div class="lab-head"><h3>Comparator logit playground</h3><span>\(P(A\succ B)=\sigma(g)\)</span></div>
+          <label class="slider-label">Comparator logit \(g\) <input type="range" id="cmpG" min="-4" max="4" step="0.05" value="1.8" /><strong id="cmpGL">1.80</strong></label>
+          <label class="slider-label">Human label <input type="range" id="cmpZ" min="0" max="1" step="1" value="1" /><strong id="cmpZL">A wins</strong></label>
+          <div class="stat-strip">
+            <div><span>\(P(A\succ B)\)</span><strong id="cmpP">-</strong></div>
+            <div><span>Ideal \(P(B\succ A)\)</span><strong id="cmpSwap">-</strong></div>
+            <div><span>Loss</span><strong id="cmpLoss">-</strong></div>
+          </div>
+          <div class="bellman-trace" id="cmpTrace" style="margin-top:0.75rem">Move g and the label.</div>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>13. Next</h2>
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="pointwise.html" style="color:inherit;text-decoration:none">&larr; Pointwise</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next</p>
+            <h3>Listwise RM</h3>
+            <p>Rank a whole list at once.</p>
+          </div>
+          <a class="btn primary" href="listwise.html">Continue &rarr;</a>
+        </div>
+      </section>
+    </article>
+  </div>
+  <footer class="site-foot"><p>Pearl · Reward Models · 03 Pairwise</p><p class="muted">Two answers. One comparison.</p></footer>
+  <script src="pairwise.js"></script>
+  <script src="nav.js"></script>
+</body></html>

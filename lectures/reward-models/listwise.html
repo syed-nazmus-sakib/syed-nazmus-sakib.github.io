@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>04 · Listwise Reward Model - Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl · Rewards</span>
+    </a>
+    <nav class="chapter-nav" aria-label="Chapters">
+      <a href="index.html">00 · Overview</a>
+      <a href="scalar.html">01 · Scalar</a>
+      <a href="pointwise.html">02 · Pointwise</a>
+      <a href="pairwise.html">03 · Pairwise</a>
+      <a class="active" href="listwise.html">04 · Listwise</a>
+      <a href="orm.html">05 · ORM</a>
+      <a href="prm.html">06 · PRM</a>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#idea">1. Idea</a></li>
+        <li><a href="#why">2. Why listwise</a></li>
+        <li><a href="#arch">3. Architecture</a></li>
+        <li><a href="#soft">4. Softmax view</a></li>
+        <li><a href="#pl">5. Plackett-Luce</a></li>
+        <li><a href="#joint">6. Joint and generative forms</a></li>
+        <li><a href="#pros">7. Advantages</a></li>
+        <li><a href="#cons">8. Limits</a></li>
+        <li><a href="#use">9. Uses</a></li>
+        <li><a href="#lab">10. Laboratory</a></li>
+        <li><a href="#next">11. Next</a></li>
+      </ol>
+    </nav>
+    <article class="study-main">
+      <p class="chapter-kicker">Architecture 04 · Whole-list ranking</p>
+      <h1 class="study-title">Listwise <em>reward model</em></h1>
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        A listwise RM looks at several candidates together and aims for a full ranking
+        \(y_{\pi_1}\succ\cdots\succ y_{\pi_K}\). Training often uses Plackett-Luce on scores.
+        This matches best-of-N more directly than isolated pairwise comparisons.
+      </div>
+
+      <section class="study-section" id="idea">
+        <h2>1. Idea</h2>
+        <div class="prose-study">
+          <p class="lead">Pointwise: one answer. Pairwise: two. Listwise: a list.</p>
+          <p>Given \(y_1,\ldots,y_K\), predict an order such as \(y_3\succ y_1\succ y_4\succ y_2\).</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="why">
+        <h2>2. Why listwise</h2>
+        <div class="prose-study">
+          <p>Pairwise labels can cycle: \(A>B\), \(B>C\), \(C>A\). A listwise model sees the set and learns global structure. One human ranking of four answers implies up to six pairwise relations.</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="arch">
+        <h2>3. Architecture</h2>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            s_i=f_\theta(x,y_i).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>Often each candidate still gets a scalar. The difference is the <em>training objective</em> over the whole list. Example: \(s_C=2.6\), \(s_A=1.8\), \(s_D=1.1\), \(s_B=0.3\) implies \(C>A>D>B\).</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="soft">
+        <h2>4. Softmax view</h2>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            P(y_i\text{ is best})=\frac{e^{s_i}}{\sum_j e^{s_j}}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>For \(s_A=3\), \(s_B=2\), \(s_C=1\): roughly \(P(A)=0.665\), \(P(B)=0.245\), \(P(C)=0.090\).</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="pl">
+        <h2>5. Plackett-Luce</h2>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            P(A\succ B\succ C)
+            =
+            \frac{e^{s_A}}{e^{s_A}+e^{s_B}+e^{s_C}}
+            \cdot
+            \frac{e^{s_B}}{e^{s_B}+e^{s_C}},
+            \qquad
+            \mathcal{L}=-\log P(A\succ B\succ C).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>First factor: pick A among all three. Second: pick B among the remainder. If the model ranks B first when A should win, loss is large.</p>
+        </div>
+        <p class="boxed-ans">Train on the probability of the full ranking, not only one pair.</p>
+      </section>
+
+      <section class="study-section" id="joint">
+        <h2>6. Joint and generative forms</h2>
+        <div class="prose-study">
+          <p>Candidates can share one context so the model sees interactions. Or an LLM can generate <code>C &gt; A &gt; B</code> with a short critique. That generative listwise judge is powerful and expensive. People often distill it into a scalar RM.</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="pros">
+        <h2>7. Advantages</h2>
+        <div class="prose-study">
+          <ul>
+            <li>Better global ranking signal.</li>
+            <li>Richer annotation per human effort.</li>
+            <li>Hard negatives among near-tied good answers.</li>
+            <li>Aligned with best-of-N selection.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section" id="cons">
+        <h2>8. Limits</h2>
+        <div class="prose-study">
+          <ul>
+            <li>Context cost scales like \(K\times L\) tokens.</li>
+            <li>Position bias in the list.</li>
+            <li>Middle ranks are noisy for large \(K\).</li>
+            <li>Forced total orders when ties are real.</li>
+            <li>Set dependence: quality looks different beside weak vs strong peers.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section" id="use">
+        <h2>9. Uses</h2>
+        <div class="prose-study">
+          <p>Reranking, dataset filtering, synthetic preference data, distillation into scalar RMs, and RL when scalar scores \(s_i\) are available.</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="lab">
+        <h2>10. Laboratory · three-way ranking</h2>
+        <div class="lab">
+          <div class="lab-head"><h3>Scores for A, B, C</h3><span>Softmax + Plackett-Luce for A≻B≻C</span></div>
+          <div class="btn-row" style="margin-bottom:0.75rem">
+            <button type="button" class="btn small" id="lwGood">Good order (5,3,0)</button>
+            <button type="button" class="btn small ghost" id="lwBad">Bad order (1,4,2)</button>
+          </div>
+          <label class="slider-label">\(s_A\) <input type="range" id="lwA" min="-2" max="6" step="0.1" value="3" /><strong id="lwAL">3.0</strong></label>
+          <label class="slider-label">\(s_B\) <input type="range" id="lwB" min="-2" max="6" step="0.1" value="2" /><strong id="lwBL">2.0</strong></label>
+          <label class="slider-label">\(s_C\) <input type="range" id="lwC" min="-2" max="6" step="0.1" value="1" /><strong id="lwCL">1.0</strong></label>
+          <div class="stat-strip">
+            <div><span>P(A best)</span><strong id="lwPA">-</strong></div>
+            <div><span>P(B best)</span><strong id="lwPB">-</strong></div>
+            <div><span>P(C best)</span><strong id="lwPC">-</strong></div>
+            <div><span>P(A≻B≻C)</span><strong id="lwRankP">-</strong></div>
+            <div><span>Loss</span><strong id="lwLoss">-</strong></div>
+          </div>
+          <div class="bellman-trace" id="lwTrace" style="margin-top:0.75rem">Drag scores.</div>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>11. Next</h2>
+        <div class="prose-study">
+          <p>Next we switch axes: from ranking form to evaluation granularity. Outcome reward models score the finished solution. Process reward models score the steps.</p>
+        </div>
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="pairwise.html" style="color:inherit;text-decoration:none">&larr; Pairwise</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Up next</p>
+            <h3>Outcome Reward Model</h3>
+            <p>One judgment for the complete answer.</p>
+          </div>
+          <a class="btn primary" href="orm.html">Continue &rarr;</a>
+        </div>
+      </section>
+    </article>
+  </div>
+  <footer class="site-foot"><p>Pearl · Reward Models · 04 Listwise</p><p class="muted">Many candidates. One ranking.</p></footer>
+  <script src="listwise.js"></script>
+  <script src="nav.js"></script>
+</body></html>

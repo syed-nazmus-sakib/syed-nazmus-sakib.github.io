@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>01 · Markov Decision Processes — Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="why.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl</span>
+    </a>
+            <nav class="chapter-nav" aria-label="Chapters">
+      <a href="why.html">00 · Why</a>
+      <a class="active" href="index.html">01 · MDP</a>
+      <a href="value.html">02 · Value</a>
+      <a href="practice.html">Practice</a>
+      <a href="dp.html">03 · DP</a>
+      <a href="td.html">04 · TD</a>
+      <a href="qlearning.html">05 · DQN</a>
+      <a href="pg.html">06 · PG</a>
+      <a href="trpo.html">07 · TRPO</a>
+      <a href="ppo.html">08 · PPO</a>
+      <a href="grpo.html">09 · GRPO</a>
+      <span class="locked">10 · SAC</span>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#overview">1. Overview</a></li>
+        <li><a href="#agent-env">2. Agent–environment</a></li>
+        <li><a href="#formal">3. Formal definition</a></li>
+        <li><a href="#components">4. Components in depth</a></li>
+        <li><a href="#policy">5. Policies</a></li>
+        <li><a href="#return">6. Return &amp; discounting</a></li>
+        <li><a href="#objective">7. The RL objective</a></li>
+        <li><a href="#markov">8. Markov property</a></li>
+        <li><a href="#episodic">9. Episodic vs continuing</a></li>
+        <li><a href="#analysis">10. Analysis notes</a></li>
+        <li><a href="#lab">11. Laboratory</a></li>
+        <li><a href="#worked">12. Worked calculations</a></li>
+        <li><a href="#next">13. What follows</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Chapter 01 · Foundations</p>
+      <h1 class="study-title">Markov Decision <em>Processes</em></h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        A Markov Decision Process (MDP) is the mathematical object that almost all modern
+        reinforcement learning assumes. It specifies how an agent interacts with an
+        environment over time: states, actions, stochastic transitions, rewards, and a
+        discount factor. This chapter develops the MDP from intuition through formal
+        definition, analyzes why discounting is required, states the learning objective
+        precisely, and examines the Markov assumption — including when it fails in
+        robotics. Interactive labs at the end are optional illustrations, not the core text.
+      </div>
+
+      <!-- 1 OVERVIEW -->
+      <section class="study-section" id="overview">
+        <h2>1. Overview</h2>
+        <div class="prose-study">
+          <p class="lead">
+            Everything downstream in this course — value functions, dynamic programming,
+            temporal-difference learning, policy gradients, TRPO, PPO, SAC — is a method
+            for solving, approximating, or relaxing one object: the MDP.
+          </p>
+          <p>
+            Historically, MDPs grew out of the optimal-control and operations-research
+            literature (Bellman, Howard, Puterman). Reinforcement learning inherits the
+            same formalism but typically drops the assumption that the transition model
+            \(P\) is known, replacing exact planning with learning from sampled interaction.
+            Understanding the MDP carefully is what makes those later algorithms feel like
+            inevitable engineering responses to a clear problem, rather than a pile of tricks.
+          </p>
+          <p>
+            At the highest level, an MDP answers three design questions:
+          </p>
+          <ol>
+            <li><strong>What can the agent observe?</strong> — the state space \(S\).</li>
+            <li><strong>What can the agent do?</strong> — the action space \(A\).</li>
+            <li><strong>How does the world respond, and how is that scored?</strong> — \(P\) and \(R\), plus \(\gamma\).</li>
+          </ol>
+          <p>
+            Given those pieces, a <em>policy</em> is a rule for choosing actions, and the
+            <em>return</em> is the discounted sum of rewards along a trajectory. Reinforcement
+            learning’s goal is to find a policy that maximizes expected return.
+          </p>
+        </div>
+      </section>
+
+      <!-- 2 AGENT ENV -->
+      <section class="study-section" id="agent-env">
+        <h2>2. The agent–environment loop</h2>
+        <div class="prose-study">
+          <p>
+            Fix a discrete time index \(t = 0, 1, 2, \ldots\). At each step the agent
+            occupies a state \(s_t \in S\), selects an action \(a_t \in A\), and the
+            environment responds with a successor state \(s_{t+1}\) and a scalar reward
+            \(r_{t+1} \in \mathbb{R}\). The interaction generates a trajectory
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            \tau = (s_0, a_0, r_1, s_1, a_1, r_2, s_2, \ldots)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Two remarks about timing conventions (easy to get wrong when reading papers):
+          </p>
+          <ul>
+            <li>
+              Reward \(r_{t+1}\) is the reward <em>received upon transitioning</em> from
+              \(s_t\) via \(a_t\) into \(s_{t+1}\). Some texts write \(r_t\) for the same
+              quantity; the mathematics is identical if you are consistent.
+            </li>
+            <li>
+              The agent’s decision at time \(t\) may depend only on \(s_t\) (Markov policies)
+              or, more generally, on the history. Under the Markov property developed below,
+              there is no loss of optimality in restricting to Markov policies for standard
+              criteria.
+            </li>
+          </ul>
+        </div>
+
+        <div class="loop-stage" id="loopStage" aria-hidden="true">
+          <div class="loop-node" data-step="0">
+            <span class="loop-label">State</span>
+            <strong>s<sub>t</sub></strong>
+            <small>information state</small>
+          </div>
+          <div class="loop-arrow">→</div>
+          <div class="loop-node" data-step="1">
+            <span class="loop-label">Action</span>
+            <strong>a<sub>t</sub></strong>
+            <small>control</small>
+          </div>
+          <div class="loop-arrow">→</div>
+          <div class="loop-node wide" data-step="2">
+            <span class="loop-label">Response</span>
+            <strong>s<sub>t+1</sub>, r<sub>t+1</sub></strong>
+            <small>dynamics + score</small>
+          </div>
+        </div>
+
+        <div class="remark-box">
+          <span class="box-label">Remark · Boundary of agent vs environment</span>
+          <p>
+            Anything that cannot be changed arbitrarily by the learning algorithm is part of
+            the environment — including reward computation. If you redesign the reward, you
+            have changed the MDP. This is why “reward hacking” is an MDP-design failure, not
+            an optimization failure: the agent correctly optimized the wrong objective.
+          </p>
+        </div>
+      </section>
+
+      <!-- 3 FORMAL -->
+      <section class="study-section" id="formal">
+        <h2>3. Formal definition</h2>
+
+        <div class="def-box">
+          <span class="box-label">Definition 3.1 · Finite MDP</span>
+          <p>
+            A <strong>finite Markov Decision Process</strong> is a tuple
+            \(\mathcal{M} = (S, A, P, R, \gamma)\) where:
+          </p>
+          <p>
+            \(S\) is a finite set of states;<br/>
+            \(A\) is a finite set of actions;<br/>
+            \(P: S \times A \times S \to [0,1]\) is a transition kernel with
+            \(\sum_{s'} P(s'\mid s,a) = 1\) for all \(s,a\);<br/>
+            \(R: S \times A \to \mathbb{R}\) (or \(R: S\times A\times S\to\mathbb{R}\))
+            is a (bounded) reward function;<br/>
+            \(\gamma \in [0,1)\) is a discount factor.
+          </p>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            The transition kernel is often written \(P(s'\mid s,a)\) or \(T(s,a,s')\).
+            When rewards depend on the successor as well, one writes \(R(s,a,s')\) and the
+            expected reward for a state–action pair becomes
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            \mathcal{R}(s,a) \;=\; \sum_{s'} P(s'\mid s,a)\, R(s,a,s').
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Many algorithms only need \(\mathcal{R}(s,a)\). In code and in our laboratory
+            below we use a simple \(R(s')\) that depends on the landing cell (step cost,
+            goal bonus, pit penalty) — a special case of \(R(s,a,s')\).
+          </p>
+          <p>
+            Continuous and hybrid MDPs replace finite sums by integrals and require measure-theoretic
+            care (Borel spaces, regular conditional probabilities). The <em>conceptual</em>
+            structure — state, action, kernel, reward, discount — is unchanged. We stay with
+            finite MDPs for explicit equations; robotics will force function approximation later.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Proposition 3.2 · Boundedness of return</span>
+          <p>
+            If \(|R| \le R_{\max}\) almost surely and \(\gamma \in [0,1)\), then for any
+            trajectory the absolute return satisfies
+            \(|G_t| \le R_{\max}/(1-\gamma)\). Hence expectations of return are well-defined
+            and finite. This is the analytic reason discounting is not optional for infinite-horizon
+            problems with nonzero rewards.
+          </p>
+        </div>
+      </section>
+
+      <!-- 4 COMPONENTS -->
+      <section class="study-section" id="components">
+        <h2>4. Components in depth</h2>
+        <div class="prose-study">
+          <p>
+            Click through the explorer, then read the expanded notes. Each symbol will reappear
+            unchanged in Bellman equations, TD updates, and actor–critic gradients.
+          </p>
+        </div>
+
+        <div class="tuple-grid" id="tupleGrid" role="tablist" aria-label="MDP components">
+          <button type="button" class="tuple-card active" data-keys role="tab" data-key="S" aria-selected="true">
+            <span class="tuple-letter">S</span>
+            <span class="tuple-name">States</span>
+          </button>
+          <button type="button" class="tuple-card" data-keys role="tab" data-key="A" aria-selected="false">
+            <span class="tuple-letter">A</span>
+            <span class="tuple-name">Actions</span>
+          </button>
+          <button type="button" class="tuple-card" data-keys role="tab" data-key="P" aria-selected="false">
+            <span class="tuple-letter">P</span>
+            <span class="tuple-name">Transitions</span>
+          </button>
+          <button type="button" class="tuple-card" data-keys role="tab" data-key="R" aria-selected="false">
+            <span class="tuple-letter">R</span>
+            <span class="tuple-name">Reward</span>
+          </button>
+          <button type="button" class="tuple-card" data-keys role="tab" data-key="G" aria-selected="false">
+            <span class="tuple-letter">γ</span>
+            <span class="tuple-name">Discount</span>
+          </button>
+        </div>
+        <div class="tuple-panel" id="tuplePanel" role="tabpanel"></div>
+
+        <h3 id="states">4.1 State space \(S\)</h3>
+        <div class="prose-study">
+          <p>
+            A state is an <em>information summary</em> sufficient for future prediction and
+            control. In a gridworld, \(s = (x,y)\) may suffice. On a hexapod, a usable state
+            typically stacks joint angles, joint velocities, torso orientation, and contact
+            flags. If you omit velocity, two physically different situations share a label —
+            the process is no longer Markov in that label (Section&nbsp;8).
+          </p>
+          <p>
+            Discrete \(S\) enables tabular methods (one number per state). Continuous \(S\)
+            forces function approximation. Partial observability yields a POMDP: the agent
+            sees observations \(o_t\), not \(s_t\), and must track a belief
+            \(b_t = p(s_t \mid o_{0:t}, a_{0:t-1})\). Belief-MDPs restore the Markov property
+            at the cost of operating in a simplex of distributions.
+          </p>
+        </div>
+
+        <h3 id="actions">4.2 Action space \(A\)</h3>
+        <div class="prose-study">
+          <p>
+            Actions may be discrete (\(\{\uparrow,\downarrow,\leftarrow,\rightarrow\}\)),
+            continuous (\(a \in \mathbb{R}^m\) torques), or hybrid. The structure of \(A\)
+            strongly constrains algorithm choice:
+          </p>
+          <ul>
+            <li>Discrete \(A\): Q-learning / DQN-style \(\arg\max_a Q(s,a)\) is feasible.</li>
+            <li>Continuous \(A\): \(\arg\max\) becomes an inner optimization; policy-gradient
+              and actor–critic methods parameterize \(\pi_\theta(a\mid s)\) or a deterministic
+              \(\mu_\theta(s)\) directly.</li>
+          </ul>
+        </div>
+
+        <h3 id="transitions">4.3 Transition kernel \(P\)</h3>
+        <div class="prose-study">
+          <p>
+            Stochasticity models slip, sensor noise folded into dynamics, opponents, and
+            unmodeled disturbance. A common teaching kernel for gridworlds is the
+            “intended with probability \(1-\varepsilon\), otherwise uniform among the other
+            three directions” model. Writing the one-step backup explicitly:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            P(s'\mid s,a)
+            =
+            \begin{cases}
+              1-\varepsilon & s'=\mathrm{intended}(s,a),\\[4pt]
+              \varepsilon/3 & s'=\mathrm{slip}_i(s),\; i=1,2,3,
+            \end{cases}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            with the usual wall-bump rule: moves into walls or out of bounds leave the agent
+            in \(s\). Dynamic programming needs the entire table \(P(\cdot\mid s,a)\).
+            Model-free RL never writes \(P\) down — it samples \(s' \sim P(\cdot\mid s,a)\)
+            by acting in the world (or simulator).
+          </p>
+        </div>
+
+        <h3 id="rewards">4.4 Reward \(R\)</h3>
+        <div class="prose-study">
+          <p>
+            The reward is not “feedback about learning progress”; it is the definition of
+            success. Sparse rewards (\(0\) almost everywhere, \(+1\) at a goal) make the
+            objective clear but credit assignment hard. Dense shaping can speed learning but
+            risks changing the optimal policy. A useful sanity check: if a human policy that
+            “does the right thing” scores poorly under \(R\), the MDP is misspecified.
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · Reward vs value</span>
+          <p>
+            Beginners often conflate reward and value. Reward is local and instantaneous.
+            Value is global: expected cumulative discounted reward from a state (or
+            state–action) under a policy. A state can have negative immediate reward yet high
+            value if it leads to large future reward — that tension is exactly what planning
+            and TD learning resolve.
+          </p>
+        </div>
+      </section>
+
+      <!-- 5 POLICY -->
+      <section class="study-section" id="policy">
+        <h2>5. Policies</h2>
+        <div class="def-box">
+          <span class="box-label">Definition 5.1 · Policy</span>
+          <p>
+            A <strong>stochastic policy</strong> is a map \(\pi: S \to \Delta(A)\), written
+            \(\pi(a\mid s)\). A <strong>deterministic policy</strong> is a map
+            \(\pi: S \to A\). A policy is <strong>stationary</strong> if it does not depend
+            on absolute time \(t\).
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            Under a policy \(\pi\), the closed-loop process \((s_t)\) is a Markov chain with
+            kernel
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            P^\pi(s'\mid s)
+            =
+            \sum_{a} \pi(a\mid s)\, P(s'\mid s,a).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The joint law of a trajectory factorizes as
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            p_\pi(\tau)
+            =
+            \mu(s_0)
+            \prod_{t=0}^{T-1}
+            \pi(a_t\mid s_t)\,
+            P(s_{t+1}\mid s_t,a_t),
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            where \(\mu\) is the start-state distribution. Equation&nbsp;(5) is the probability
+            that policy-gradient methods differentiate via the log-derivative trick — the
+            \(P\) factors drop out of \(\nabla_\theta \log p_{\pi_\theta}(\tau)\). You do not
+            need that yet; keep the factorization in mind.
+          </p>
+        </div>
+      </section>
+
+      <!-- 6 RETURN -->
+      <section class="study-section" id="return">
+        <h2>6. Return and discounting</h2>
+        <div class="def-box">
+          <span class="box-label">Definition 6.1 · Discounted return</span>
+          <p>
+            The return from time \(t\) is
+            \[
+              G_t
+              =
+              \sum_{k=0}^{\infty} \gamma^{k}\, r_{t+k+1}
+              =
+              r_{t+1} + \gamma r_{t+2} + \gamma^{2} r_{t+3} + \cdots.
+            \]
+            The recursive form \(G_t = r_{t+1} + \gamma G_{t+1}\) is the seed of every
+            Bellman equation in the next chapter.
+          </p>
+        </div>
+
+        <h3>6.1 Why \(\gamma &lt; 1\)</h3>
+        <div class="prose-study">
+          <p>Two independent reasons:</p>
+          <ol>
+            <li>
+              <strong>Analytic.</strong> Without discounting, the infinite sum of a constant
+              positive reward diverges. Policy comparison becomes undefined for continuing
+              tasks.
+            </li>
+            <li>
+              <strong>Economic / physical.</strong> Future reward is uncertain (battery,
+              hardware failure, nonstationarity). Discounting is a simple model of impatience.
+            </li>
+          </ol>
+          <p>
+            Effective horizon is often summarized as \(1/(1-\gamma)\) steps: with
+            \(\gamma=0.99\), rewards ~100 steps ahead still matter substantially; with
+            \(\gamma=0.9\), the weight \(\gamma^{20} \approx 0.12\) — twenty steps out is
+            already faint.
+          </p>
+        </div>
+
+        <h3>6.2 Undiscounted episodic returns</h3>
+        <div class="prose-study">
+          <p>
+            For finite-horizon episodic tasks one may set \(\gamma=1\) and sum until
+            termination. Equivalently, one can absorb terminal states into zero-reward
+            self-loops and keep \(\gamma&lt;1\). Both are common; be explicit which convention
+            a paper uses when comparing numbers.
+          </p>
+        </div>
+
+        <div class="lab" id="returnLab">
+          <div class="lab-head">
+            <h3>Calculator · assemble \(G_0\)</h3>
+            <span>Interactive · optional</span>
+          </div>
+          <p class="lab-intro">
+            Fix a toy reward sequence and vary \(\gamma\). Watch each discounted term and the
+            total. This is the same arithmetic the gridworld lab uses on live trajectories.
+          </p>
+          <aside class="calc-panel" id="returnCalc" style="position:static">
+            <div class="gamma-row">
+              <label for="gammaSlider">γ = <strong id="gammaVal">0.90</strong></label>
+              <input type="range" id="gammaSlider" min="0" max="0.99" step="0.01" value="0.90" />
+            </div>
+            <div class="reward-row" id="rewardChips"></div>
+            <ol class="math-steps" id="returnSteps"></ol>
+            <div class="math-total" id="returnTotal"></div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 7 OBJECTIVE -->
+      <section class="study-section" id="objective">
+        <h2>7. The reinforcement learning objective</h2>
+        <div class="prose-study">
+          <p>
+            Let \(\mu\) be the distribution over start states. The performance of a policy is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            J(\pi)
+            \;=\;
+            \mathbb{E}_{\pi}\!\left[G_0\right]
+            \;=\;
+            \mathbb{E}_{s_0\sim\mu}\!\left[V^{\pi}(s_0)\right],
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            where \(V^{\pi}\) will be defined properly in Chapter&nbsp;02. Equivalently, in the
+            average-reward criterion (less common in deep RL, important in continuing control),
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            J_{\mathrm{avg}}(\pi)
+            =
+            \lim_{T\to\infty}
+            \frac{1}{T}
+            \mathbb{E}_{\pi}\!\left[\sum_{t=0}^{T-1} r_{t+1}\right].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This course focuses on the discounted criterion&nbsp;(6). An optimal policy
+            \(\pi^*\) satisfies \(J(\pi^*) \ge J(\pi)\) for all \(\pi\). For finite discounted
+            MDPs, an optimal deterministic stationary policy always exists. That theorem is
+            why “act greedily with respect to \(Q^*\)” is not a heuristic — it is exact.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Theorem 7.1 · Existence (finite discounted MDP)</span>
+          <p>
+            In a finite MDP with \(\gamma \in [0,1)\), there exists a deterministic stationary
+            policy \(\pi^*\) that is optimal for \(J(\pi)\). Moreover, the optimal action-value
+            function \(Q^*\) characterizes it via \(\pi^*(s) \in \arg\max_a Q^*(s,a)\).
+            (Proof sketch in Chapter&nbsp;02 via the Bellman optimality operator being a
+            contraction.)
+          </p>
+        </div>
+      </section>
+
+      <!-- 8 MARKOV -->
+      <section class="study-section" id="markov">
+        <h2>8. The Markov property</h2>
+        <div class="def-box">
+          <span class="box-label">Definition 8.1 · Markov property</span>
+          <p>
+            The state process is Markov if
+            \[
+              P(s_{t+1}\mid s_t,a_t,s_{t-1},a_{t-1},\ldots,s_0,a_0)
+              =
+              P(s_{t+1}\mid s_t,a_t).
+            \]
+            Informally: <em>the future is independent of the past given the present state
+            and action.</em>
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            This is an assumption about the <em>chosen representation</em>, not about physics.
+            The true universe may be Markov at the level of microstate; your sensor vector
+            may not be. When the assumption fails:
+          </p>
+          <ul>
+            <li>Bellman equations written in \(s\) are simply false for the real process.</li>
+            <li>TD targets become biased in a structural way (not just estimation noise).</li>
+            <li>Policies that look optimal in the POMDP belief space cannot be expressed as
+              functions of the raw observation alone.</li>
+          </ul>
+          <p>
+            Practical repairs: augment with velocity / history / frame stacks; learn latent
+            Markov states; use recurrent policies. Frame-stacking in Atari is exactly
+            “restore approximate Markovness by expanding \(S\).”
+          </p>
+        </div>
+
+        <div class="markov-demo" id="markovDemo">
+          <div class="markov-col bad">
+            <h4>Insufficient state</h4>
+            <p>Position only — velocity hidden.</p>
+            <div class="markov-viz" id="markovBad"></div>
+            <p class="markov-note">Same label, opposite futures → non-Markov.</p>
+          </div>
+          <div class="markov-col good">
+            <h4>Sufficient state</h4>
+            <p>Position and velocity.</p>
+            <div class="markov-viz" id="markovGood"></div>
+            <p class="markov-note">Future well-defined from current features.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 9 EPISODIC -->
+      <section class="study-section" id="episodic">
+        <h2>9. Episodic vs continuing tasks</h2>
+        <div class="prose-study">
+          <p>
+            An <strong>episodic</strong> task has absorbing terminal states (goal reached,
+            robot fallen, game over). After termination, the agent resets. Monte Carlo methods
+            need episodes: they wait for \(G_t\) to be fully observed.
+          </p>
+          <p>
+            A <strong>continuing</strong> task never ends (thermal control, always-on locomotion).
+            Pure Monte Carlo is unavailable; TD and discounting become essential. Many “episodic”
+            simulators are continuing MDPs with artificial time limits — truncation is not the
+            same as termination, and conflating them biases value estimates (bootstrapping from
+            the truncated state is the usual fix).
+          </p>
+        </div>
+      </section>
+
+      <!-- 10 ANALYSIS -->
+      <section class="study-section" id="analysis">
+        <h2>10. Analysis notes (deeper pass)</h2>
+
+        <h3>10.1 Occupancy measures</h3>
+        <div class="prose-study">
+          <p>
+            The discounted state occupancy under \(\pi\) is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            d^{\pi}(s)
+            =
+            (1-\gamma)\sum_{t=0}^{\infty}\gamma^{t}\,
+            P\!\left(s_t = s \mid \pi\right).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Then \(J(\pi) = \sum_s d^{\pi}(s)\sum_a \pi(a\mid s)\,\mathcal{R}(s,a)\).
+            Policy-gradient theorems are statements about expectations under \(d^{\pi}\).
+            Off-policy learning is hard partly because data is drawn from \(d^{\beta}\) for a
+            behavior policy \(\beta \neq \pi\).
+          </p>
+        </div>
+
+        <h3>10.2 Deterministic vs stochastic optimality</h3>
+        <div class="prose-study">
+          <p>
+            For the discounted criterion in a finite MDP, determinism is enough: there is an
+            optimal deterministic policy. Stochastic policies still matter for
+            <em>learning</em> (exploration), for games with hidden information, and for
+            entropy-regularized objectives (soft optimality in SAC), where the optimum of the
+            <em>modified</em> objective is deliberately stochastic.
+          </p>
+        </div>
+
+        <h3>10.3 Model-based vs model-free foreshadowing</h3>
+        <div class="prose-study">
+          <dl class="dl-inline">
+            <div>
+              <dt>DP</dt>
+              <dd>Known \(P,R\). Sweep states. Exact Bellman backups. Chapter&nbsp;03.</dd>
+            </div>
+            <div>
+              <dt>MC</dt>
+              <dd>Unknown model. Full returns from complete episodes. High variance.</dd>
+            </div>
+            <div>
+              <dt>TD</dt>
+              <dd>Unknown model. Bootstrap after one (or \(n\)) steps. Chapter&nbsp;04.</dd>
+            </div>
+          </dl>
+          <p>
+            All three attack the same fixed point — the value function of an MDP. They differ
+            only in how they estimate the Bellman expectation.
+          </p>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">Connection · Robotics</span>
+          <p>
+            Your simulator (MuJoCo, Newton, custom) <em>is</em> a sample access to \(P\).
+            It does not hand you the probability table. That single fact is why robotics RL
+            is model-free or learned-model-based, never classical DP on the true kernel.
+            State design (Markovness) and reward design (objective fidelity) remain the
+            highest-leverage engineering choices — more than optimizer hyperparameters.
+          </p>
+        </div>
+      </section>
+
+      <!-- 11 LAB -->
+      <section class="study-section lab-wide" id="lab">
+        <h2>11. Laboratory · finite gridworld MDP</h2>
+        <div class="prose-study">
+          <p>
+            The following 5×5 grid is a concrete finite MDP. Use it to verify definitions:
+            read off \(s\), choose \(a\), observe a sample from \(P(\cdot\mid s,a)\), record
+            \(r\), and recompute \(G_0\). Prefer reading Sections&nbsp;1–10 first; the lab
+            does not replace the theory.
+          </p>
+          <ul>
+            <li>Step reward \(-0.1\); goal \(+10\); pit \(-5\); walls block and bounce.</li>
+            <li>Optional slip: \(\varepsilon=0.2\) as in equation&nbsp;(3).</li>
+            <li>Keyboard: arrows / WASD when this section is on screen.</li>
+          </ul>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Interactive gridworld</h3>
+            <span>Samples from \(P\) · live \(G_0\)</span>
+          </div>
+
+          <div class="demo-shell">
+            <div class="demo-controls">
+              <div class="control-block">
+                <span class="control-label">Move</span>
+                <div class="dpad" role="group" aria-label="Actions">
+                  <button type="button" data-action="up">↑</button>
+                  <button type="button" data-action="left">←</button>
+                  <button type="button" data-action="down">↓</button>
+                  <button type="button" data-action="right">→</button>
+                </div>
+              </div>
+              <div class="control-block">
+                <span class="control-label">Environment</span>
+                <label class="toggle">
+                  <input type="checkbox" id="slipToggle" />
+                  <span>Stochastic slip (ε = 0.2)</span>
+                </label>
+                <label class="slider-label">
+                  Discount γ
+                  <input type="range" id="demoGamma" min="0" max="0.99" step="0.01" value="0.90" />
+                  <strong id="demoGammaVal">0.90</strong>
+                </label>
+              </div>
+              <div class="control-block">
+                <span class="control-label">Episode</span>
+                <div class="btn-row">
+                  <button type="button" class="btn small" id="resetEpisode">Reset</button>
+                  <button type="button" class="btn small ghost" id="autoPlay">Auto-walk</button>
+                  <button type="button" class="btn small ghost" id="clearLog">Clear log</button>
+                </div>
+              </div>
+              <div class="stat-strip">
+                <div><span>State</span><strong id="statState">(0,0)</strong></div>
+                <div><span>Step</span><strong id="statStep">0</strong></div>
+                <div><span>Σ r</span><strong id="statSumR">0.00</strong></div>
+                <div><span>G₀</span><strong id="statG">0.00</strong></div>
+              </div>
+            </div>
+
+            <div class="grid-wrap">
+              <div class="legend">
+                <span><i class="lg agent"></i> Agent</span>
+                <span><i class="lg goal"></i> Goal (+10)</span>
+                <span><i class="lg pit"></i> Pit (−5)</span>
+                <span><i class="lg wall"></i> Wall</span>
+              </div>
+              <div class="grid" id="grid" role="grid" aria-label="Gridworld"></div>
+            </div>
+
+            <div class="math-live">
+              <header>
+                <h3>Transition ledger</h3>
+                <p>Exact \(P(\cdot\mid s,a)\) for the current kernel, then the sample.</p>
+              </header>
+              <div class="transition-viz" id="transitionViz">
+                <p class="empty-hint">Take an action to expand the one-step kernel and reward.</p>
+              </div>
+              <div class="episode-log">
+                <h4>Episode trace</h4>
+                <ol id="episodeLog"></ol>
+              </div>
+              <div class="g-build" id="gBuild">
+                <h4>Running \(G_0\)</h4>
+                <div class="g-formula" id="gFormula">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h3>Empirical estimation of \(P\)</h3>
+        <div class="prose-study">
+          <p>
+            From interior cell \((2,1)\) with intended action Right and slip enabled, the
+            true mass on the intended successor is \(0.8\). Sampling approximates that mass
+            by relative frequency — the law of large numbers in miniature.
+          </p>
+        </div>
+        <div class="lab">
+          <button type="button" class="btn small" id="sampleSlips">Sample 20 transitions</button>
+          <button type="button" class="btn small ghost" id="resetSlips">Reset counts</button>
+          <div class="bar-chart" id="slipChart"></div>
+          <p class="caption tight" id="slipCaption">No samples yet.</p>
+        </div>
+      </section>
+
+      <!-- 12 WORKED -->
+      <section class="study-section" id="worked">
+        <h2>12. Worked calculations</h2>
+        <div class="prose-study">
+          <p>
+            Consider \(\gamma = 0.9\) and rewards \((-0.1,-0.1,-0.1,+10)\) along a path into
+            the goal. Compute \(G_0\) by hand.
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            G_0
+            =
+            -0.1
+            + 0.9(-0.1)
+            + 0.81(-0.1)
+            + 0.729(10)
+            =
+            7.019.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This is <em>one sample</em> of return for one trajectory. The objective
+            \(J(\pi)\) averages over all trajectories induced by \(\pi\) and \(P\). Value
+            functions (next chapter) organize those averages state by state.
+          </p>
+        </div>
+
+        <div class="worked-board" id="workedBoard">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li data-step="0" class="hidden-step">
+              Trajectory: <code>(0,0) →R (1,0) →R (2,0) →U … → GOAL</code>
+            </li>
+            <li data-step="1" class="hidden-step">
+              \(r_1=-0.1,\; r_2=-0.1,\; r_3=-0.1,\; r_4=+10\)
+            </li>
+            <li data-step="2" class="hidden-step">
+              \(G_0 = \sum_{k=0}^{3} \gamma^k r_{k+1}\)
+            </li>
+            <li data-step="3" class="hidden-step">
+              Substitute \(\gamma=0.9\):
+              \(-0.1 + 0.9(-0.1) + 0.81(-0.1) + 0.729(10)\)
+            </li>
+            <li data-step="4" class="hidden-step">
+              Expand: \(-0.1 - 0.09 - 0.081 + 7.29\)
+            </li>
+            <li data-step="5" class="hidden-step">
+              Result: \(G_0 = 7.019\) (one Monte Carlo sample of return).
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- 13 NEXT -->
+      <section class="study-section" id="next">
+        <h2>13. What follows</h2>
+        <div class="prose-study">
+          <p>
+            The MDP tells you the rules. It does not yet tell you how good a situation is.
+            Chapter&nbsp;02 introduces <strong>value functions</strong> \(V^{\pi}\) and
+            \(Q^{\pi}\), derives the <strong>Bellman expectation</strong> and
+            <strong>Bellman optimality</strong> equations from \(G_t = r_{t+1}+\gamma G_{t+1}\),
+            and shows why \(Q^*\) yields an optimal policy by greedy readout.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li><a href="why.html">Chapter 00 · Why</a> — what came before MDPs and why it failed.</li>
+            <li>Puterman, <em>Markov Decision Processes</em> — classical reference.</li>
+            <li>Sutton &amp; Barto, Ch. 3 — standard RL treatment of MDPs.</li>
+            <li>Course notes file: <code>course-notes.txt</code> in this repository.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="why.html" style="color:inherit;text-decoration:none">← Why MDPs</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next chapter</p>
+            <h3>Value functions &amp; Bellman equations</h3>
+            <p>How good is a state? How does that recurse?</p>
+          </div>
+          <a class="btn primary" href="value.html">Continue →</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Chapter 01 · Markov Decision Processes</p>
+    <p class="muted">Study note first; laboratory second. Full outline in <code>course-notes.txt</code>.</p>
+  </footer>
+
+  <script src="mdp.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

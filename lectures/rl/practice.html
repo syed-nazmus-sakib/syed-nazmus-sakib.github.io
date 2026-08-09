@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Practice · One Gridworld for Everything — Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="why.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl</span>
+    </a>
+            <nav class="chapter-nav" aria-label="Chapters">
+      <a href="why.html">00 · Why</a>
+      <a href="index.html">01 · MDP</a>
+      <a href="value.html">02 · Value</a>
+      <a class="active" href="practice.html">Practice</a>
+      <a href="dp.html">03 · DP</a>
+      <a href="td.html">04 · TD</a>
+      <a href="qlearning.html">05 · DQN</a>
+      <a href="pg.html">06 · PG</a>
+      <a href="trpo.html">07 · TRPO</a>
+      <a href="ppo.html">08 · PPO</a>
+      <a href="grpo.html">09 · GRPO</a>
+      <span class="locked">10 · SAC</span>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#setup" style="text-decoration:none">Start</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#setup">0. The grid</a></li>
+        <li><a href="#mdp">1. As an MDP</a></li>
+        <li><a href="#trajectory">2. One trajectory</a></li>
+        <li><a href="#eval">3. Policy evaluation</a></li>
+        <li><a href="#improve">4. Policy improvement</a></li>
+        <li><a href="#reeval">5. Evaluate improved π</a></li>
+        <li><a href="#pi">6. Policy Iteration</a></li>
+        <li><a href="#vi">7. Value Iteration</a></li>
+        <li><a href="#compare">8. PI vs VI</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main practice-page">
+      <p class="chapter-kicker">Worked notebook · Foundations</p>
+      <h1 class="study-title">One gridworld for <em>everything</em></h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        A single \(2\times 3\) world is enough to see the whole Bellman stack by hand:
+        MDP representation, return of a trajectory, iterative policy evaluation under a
+        random policy, greedy improvement, re-evaluation of the improved policy, and
+        Value Iteration. Same numbers throughout — no simulation, only careful arithmetic
+        you could check with a pencil.
+      </div>
+
+      <!-- 0 SETUP -->
+      <section class="study-section" id="setup">
+        <h2>0. The practice grid</h2>
+        <div class="prose-study">
+          <p class="lead">
+            We will use this world for every calculation on this page.
+          </p>
+        </div>
+
+        <div class="board-grid" aria-label="2 by 3 practice gridworld">
+          <div class="board-cell">A</div>
+          <div class="board-cell">B</div>
+          <div class="board-cell goal">G · +5</div>
+          <div class="board-cell">C</div>
+          <div class="board-cell">D</div>
+          <div class="board-cell pit">P · −5</div>
+        </div>
+
+        <div class="prose-study">
+          <ul>
+            <li>\(G\): goal terminal state</li>
+            <li>\(P\): penalty terminal state</li>
+            <li>Actions: \(\mathcal{A}=\{\uparrow,\downarrow,\leftarrow,\rightarrow\}\)</li>
+            <li>Movement is <strong>deterministic</strong></li>
+            <li>Hitting a wall means staying in the same state</li>
+            <li>Every normal movement gives \(r=-1\)</li>
+            <li>Entering \(G\) gives \(+5\); entering \(P\) gives \(-5\)</li>
+            <li>Discount: \(\gamma=0.9\)</li>
+            <li>After reaching \(G\) or \(P\), the episode ends</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 1 MDP -->
+      <section class="study-section" id="mdp">
+        <h2>1. Representing it as an MDP</h2>
+        <div class="prose-study">
+          <p>
+            An MDP is the tuple
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            \mathcal{M}=(\mathcal{S},\mathcal{A},P,R,\gamma).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            State space:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            \mathcal{S}=\{A,B,C,D,G,P\}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            From \(B\), for example:
+          </p>
+        </div>
+
+        <table class="practice-table">
+          <thead>
+            <tr><th>Action</th><th>Next state</th><th>Reward</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>↑</td><td>\(B\) (wall)</td><td>\(-1\)</td></tr>
+            <tr><td>↓</td><td>\(D\)</td><td>\(-1\)</td></tr>
+            <tr><td>←</td><td>\(A\)</td><td>\(-1\)</td></tr>
+            <tr><td>→</td><td>\(G\)</td><td>\(+5\)</td></tr>
+          </tbody>
+        </table>
+
+        <div class="prose-study">
+          <p>
+            Because movement is deterministic,
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            P(G\mid B,\rightarrow)=1,
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            meaning a \(100\%\) probability of reaching \(G\) when we take right from \(B\).
+          </p>
+        </div>
+      </section>
+
+      <!-- 2 TRAJECTORY -->
+      <section class="study-section" id="trajectory">
+        <h2>2. One trajectory and return</h2>
+        <div class="prose-study">
+          <p>
+            Suppose the agent follows
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            C \;\rightarrow\; D \;\rightarrow\; B \;\rightarrow\; G.
+          \]
+        </div>
+
+        <div class="path-strip" aria-label="Trajectory C to D to B to G">
+          <span class="path-node">C</span>
+          <span class="path-arrow">→</span>
+          <span class="path-node">D</span>
+          <span class="path-arrow">→</span>
+          <span class="path-node">B</span>
+          <span class="path-arrow">→</span>
+          <span class="path-node goal">G</span>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Rewards along the way:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            -1,\;\; -1,\;\; +5.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The return from \(C\) is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            G_0
+            =
+            -1
+            + 0.9\,(-1)
+            + 0.9^2\,(5)
+            =
+            -1 - 0.9 + 4.05.
+          \]
+        </div>
+        <p class="boxed-ans">\(G_0 = 2.15\)</p>
+        <div class="prose-study">
+          <p>
+            Remember this number. It will reappear as the optimal value of \(C\).
+          </p>
+        </div>
+      </section>
+
+      <!-- 3 POLICY EVAL -->
+      <section class="study-section" id="eval">
+        <h2>3. Policy evaluation</h2>
+        <div class="prose-study">
+          <p>
+            Start with a random (uniform) policy:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            \pi(a\mid s)=0.25
+            \qquad\text{for every action \(a\).}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Initialize non-terminal values to zero:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            V_0(A)=V_0(B)=V_0(C)=V_0(D)=0,
+            \qquad
+            V(G)=V(P)=0.
+          \]
+        </div>
+        <div class="note-box">
+          <span class="box-label">Why terminals are zero</span>
+          <p>
+            After termination no further rewards occur, so the expected remaining return
+            is \(0\). We hold \(V(G)=V(P)=0\) forever.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            The synchronous Bellman expectation update (deterministic \(P\)) is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            V_{k+1}(s)
+            =
+            \sum_{a}\pi(a\mid s)
+            \Big[
+              r(s,a) + \gamma V_k(s')
+            \Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Because transitions are deterministic we do not need an extra sum over \(s'\).
+          </p>
+        </div>
+
+        <h3 class="practice-h3">Iteration 1</h3>
+
+        <h4 class="practice-h4">State \(A\)</h4>
+        <div class="prose-study">
+          <p>From \(A\):</p>
+          <ul>
+            <li>↑ — stay at \(A\), reward \(-1\)</li>
+            <li>↓ — move to \(C\), reward \(-1\)</li>
+            <li>← — stay at \(A\), reward \(-1\)</li>
+            <li>→ — move to \(B\), reward \(-1\)</li>
+          </ul>
+          <p>Since all initial values are zero:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            V_1(A)
+            =
+            \tfrac14\Big[
+              (-1+0.9\cdot 0)
+              +
+              (-1+0.9\cdot 0)
+              +
+              (-1+0.9\cdot 0)
+              +
+              (-1+0.9\cdot 0)
+            \Big]
+            =
+            -1.
+          \]
+        </div>
+        <p class="boxed-ans">\(V_1(A)=-1\)</p>
+
+        <h4 class="practice-h4">State \(B\)</h4>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            V_1(B)
+            =
+            \tfrac14\big[
+              -1 + (-1) + (-1) + 5
+            \big]
+            =
+            0.5.
+          \]
+        </div>
+        <p class="boxed-ans">\(V_1(B)=0.5\)</p>
+        <div class="prose-study">
+          <p>
+            The positive value appears because one action reaches the goal.
+          </p>
+        </div>
+
+        <h4 class="practice-h4">State \(C\)</h4>
+        <div class="prose-study">
+          <p>All four actions currently produce reward \(-1\) into zero-valued successors:</p>
+        </div>
+        <p class="boxed-ans">\(V_1(C)=-1\)</p>
+
+        <h4 class="practice-h4">State \(D\)</h4>
+        <div class="prose-study">
+          <p>
+            Three normal actions give \(-1\); right enters the penalty \(-5\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(12)</span>
+          \[
+            V_1(D)
+            =
+            \tfrac14\big[-1-1-1-5\big]
+            =
+            -2.
+          \]
+        </div>
+        <p class="boxed-ans">\(V_1(D)=-2\)</p>
+
+        <table class="practice-table">
+          <caption>After iteration 1</caption>
+          <thead>
+            <tr><th>State</th><th>\(V_1\)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>\(A\)</td><td>\(-1\)</td></tr>
+            <tr><td>\(B\)</td><td>\(0.5\)</td></tr>
+            <tr><td>\(C\)</td><td>\(-1\)</td></tr>
+            <tr><td>\(D\)</td><td>\(-2\)</td></tr>
+          </tbody>
+        </table>
+
+        <h3 class="practice-h3">Iteration 2 — example for \(A\)</h3>
+        <div class="prose-study">
+          <p>
+            Now use the previous values:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(13)</span>
+          \[
+            V_2(A)
+            =
+            \tfrac14\Big[
+              (-1+0.9 V_1(A))
+              +
+              (-1+0.9 V_1(C))
+              +
+              (-1+0.9 V_1(A))
+              +
+              (-1+0.9 V_1(B))
+            \Big].
+          \]
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(14)</span>
+          \[
+            V_2(A)
+            =
+            \tfrac14\big[
+              -1.9 - 1.9 - 1.9 - 0.55
+            \big]
+            =
+            -1.5625.
+          \]
+        </div>
+        <p class="boxed-ans">\(V_2(A)=-1.5625\)</p>
+
+        <table class="practice-table">
+          <caption>After evaluating all states through iteration 2</caption>
+          <thead>
+            <tr><th>State</th><th>\(V_1\)</th><th>\(V_2\)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>\(A\)</td><td>\(-1\)</td><td>\(-1.5625\)</td></tr>
+            <tr><td>\(B\)</td><td>\(0.5\)</td><td>\(-0.0625\)</td></tr>
+            <tr><td>\(C\)</td><td>\(-1\)</td><td>\(-2.125\)</td></tr>
+            <tr><td>\(D\)</td><td>\(-2\)</td><td>\(-2.5625\)</td></tr>
+          </tbody>
+        </table>
+
+        <div class="prose-study">
+          <p>
+            Repeating until convergence under the random policy gives approximately
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(15)</span>
+          \[
+            V^{\pi}(A)\approx -5.22,\quad
+            V^{\pi}(B)\approx -2.32,\quad
+            V^{\pi}(C)\approx -6.00,\quad
+            V^{\pi}(D)\approx -5.00.
+          \]
+        </div>
+        <div class="analysis-box">
+          <span class="box-label">Reading the result</span>
+          <p>
+            These values are poor: the random policy frequently hits walls and sometimes
+            walks into the penalty. Evaluation did its job — it told the truth about a
+            bad policy.
+          </p>
+        </div>
+      </section>
+
+      <!-- 4 IMPROVEMENT -->
+      <section class="study-section" id="improve">
+        <h2>4. Policy improvement</h2>
+        <div class="prose-study">
+          <p>
+            Now calculate one-step action values under the converged \(V^{\pi}\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(16)</span>
+          \[
+            q(s,a)=r(s,a)+\gamma V^{\pi}(s').
+          \]
+        </div>
+
+        <h3 class="practice-h3">At state \(B\)</h3>
+        <div class="eq-block">
+          <span class="eq-tag">(17)</span>
+          \begin{align*}
+            q(B,\uparrow)
+            &= -1 + 0.9(-2.32) = -3.09, \\
+            q(B,\downarrow)
+            &= -1 + 0.9(-5.00) = -5.50, \\
+            q(B,\leftarrow)
+            &= -1 + 0.9(-5.22) = -5.70, \\
+            q(B,\rightarrow)
+            &= 5.
+          \end{align*}
+        </div>
+        <div class="prose-study">
+          <p>
+            Therefore
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(18)</span>
+          \[
+            \pi_{\mathrm{new}}(B)
+            =
+            \arg\max_a q(B,a)
+            =
+            \rightarrow.
+          \]
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Doing this for every state yields the greedy policy
+          </p>
+        </div>
+
+        <div class="board-grid policy" aria-label="Improved policy arrows">
+          <div class="board-cell">→</div>
+          <div class="board-cell">→</div>
+          <div class="board-cell goal">G · +5</div>
+          <div class="board-cell">→</div>
+          <div class="board-cell">↑</div>
+          <div class="board-cell pit">P · −5</div>
+        </div>
+
+        <div class="eq-block">
+          <span class="eq-tag">(19)</span>
+          \[
+            \pi(A)=\rightarrow,\quad
+            \pi(B)=\rightarrow,\quad
+            \pi(C)=\rightarrow,\quad
+            \pi(D)=\uparrow.
+          \]
+        </div>
+      </section>
+
+      <!-- 5 RE-EVAL -->
+      <section class="study-section" id="reeval">
+        <h2>5. Evaluate the improved policy</h2>
+        <div class="prose-study">
+          <p>
+            The policy is now deterministic, so evaluation collapses to a short chain of
+            equations.
+          </p>
+        </div>
+
+        <h4 class="practice-h4">State \(B\)</h4>
+        <div class="prose-study">
+          <p>\(B\) goes directly to the goal:</p>
+        </div>
+        <p class="boxed-ans">\(V(B)=5\)</p>
+
+        <h4 class="practice-h4">State \(A\)</h4>
+        <div class="eq-block">
+          <span class="eq-tag">(20)</span>
+          \[
+            V(A)=-1+0.9\,V(B)=-1+0.9(5)=3.5.
+          \]
+        </div>
+        <p class="boxed-ans">\(V(A)=3.5\)</p>
+
+        <h4 class="practice-h4">State \(D\)</h4>
+        <div class="eq-block">
+          <span class="eq-tag">(21)</span>
+          \[
+            V(D)=-1+0.9\,V(B)=3.5.
+          \]
+        </div>
+        <p class="boxed-ans">\(V(D)=3.5\)</p>
+
+        <h4 class="practice-h4">State \(C\)</h4>
+        <div class="eq-block">
+          <span class="eq-tag">(22)</span>
+          \[
+            V(C)=-1+0.9\,V(D)=-1+0.9(3.5)=2.15.
+          \]
+        </div>
+        <p class="boxed-ans">\(V(C)=2.15\)</p>
+        <div class="prose-study">
+          <p>
+            Same number as the trajectory return in Section&nbsp;2 — because that path
+            <em>is</em> what the improved policy does from \(C\).
+          </p>
+        </div>
+
+        <div class="board-grid values" aria-label="Values under improved policy">
+          <div class="board-cell"><span class="cell-label">A</span><strong>3.50</strong></div>
+          <div class="board-cell"><span class="cell-label">B</span><strong>5.00</strong></div>
+          <div class="board-cell goal"><span class="cell-label">G</span><strong>—</strong></div>
+          <div class="board-cell"><span class="cell-label">C</span><strong>2.15</strong></div>
+          <div class="board-cell"><span class="cell-label">D</span><strong>3.50</strong></div>
+          <div class="board-cell pit"><span class="cell-label">P</span><strong>—</strong></div>
+        </div>
+      </section>
+
+      <!-- 6 PI -->
+      <section class="study-section" id="pi">
+        <h2>6. Policy Iteration</h2>
+        <div class="prose-study">
+          <p>
+            Policy Iteration alternates
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(23)</span>
+          \[
+            \text{evaluate }\pi
+            \;\longrightarrow\;
+            \text{improve }\pi.
+          \]
+        </div>
+
+        <div class="flow-steps">
+          <div class="flow-step">Random policy \(\pi\)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Evaluate its values \(V^{\pi}\)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Choose better actions (greedy)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Evaluate the new policy</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">No better action exists → \(\pi^*\)</div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Therefore the final policy is optimal. At \(C\), two paths are equally good:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(24)</span>
+          \[
+            C\rightarrow D\rightarrow B\rightarrow G
+            \qquad\text{or}\qquad
+            C\rightarrow A\rightarrow B\rightarrow G.
+          \]
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(25)</span>
+          \[
+            -1 + 0.9(-1) + 0.9^2(5) = 2.15.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            So \(\pi^*(C)\) may be either \(\rightarrow\) or \(\uparrow\) — both are optimal.
+          </p>
+        </div>
+      </section>
+
+      <!-- 7 VI -->
+      <section class="study-section" id="vi">
+        <h2>7. Value Iteration</h2>
+        <div class="prose-study">
+          <p>
+            Value Iteration folds evaluation and improvement into one update:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(26)</span>
+          \[
+            V_{k+1}(s)
+            =
+            \max_a
+            \Big[
+              r(s,a)+\gamma V_k(s')
+            \Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Instead of averaging actions, we immediately take the best one.
+            Initialize \(V_0(s)=0\) for non-terminals.
+          </p>
+        </div>
+
+        <h3 class="practice-h3">Iteration 1</h3>
+        <div class="prose-study">
+          <p>For \(B\):</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(27)</span>
+          \[
+            V_1(B)=\max(-1,-1,-1,5)=5.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            For \(A\), every action currently looks like \(-1\). Same for \(C\).
+            For \(D\), the best action avoids the penalty and also yields \(-1\):
+          </p>
+        </div>
+        <table class="practice-table">
+          <caption>After VI iteration 1</caption>
+          <thead>
+            <tr><th>State</th><th>\(V_1\)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>\(A\)</td><td>\(-1\)</td></tr>
+            <tr><td>\(B\)</td><td>\(5\)</td></tr>
+            <tr><td>\(C\)</td><td>\(-1\)</td></tr>
+            <tr><td>\(D\)</td><td>\(-1\)</td></tr>
+          </tbody>
+        </table>
+
+        <h3 class="practice-h3">Iteration 2</h3>
+        <div class="eq-block">
+          <span class="eq-tag">(28)</span>
+          \[
+            V_2(A)=-1+0.9\,V_1(B)=-1+4.5=3.5,
+            \qquad
+            V_2(D)=3.5.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            But \(C\) still does not yet “see” the goal clearly:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(29)</span>
+          \[
+            V_2(C)=-1.9.
+          \]
+        </div>
+        <table class="practice-table">
+          <caption>After VI iteration 2</caption>
+          <thead>
+            <tr><th>State</th><th>\(V_2\)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>\(A\)</td><td>\(3.5\)</td></tr>
+            <tr><td>\(B\)</td><td>\(5\)</td></tr>
+            <tr><td>\(C\)</td><td>\(-1.9\)</td></tr>
+            <tr><td>\(D\)</td><td>\(3.5\)</td></tr>
+          </tbody>
+        </table>
+
+        <h3 class="practice-h3">Iteration 3</h3>
+        <div class="prose-study">
+          <p>
+            Now \(C\) sees that both \(A\) and \(D\) are valuable:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(30)</span>
+          \[
+            V_3(C)=-1+0.9(3.5)=2.15.
+          \]
+        </div>
+        <p class="boxed-ans">\(V_3(C)=2.15\)</p>
+
+        <table class="practice-table">
+          <caption>Final \(V^*\) — values no longer change</caption>
+          <thead>
+            <tr><th>State</th><th>\(V^*\)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>\(A\)</td><td>\(3.5\)</td></tr>
+            <tr><td>\(B\)</td><td>\(5\)</td></tr>
+            <tr><td>\(C\)</td><td>\(2.15\)</td></tr>
+            <tr><td>\(D\)</td><td>\(3.5\)</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 8 COMPARE -->
+      <section class="study-section" id="compare">
+        <h2>8. Policy Iteration vs Value Iteration</h2>
+
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Policy Iteration</h4>
+            <p>
+              Fully evaluate the current policy,<br/>
+              then improve it.
+            </p>
+            <p class="mono-line">evaluate → improve → repeat</p>
+          </div>
+          <div class="compare-card">
+            <h4>Value Iteration</h4>
+            <p>
+              One optimal Bellman update,<br/>
+              then repeat.
+            </p>
+            <p class="mono-line">\(V\leftarrow\mathcal{T}^*V\) until fixed</p>
+          </div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Both produce the same optimal policy:
+          </p>
+        </div>
+
+        <div class="board-grid policy" aria-label="Optimal policy">
+          <div class="board-cell">→</div>
+          <div class="board-cell">→</div>
+          <div class="board-cell goal">G · +5</div>
+          <div class="board-cell">↑ / →</div>
+          <div class="board-cell">↑</div>
+          <div class="board-cell pit">P · −5</div>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">The most important observation</span>
+          <p>
+            The goal value spreads <em>backward</em>:
+          </p>
+          <ol>
+            <li><strong>Iteration 1:</strong> \(B\) discovers the goal</li>
+            <li><strong>Iteration 2:</strong> \(A\) and \(D\) discover \(B\)</li>
+            <li><strong>Iteration 3:</strong> \(C\) discovers \(A\) and \(D\)</li>
+          </ol>
+          <p>
+            That backward propagation of reward information is the core mechanism behind
+            every Bellman-based reinforcement learning algorithm — DP, TD, and Q-learning
+            all live inside this picture.
+          </p>
+        </div>
+
+        <div class="wave-diagram" aria-hidden="true">
+          <div class="wave-row">
+            <span class="wave-cell dim">A</span>
+            <span class="wave-cell hot">B ✓</span>
+            <span class="wave-cell goal">G</span>
+          </div>
+          <p class="wave-cap">Step 1 — goal lights \(B\)</p>
+          <div class="wave-row">
+            <span class="wave-cell hot">A ✓</span>
+            <span class="wave-cell hot">B</span>
+            <span class="wave-cell goal">G</span>
+          </div>
+          <div class="wave-row">
+            <span class="wave-cell dim">C</span>
+            <span class="wave-cell hot">D ✓</span>
+            <span class="wave-cell pit">P</span>
+          </div>
+          <p class="wave-cap">Step 2 — \(A\) and \(D\) light up</p>
+          <div class="wave-row">
+            <span class="wave-cell hot">A</span>
+            <span class="wave-cell hot">B</span>
+            <span class="wave-cell goal">G</span>
+          </div>
+          <div class="wave-row">
+            <span class="wave-cell hot">C ✓</span>
+            <span class="wave-cell hot">D</span>
+            <span class="wave-cell pit">P</span>
+          </div>
+          <p class="wave-cap">Step 3 — \(C\) finally sees the path</p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li><a href="value.html">Chapter 02</a> — \(V^{\pi}\), \(Q^{\pi}\), Bellman equations.</li>
+            <li><a href="dp.html">Chapter 03</a> — Policy / Value Iteration as algorithms.</li>
+            <li><a href="dp.html#lab">DP laboratory</a> — run the same ideas on a larger grid.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Back to theory</p>
+            <h3>Dynamic Programming</h3>
+            <p>You just did a full PI and VI by hand. The chapter formalizes it.</p>
+          </div>
+          <a class="btn primary" href="dp.html">Open DP →</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Practice notebook · One gridworld for everything</p>
+    <p class="muted">Pencil arithmetic. Same numbers. No simulation.</p>
+  </footer>
+
+  <script src="nav.js"></script>
+</body>
+</html>

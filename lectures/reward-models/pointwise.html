@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>02 · Pointwise Binary Verifier - Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl · Rewards</span>
+    </a>
+    <nav class="chapter-nav" aria-label="Chapters">
+      <a href="index.html">00 · Overview</a>
+      <a href="scalar.html">01 · Scalar</a>
+      <a class="active" href="pointwise.html">02 · Pointwise</a>
+      <a href="pairwise.html">03 · Pairwise</a>
+      <a href="listwise.html">04 · Listwise</a>
+      <a href="orm.html">05 · ORM</a>
+      <a href="prm.html">06 · PRM</a>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#idea">1. Idea</a></li>
+        <li><a href="#arch">2. Architecture</a></li>
+        <li><a href="#example">3. Example</a></li>
+        <li><a href="#loss">4. Loss</a></li>
+        <li><a href="#vs">5. vs pairwise RM</a></li>
+        <li><a href="#labels">6. Where labels come from</a></li>
+        <li><a href="#ormprm">7. ORM or PRM?</a></li>
+        <li><a href="#use">8. Uses</a></li>
+        <li><a href="#weak">9. Weaknesses</a></li>
+        <li><a href="#lab">10. Laboratory</a></li>
+        <li><a href="#worked">11. Worked</a></li>
+        <li><a href="#next">12. Next</a></li>
+      </ol>
+    </nav>
+    <article class="study-main">
+      <p class="chapter-kicker">Architecture 02 · Pointwise classification</p>
+      <h1 class="study-title">Pointwise <em>binary verifier</em></h1>
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        A pointwise verifier judges one candidate alone. The label is correct or incorrect
+        (or safe/unsafe). Training uses binary cross-entropy. The output is a probability
+        in \([0,1]\). This fits math and code well when a hard criterion exists.
+      </div>
+
+      <section class="study-section" id="idea">
+        <h2>1. Idea</h2>
+        <div class="prose-study">
+          <p class="lead">Previously we learned from \(A \succ B\). Now we learn from a single pair \((x,y)\) with label \(z\in\{0,1\}\).</p>
+          <p>\(z=1\) means acceptable. \(z=0\) means not.</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="arch">
+        <h2>2. Architecture</h2>
+        <div class="flow-steps">
+          <div class="flow-step">Question + candidate</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Transformer → \(h_T\)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Logit \(a=w^\top h_T+b\)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">\(p=\sigma(a)\in[0,1]\)</div>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            p_\theta(x,y)=\sigma(w^\top h_T+b).
+          \]
+        </div>
+      </section>
+
+      <section class="study-section" id="example">
+        <h2>3. Example</h2>
+        <div class="prose-study">
+          <p>Question: what is \(12\times 8\)?</p>
+          <p>Candidate A: \(96\) with \(z=1\). Candidate B: \(86\) with \(z=0\).</p>
+          <p>Model might predict \(p_A=0.97\), \(p_B=0.08\). No pairing required.</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="loss">
+        <h2>4. Loss</h2>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            \mathcal{L}=-\big[z\log p+(1-z)\log(1-p)\big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>If \(z=1\), loss \(=-\log p\) (push \(p\to 1\)). If \(z=0\), loss \(=-\log(1-p)\) (push \(p\to 0\)).</p>
+          <p>Example: correct answer with \(p=0.9\) gives loss \(\approx 0.105\). Same answer with \(p=0.1\) gives loss \(\approx 2.3\).</p>
+        </div>
+        <p class="boxed-ans">\(\mathcal{L}=-[z\log p+(1-z)\log(1-p)]\)</p>
+      </section>
+
+      <section class="study-section" id="vs">
+        <h2>5. vs pairwise scalar RM</h2>
+        <table class="practice-table">
+          <thead><tr><th></th><th>Pairwise scalar</th><th>Pointwise verifier</th></tr></thead>
+          <tbody>
+            <tr><td>Training input</td><td>Two candidates</td><td>One candidate</td></tr>
+            <tr><td>Label</td><td>Winner / loser</td><td>Correct / incorrect</td></tr>
+            <tr><td>Meaning</td><td>Relative preference</td><td>Class probability</td></tr>
+            <tr><td>Needs absolute criterion?</td><td>Not always</td><td>Yes</td></tr>
+            <tr><td>Best for</td><td>Open-ended quality</td><td>Math, code, checks</td></tr>
+          </tbody>
+        </table>
+        <div class="note-box">
+          <span class="box-label">Subtle point</span>
+          <p>Pairwise can prefer "bad" over "worse." Pointwise asks whether the answer meets a bar.</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="labels">
+        <h2>6. Where labels come from</h2>
+        <div class="prose-study">
+          <ul>
+            <li>Humans: correct/incorrect, safe/unsafe.</li>
+            <li>Programs: final answer match, unit tests, task success.</li>
+          </ul>
+          <p>Programmatic labels are cheap and objective, but often only check the final result.</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="ormprm">
+        <h2>7. ORM or PRM?</h2>
+        <div class="prose-study">
+          <p>Pointwise is an output style, not a location. Apply it to a full solution (ORM) or after every step (PRM):</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            \text{Step 1}\to 0.98,\quad
+            \text{Step 2}\to 0.91,\quad
+            \text{Step 3}\to 0.07.
+          \]
+        </div>
+      </section>
+
+      <section class="study-section" id="use">
+        <h2>8. Uses</h2>
+        <div class="prose-study">
+          <ul>
+            <li>Best-of-N: pick \(\arg\max_i p(x,y_i)\).</li>
+            <li>Filtering: reject when \(p<\tau\) (for example \(\tau=0.8\)).</li>
+            <li>Search: keep high-\(p\) branches.</li>
+            <li>RL: reward \(p\) or the raw logit \(a\) (logits saturate less).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section" id="weak">
+        <h2>9. Weaknesses</h2>
+        <div class="prose-study">
+          <ul>
+            <li>Needs an explicit criterion (hard for creative writing).</li>
+            <li>Correct final answer can hide bad reasoning.</li>
+            <li>Class imbalance: always predicting "wrong" can look accurate.</li>
+            <li>Overconfidence: \(p=0.99\) is not a guarantee.</li>
+            <li>Distribution shift breaks verifiers trained on easier data.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section" id="lab">
+        <h2>10. Laboratory · BCE playground</h2>
+        <div class="lab">
+          <div class="lab-head"><h3>Logit, label, loss</h3><span>Binary cross-entropy live</span></div>
+          <div class="btn-row" style="margin-bottom:0.75rem">
+            <button type="button" class="btn small" id="pwExGood">Confident + correct</button>
+            <button type="button" class="btn small ghost" id="pwExBad">Confident + wrong</button>
+          </div>
+          <label class="slider-label">Logit \(a\) <input type="range" id="pwLogit" min="-4" max="4" step="0.05" value="2.2" /><strong id="pwLogitL">2.20</strong></label>
+          <label class="slider-label">Label \(z\) (0 or 1) <input type="range" id="pwLabel" min="0" max="1" step="1" value="1" /><strong id="pwLabelL">correct (1)</strong></label>
+          <div class="stat-strip">
+            <div><span>\(p=\sigma(a)\)</span><strong id="pwProb">-</strong></div>
+            <div><span>Loss</span><strong id="pwLoss">-</strong></div>
+          </div>
+          <div class="bellman-trace" id="pwTrace" style="margin-top:0.75rem">Adjust logit and label.</div>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>11. Worked</h2>
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Take one (x, y) with label z in {0,1}.</li>
+            <li class="hidden-step">Run Transformer; read final state; compute logit a.</li>
+            <li class="hidden-step">p = sigma(a).</li>
+            <li class="hidden-step">Loss = -[z log p + (1-z) log(1-p)].</li>
+            <li class="hidden-step">Use p for filtering, best-of-N, search, or RL.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>12. Next</h2>
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="scalar.html" style="color:inherit;text-decoration:none">&larr; Scalar RM</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next</p>
+            <h3>Direct pairwise comparator</h3>
+            <p>Read A and B together. Predict which wins.</p>
+          </div>
+          <a class="btn primary" href="pairwise.html">Continue &rarr;</a>
+        </div>
+      </section>
+    </article>
+  </div>
+  <footer class="site-foot"><p>Pearl · Reward Models · 02 Pointwise</p><p class="muted">One answer. One probability.</p></footer>
+  <script src="pointwise.js"></script>
+  <script src="nav.js"></script>
+</body></html>

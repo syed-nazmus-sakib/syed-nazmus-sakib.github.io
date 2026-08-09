@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>03 · Dynamic Programming — Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="why.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl</span>
+    </a>
+            <nav class="chapter-nav" aria-label="Chapters">
+      <a href="why.html">00 · Why</a>
+      <a href="index.html">01 · MDP</a>
+      <a href="value.html">02 · Value</a>
+      <a href="practice.html">Practice</a>
+      <a class="active" href="dp.html">03 · DP</a>
+      <a href="td.html">04 · TD</a>
+      <a href="qlearning.html">05 · DQN</a>
+      <a href="pg.html">06 · PG</a>
+      <a href="trpo.html">07 · TRPO</a>
+      <a href="ppo.html">08 · PPO</a>
+      <a href="grpo.html">09 · GRPO</a>
+      <span class="locked">10 · SAC</span>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#overview">1. Overview</a></li>
+        <li><a href="#planning">2. Planning, not learning</a></li>
+        <li><a href="#evaluation">3. Policy evaluation</a></li>
+        <li><a href="#improvement">4. Policy improvement</a></li>
+        <li><a href="#pi">5. Policy Iteration</a></li>
+        <li><a href="#vi">6. Value Iteration</a></li>
+        <li><a href="#compare">7. PI vs VI</a></li>
+        <li><a href="#async">8. Asynchronous DP</a></li>
+        <li><a href="#limits">9. Limits &amp; why TD</a></li>
+        <li><a href="#lab">10. Laboratory</a></li>
+        <li><a href="#worked">11. Worked example</a></li>
+        <li><a href="#next">12. What follows</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Chapter 03 · Foundations</p>
+      <h1 class="study-title">Dynamic <em>Programming</em></h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Dynamic Programming (DP) turns Bellman equations into algorithms under a strong
+        assumption: the model \(P\) and \(R\) are known exactly, and the state space is small
+        enough to sweep. Policy Iteration alternates exact (or approximate) evaluation of
+        \(V^{\pi}\) with greedy improvement. Value Iteration repeatedly applies the Bellman
+        optimality operator and reads the policy off only at the end. Both converge to
+        \(\pi^*\) for finite discounted MDPs. This chapter states the updates, sketches why
+        improvement never hurts, compares the two algorithms, and runs them live on a grid.
+        The same backup structure reappears in TD — only the source of the next-state
+        expectation changes from “sum over \(P\)” to “sample \(s'\).”
+      </div>
+
+      <!-- 1 -->
+      <section class="study-section" id="overview">
+        <h2>1. Overview</h2>
+        <div class="prose-study">
+          <p class="lead">
+            Chapters&nbsp;01–02 gave you the MDP and the Bellman equations. Dynamic Programming
+            is what you do when you are allowed to <em>compute</em> those equations instead of
+            estimating them.
+          </p>
+          <p>
+            “Dynamic programming” here is Bellman’s classical sense: break a sequential
+            decision problem into recursive subproblems whose solutions compose. In RL
+            textbooks the phrase almost always means <strong>tabular planning with a known
+            model</strong> — Policy Evaluation, Policy Iteration, Value Iteration, and their
+            asynchronous cousins.
+          </p>
+          <p>
+            Keep one slogan in mind for the rest of the course:
+          </p>
+        </div>
+        <div class="note-box">
+          <span class="box-label">Slogan</span>
+          <p>
+            <strong>TD / Q-learning = DP with the expectation over \(P\) replaced by a sample.</strong>
+            If you understand the backups in this chapter, every later “learning” update is a
+            stochastic approximation of the same operator.
+          </p>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section class="study-section" id="planning">
+        <h2>2. Planning, not learning</h2>
+        <div class="prose-study">
+          <p>
+            DP assumes:
+          </p>
+          <ol>
+            <li>You can evaluate \(P(s'\mid s,a)\) and \(R(s,a,s')\) for every triple you need.</li>
+            <li>You can iterate over all \(s \in S\) (and often all \(a \in A\)) in memory.</li>
+          </ol>
+          <p>
+            No interaction with the environment is required — you never “explore.” You are
+            solving a known Markov decision process as a computational problem. That is
+            <strong>planning</strong>. Learning begins when \(P\) or \(R\) (or both) are
+            unknown and must be inferred from experience.
+          </p>
+        </div>
+
+        <div class="remark-box">
+          <span class="box-label">Remark · Full backup vs sample backup</span>
+          <p>
+            A <em>full backup</em> for a state uses the entire distribution \(P(\cdot\mid s,a)\)
+            — every successor contributes. A <em>sample backup</em> uses one drawn \(s'\).
+            DP uses full backups. Monte Carlo and TD use sample backups. The quadrant from
+            your notes (full/sample × bootstrap/depth) places DP in the “full backup +
+            one-step bootstrap” corner.
+          </p>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section class="study-section" id="evaluation">
+        <h2>3. Iterative policy evaluation</h2>
+        <div class="prose-study">
+          <p>
+            Fix a policy \(\pi\). We want \(V^{\pi}\), the unique solution of the Bellman
+            expectation equation (Chapter&nbsp;02). Iterative policy evaluation applies the
+            operator \(\mathcal{T}^{\pi}\) repeatedly:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            V_{k+1}(s)
+            \;\leftarrow\;
+            \sum_{a}\pi(a\mid s)
+            \sum_{s'}P(s'\mid s,a)
+            \Big[
+              R(s,a,s') + \gamma V_{k}(s')
+            \Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Equivalently \(V_{k+1} = \mathcal{T}^{\pi} V_k\). Because \(\mathcal{T}^{\pi}\) is a
+            \(\gamma\)-contraction in \(\|\cdot\|_\infty\), \(V_k \to V^{\pi}\) from any
+            start, geometrically fast. In practice one stops when
+            \(\|V_{k+1}-V_k\|_\infty &lt; \theta\) for a small threshold \(\theta\).
+          </p>
+          <p>
+            For tiny MDPs one can also solve the linear system
+            \(V = r^{\pi} + \gamma P^{\pi} V\) in closed form:
+            \(V = (I - \gamma P^{\pi})^{-1} r^{\pi}\). Iteration is preferred pedagogically
+            and scales better when \(|S|\) is large but still tabular.
+          </p>
+        </div>
+
+        <div class="def-box">
+          <span class="box-label">Definition 3.1 · Sweep</span>
+          <p>
+            A <strong>sweep</strong> is one pass that updates every state once (synchronously
+            using a frozen copy of \(V_k\), or asynchronously in place). Synchronous sweeps
+            match the pure operator view; asynchronous updates often converge faster in
+            wall-clock time on large tables.
+          </p>
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section class="study-section" id="improvement">
+        <h2>4. Policy improvement</h2>
+        <div class="prose-study">
+          <p>
+            Given \(V^{\pi}\) (or \(Q^{\pi}\)), define a new policy by acting greedily with
+            respect to the one-step lookahead:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            \pi'(s)
+            \in
+            \arg\max_{a}
+            \sum_{s'}P(s'\mid s,a)
+            \Big[
+              R(s,a,s') + \gamma V^{\pi}(s')
+            \Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            In terms of action values this is simply
+            \(\pi'(s) \in \arg\max_a Q^{\pi}(s,a)\).
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Theorem 4.1 · Policy Improvement Theorem</span>
+          <p>
+            Let \(\pi\) and \(\pi'\) be deterministic policies such that for all \(s\),
+            \[
+              Q^{\pi}\big(s,\pi'(s)\big) \;\ge\; V^{\pi}(s).
+            \]
+            Then \(V^{\pi'}(s) \ge V^{\pi}(s)\) for all \(s\). If strict inequality holds at
+            any state, \(\pi'\) is strictly better somewhere. In particular, the greedy
+            policy with respect to \(Q^{\pi}\) is always at least as good as \(\pi\).
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Proof sketch (why the escalator only goes up)</span>
+          <p>
+            The inequality \(Q^{\pi}(s,\pi'(s)) \ge V^{\pi}(s)\) says that taking \(\pi'\)’s
+            action once, then following \(\pi\), is already no worse than following \(\pi\)
+            forever. Unrolling that one-step improvement repeatedly —
+            \(\pi'\) then \(\pi'\) then \(\pi'\) … — produces an infinite-horizon return at
+            least as large as \(V^{\pi}\). Formally one shows
+            \(V^{\pi} \le \mathcal{T}^{\pi'} V^{\pi} \le (\mathcal{T}^{\pi'})^2 V^{\pi} \le \cdots \to V^{\pi'}\).
+          </p>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section class="study-section" id="pi">
+        <h2>5. Policy Iteration</h2>
+        <div class="prose-study">
+          <p>
+            Policy Iteration (PI) alternates the two blocks until the policy stops changing:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            \underbrace{\pi_0 \;\xrightarrow{\;\mathrm{eval}\;}\; V^{\pi_0}
+            \;\xrightarrow{\;\mathrm{greedy}\;}\; \pi_1
+            \;\xrightarrow{\;\mathrm{eval}\;}\; V^{\pi_1}
+            \;\xrightarrow{\;\mathrm{greedy}\;}\; \cdots}_{\text{Policy Iteration}}
+          \]
+        </div>
+        <div class="prose-study">
+          <ol>
+            <li><strong>Policy Evaluation:</strong> compute \(V^{\pi_k}\) (iterate (1) to convergence, or solve the linear system).</li>
+            <li><strong>Policy Improvement:</strong> set \(\pi_{k+1}\) greedy w.r.t. \(V^{\pi_k}\) via (2).</li>
+            <li>Stop when \(\pi_{k+1} = \pi_k\) (then \(\pi_k\) is optimal).</li>
+          </ol>
+          <p>
+            Because each improvement is monotonically nondecreasing in value and there are
+            finitely many deterministic policies, PI reaches \(\pi^*\) in finitely many
+            outer iterations. Each outer iteration may itself require many evaluation sweeps.
+          </p>
+        </div>
+
+        <div class="remark-box">
+          <span class="box-label">Remark · Truncated / modified policy iteration</span>
+          <p>
+            Exact evaluation is unnecessary. Stopping evaluation after a few sweeps
+            (truncated PI) still works in practice and interpolates toward Value Iteration,
+            which can be seen as truncation to a <em>single</em> backup before improving.
+          </p>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section class="study-section" id="vi">
+        <h2>6. Value Iteration</h2>
+        <div class="prose-study">
+          <p>
+            Value Iteration (VI) never maintains an explicit policy during the loop. It
+            applies the <strong>Bellman optimality operator</strong> directly:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            V_{k+1}(s)
+            \;\leftarrow\;
+            \max_{a}
+            \sum_{s'}P(s'\mid s,a)
+            \Big[
+              R(s,a,s') + \gamma V_{k}(s')
+            \Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            That is \(V_{k+1} = \mathcal{T}^* V_k\). As \(\mathcal{T}^*\) is a \(\gamma\)-contraction,
+            \(V_k \to V^*\). After convergence (or approximate convergence), extract
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            \pi^*(s)
+            \in
+            \arg\max_{a}
+            \sum_{s'}P(s'\mid s,a)
+            \Big[
+              R(s,a,s') + \gamma V^*(s')
+            \Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Intuition: each sweep is “one step of greedy lookahead using the current value
+            guess.” You do not wait to finish evaluating a policy before re-greedifying —
+            evaluation and improvement are fused.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Proposition 6.1 · Stopping rule</span>
+          <p>
+            If \(\|V_{k+1} - V_k\|_\infty &lt; \varepsilon(1-\gamma)/(2\gamma)\), then the greedy
+            policy with respect to \(V_{k+1}\) is \(\varepsilon\)-optimal:
+            \(\|V^{\pi} - V^*\|_\infty &lt; \varepsilon\). (Constants vary slightly by reference;
+            the point is that small Bellman residual ⇒ near-optimal greedy policy.)
+          </p>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section class="study-section" id="compare">
+        <h2>7. Policy Iteration vs Value Iteration</h2>
+        <div class="prose-study">
+          <dl class="dl-inline">
+            <div>
+              <dt>PI</dt>
+              <dd>Few outer iterations; each needs thorough evaluation. Exact policy sequence with monotone improvement.</dd>
+            </div>
+            <div>
+              <dt>VI</dt>
+              <dd>Cheap sweeps; many of them. Policy is implicit until the end. Often faster wall-clock on large tables.</dd>
+            </div>
+            <div>
+              <dt>MPI</dt>
+              <dd>Modified/truncated PI sits between: \(m\) evaluation sweeps then improve. \(m=1\) ≈ VI-style; \(m\to\infty\) ≈ classical PI.</dd>
+            </div>
+          </dl>
+          <p>
+            Both compute the same \(V^*\) / \(\pi^*\) in the limit. Choice is computational
+            taste, not a different solution concept.
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · Where “greedy” formally enters</span>
+          <p>
+            Greedy improvement is equation&nbsp;(2)/(5): replace the average over \(\pi\) by
+            \(\max_a\). That single change turns evaluation into control. Q-learning’s
+            target \(r + \gamma \max_{a'} Q(s',a')\) is the sample version of the same max.
+            The word “greedy” in RL almost always means this \(\arg\max\), not the
+            \(\gamma\to 0\) sense of myopic discounting.
+          </p>
+        </div>
+      </section>
+
+      <!-- 8 -->
+      <section class="study-section" id="async">
+        <h2>8. Asynchronous and in-place DP</h2>
+        <div class="prose-study">
+          <p>
+            Synchronous VI updates all states from a frozen copy of \(V_k\). Asynchronous
+            DP updates states in any order, immediately overwriting \(V(s)\), possibly
+            prioritizing states with large Bellman error (prioritized sweeping). Convergence
+            still holds if every state is updated infinitely often and the usual contraction
+            conditions apply.
+          </p>
+          <p>
+            These variants matter as conceptual bridges: experience replay with TD updates
+            is morally “asynchronous sample-backed DP on visited states.”
+          </p>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section class="study-section" id="limits">
+        <h2>9. Limits — and why TD is next</h2>
+        <div class="prose-study">
+          <p>
+            DP collapses outside toy tabular worlds for two independent reasons:
+          </p>
+          <ol>
+            <li>
+              <strong>Model.</strong> Real robotics gives you a simulator to <em>sample</em>,
+              not a closed-form \(P(s'\mid s,a)\) for continuous \(s'\).
+            </li>
+            <li>
+              <strong>Scale.</strong> Sweeping every state is impossible when \(S\) is
+              continuous or astronomically large.
+            </li>
+          </ol>
+          <p>
+            Temporal-Difference learning keeps the one-step bootstrapping backbone of (1)
+            and (4) but replaces
+            \(\sum_{s'}P(s'\mid s,a)\,f(s')\) with \(f(s')\) at a sampled successor.
+            Exploration (\(\varepsilon\)-greedy, entropy bonuses, …) appears because, unlike
+            DP, you only learn about states and actions you actually visit.
+          </p>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">Bridge · Four corners (recap)</span>
+          <p>
+            Exhaustive search: full model, full depth (game trees).<br/>
+            DP: full model, one-step bootstrap.<br/>
+            Monte Carlo: samples, full depth (episode returns).<br/>
+            TD: samples, one-step bootstrap — the scalable corner.
+          </p>
+        </div>
+      </section>
+
+      <!-- 10 LAB -->
+      <section class="study-section lab-wide" id="lab">
+        <h2>10. Laboratory · PI and VI on a grid</h2>
+        <div class="prose-study">
+          <p>
+            5×5 grid, rewards aligned with Chapter&nbsp;01 (step \(-0.1\), goal \(+10\),
+            pit \(-5\)), walls as before. Toggle <strong>slip</strong> to replace the
+            deterministic backup with
+            \(\sum_{s'}P(s'\mid s,a)[R+\gamma V(s')]\) — the full transition sum from the
+            text. \(\gamma\) is adjustable. Watch \(V\) and the greedy arrows evolve.
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Policy Iteration / Value Iteration</h3>
+            <span>Known model · full backups</span>
+          </div>
+
+          <div class="demo-controls" style="margin-bottom:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem">
+            <div class="control-block">
+              <span class="control-label">Discount</span>
+              <label class="slider-label">
+                γ
+                <input type="range" id="dpGamma" min="0" max="0.99" step="0.01" value="0.90" />
+                <strong id="dpGammaLabel">0.90</strong>
+              </label>
+              <label class="toggle" style="margin-top:0.55rem">
+                <input type="checkbox" id="dpSlip" />
+                <span>Stochastic slip (ε = 0.2)</span>
+              </label>
+              <p class="caption tight">Rewards match Ch&nbsp;01: step −0.1, goal +10, pit −5.</p>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Policy Iteration</span>
+              <div class="btn-row">
+                <button type="button" class="btn small" id="piEval">Evaluate π (sweeps)</button>
+                <button type="button" class="btn small" id="piImprove">Improve π</button>
+                <button type="button" class="btn small ghost" id="piFull">Full PI step</button>
+              </div>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Value Iteration</span>
+              <div class="btn-row">
+                <button type="button" class="btn small" id="viOnce">One VI sweep</button>
+                <button type="button" class="btn small ghost" id="viMany">25 more VI sweeps</button>
+              </div>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Reset</span>
+              <div class="btn-row">
+                <button type="button" class="btn small ghost" id="dpReset">Reset V &amp; π</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="split" style="grid-template-columns:1fr 1fr;gap:1rem">
+            <div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:0 0 0.5rem">
+                Value table \(V(s)\) + greedy policy
+              </h4>
+              <div class="dp-grid" id="dpGrid"></div>
+              <p class="caption tight">Arrows = current policy (PI) or greedy w.r.t. \(V\) (always shown).</p>
+            </div>
+            <div>
+              <div class="stat-strip">
+                <div><span>Mode</span><strong id="dpMode">idle</strong></div>
+                <div><span>Outer / sweeps</span><strong id="dpCount">0</strong></div>
+                <div><span>‖Δ‖∞</span><strong id="dpDelta">—</strong></div>
+                <div><span>π stable?</span><strong id="dpStable">n/a</strong></div>
+              </div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:1rem 0 0.5rem">
+                Backup log
+              </h4>
+              <div class="bellman-trace" id="dpTrace">Run Evaluate / VI to apply Bellman backups with the known model.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 11 -->
+      <section class="study-section" id="worked">
+        <h2>11. Worked example · one improvement step</h2>
+        <div class="prose-study">
+          <p>
+            Suppose three actions from state \(s\), \(\gamma=0.9\), and the current
+            \(V^{\pi}\) gives successor values \(V(s_1)=2\), \(V(s_2)=5\), \(V(s_3)=4\).
+            Deterministic transitions, rewards \(R=0\) for all three. Lookahead scores:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            \begin{aligned}
+              a_1 &:\; 0 + 0.9\cdot 2 = 1.8,\\
+              a_2 &:\; 0 + 0.9\cdot 5 = 4.5,\\
+              a_3 &:\; 0 + 0.9\cdot 4 = 3.6.
+            \end{aligned}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Greedy improvement sets \(\pi'(s)=a_2\). If the old \(\pi(s)\) was \(a_3\), the
+            policy changed and Theorem&nbsp;4.1 guarantees values cannot get worse. If every
+            state already selected its maximizing action, PI has converged.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Compute \(Q^{\pi}(s,a)=\sum_{s'}P(s'|s,a)[R+\gamma V^{\pi}(s')]\) for each \(a\).</li>
+            <li class="hidden-step">Here \(Q(s,a_1)=1.8\), \(Q(s,a_2)=4.5\), \(Q(s,a_3)=3.6\).</li>
+            <li class="hidden-step">Set \(\pi'(s)=\arg\max_a Q(s,a)=a_2\).</li>
+            <li class="hidden-step">Policy Improvement Theorem ⇒ \(V^{\pi'}(s)\ge V^{\pi}(s)\) ∀s.</li>
+            <li class="hidden-step">Re-evaluate \(V^{\pi'}\) with sweeps of equation (1).</li>
+            <li class="hidden-step">Repeat until \(\pi'=\pi\); then \(\pi=\pi^*\) for finite MDPs.</li>
+          </ol>
+          <p class="caption tight" style="margin-top:1rem">
+            For a full pencil walkthrough — random \(\pi\) → evaluate → improve → Value Iteration —
+            on a \(2\times 3\) grid with every intermediate number:
+            <a href="practice.html">Open the Practice notebook →</a>
+          </p>
+        </div>
+      </section>
+
+      <!-- 12 -->
+      <section class="study-section" id="next">
+        <h2>12. What follows</h2>
+        <div class="prose-study">
+          <p>
+            Temporal-Difference learning keeps bootstrapping (\(r + \gamma V(s')\)) but drops
+            the requirement that you know \(P\). You will meet TD(0), SARSA (on-policy
+            control), Q-learning (off-policy control), and the exploration problem DP never
+            had to face.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Sutton &amp; Barto, Ch. 4 — DP chapter.</li>
+            <li><a href="value.html">Chapter 02</a> — Bellman operators \(\mathcal{T}^{\pi}\), \(\mathcal{T}^*\).</li>
+            <li><a href="practice.html">Practice notebook</a> — full PI / VI by hand on a \(2\times 3\) grid.</li>
+            <li><a href="index.html">Chapter 01</a> — MDP model assumptions.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="value.html" style="color:inherit;text-decoration:none">← Value &amp; Bellman</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next chapter</p>
+            <h3>Temporal-Difference Learning</h3>
+            <p>TD(0), SARSA, Q-learning — DP from samples.</p>
+          </div>
+          <a class="btn primary" href="td.html">Continue →</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Chapter 03 · Dynamic Programming</p>
+    <p class="muted">Planning with a known model. TD removes that luxury.</p>
+  </footer>
+
+  <script src="dp.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

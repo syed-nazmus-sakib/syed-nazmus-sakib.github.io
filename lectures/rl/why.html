@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>00 · Why MDPs — Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="why.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl</span>
+    </a>
+            <nav class="chapter-nav" aria-label="Chapters">
+      <a class="active" href="why.html">00 · Why</a>
+      <a href="index.html">01 · MDP</a>
+      <a href="value.html">02 · Value</a>
+      <a href="practice.html">Practice</a>
+      <a href="dp.html">03 · DP</a>
+      <a href="td.html">04 · TD</a>
+      <a href="qlearning.html">05 · DQN</a>
+      <a href="pg.html">06 · PG</a>
+      <a href="trpo.html">07 · TRPO</a>
+      <a href="ppo.html">08 · PPO</a>
+      <a href="grpo.html">09 · GRPO</a>
+      <span class="locked">10 · SAC</span>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#need" style="text-decoration:none">Start</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#need">1. Why do we need MDPs?</a></li>
+        <li><a href="#before">2. What came before</a></li>
+        <li><a href="#failed">3. Why those ideas failed</a></li>
+        <li><a href="#gap">4. The missing pieces</a></li>
+        <li><a href="#mdp-answer">5. What the MDP buys us</a></li>
+        <li><a href="#next">6. What follows</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Chapter 00 · Prelude</p>
+      <h1 class="study-title">Why do we need <em>MDPs</em>?</h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Before Markov Decision Processes, people already tried to make machines decide.
+        Bandits, open-loop control, supervised “behavior cloning,” classical planners, and
+        reactive lookup tables all worked in narrow settings — and broke as soon as the
+        world became sequential, uncertain, and long-horizon. This chapter is the motivation
+        for Chapter&nbsp;01: what we needed that those tools did not give us.
+      </div>
+
+      <section class="study-section" id="need">
+        <h2>1. Why do we need MDPs?</h2>
+        <div class="prose-study">
+          <p class="lead">
+            Reinforcement learning is not “train a network on labels.” It is the problem of
+            an agent that acts over time, gets sparse feedback, and must live with the
+            consequences of earlier choices.
+          </p>
+          <p>
+            That problem has three stubborn features:
+          </p>
+          <ol>
+            <li><strong>Sequential dependence.</strong> Today’s action changes tomorrow’s state.</li>
+            <li><strong>Delayed credit.</strong> A reward now may be caused by a choice many steps ago.</li>
+            <li><strong>Uncertainty.</strong> The same action in the same situation need not always produce the same next state.</li>
+          </ol>
+          <p>
+            An MDP is a mathematical contract that names those features cleanly:
+            states, actions, transitions, rewards, and a discount factor. Without that
+            contract, algorithms have nowhere stable to stand — you cannot even write down
+            what “optimal” means.
+          </p>
+        </div>
+
+        <div class="def-box">
+          <span class="box-label">The goal, in one line</span>
+          <p>
+            Find a policy \(\pi\) that maximizes expected long-run return
+            \(\mathbb{E}_\pi[G_0]\). Everything after Chapter&nbsp;00 is machinery for that sentence.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="before">
+        <h2>2. What came before MDPs</h2>
+        <div class="prose-study">
+          <p>
+            People did not wait for Bellman to invent decision-making. Several older
+            frameworks already tried to answer “what should I do?”
+          </p>
+        </div>
+
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Multi-armed bandits</h4>
+            <p>
+              Pull one arm; get a reward; repeat. Exploration vs exploitation is real —
+              but there is no lasting state. One action does not rearrange the world for later.
+            </p>
+            <p class="mono-line">no dynamics · only immediate reward</p>
+          </div>
+          <div class="compare-card">
+            <h4>Supervised learning</h4>
+            <p>
+              Map \(x\mapsto y\) from labeled data. Brilliant at perception. Silent about
+              “if I take this action now, what happens three steps later?”
+            </p>
+            <p class="mono-line">labels · i.i.d. assumption</p>
+          </div>
+        </div>
+
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Open-loop control</h4>
+            <p>
+              Compute a fixed sequence \(a_0,a_1,\ldots\) in advance and play it. Works if
+              the world is nearly deterministic and nothing goes wrong. Brittle the moment
+              noise appears.
+            </p>
+            <p class="mono-line">plan once · never replan</p>
+          </div>
+          <div class="compare-card">
+            <h4>Classical planning (deterministic)</h4>
+            <p>
+              Search a graph of known, deterministic transitions to a goal. Excellent when
+              \(P\) is known and sharp. Collapses when outcomes are probabilistic or the model is wrong.
+            </p>
+            <p class="mono-line">known graph · no stochastic P</p>
+          </div>
+        </div>
+
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Reactive / scripted policies</h4>
+            <p>
+              Hand-written rules: “if near wall, turn left.” Fast and interpretable, but
+              they do not optimize long-horizon return and do not generalize when the rule
+              book is incomplete.
+            </p>
+            <p class="mono-line">if–then · no optimality</p>
+          </div>
+          <div class="compare-card">
+            <h4>Behavior cloning</h4>
+            <p>
+              Imitate expert actions with supervised learning. Fails under distribution
+              shift: the learner drifts off the expert’s state distribution and never
+              recovers (compounding error).
+            </p>
+            <p class="mono-line">imitate · no recovery</p>
+          </div>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">None of these are “wrong”</span>
+          <p>
+            Bandits, SL, planning, and scripts are still useful tools. They failed as a
+            <em>complete</em> theory of sequential decision-making under uncertainty —
+            which is exactly the setting RL targets.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="failed">
+        <h2>3. Why those ideas failed (for this problem)</h2>
+
+        <h3 class="practice-h3">Bandits ignore the future world</h3>
+        <div class="prose-study">
+          <p>
+            In a bandit, pulling arm 3 does not change which arms exist tomorrow.
+            In a maze, moving right <em>does</em> change where you are. Credit assignment
+            across time is not optional — it is the whole problem.
+          </p>
+        </div>
+
+        <h3 class="practice-h3">Supervised learning has no consequence model</h3>
+        <div class="prose-study">
+          <p>
+            A classifier answers “what label is this?” An agent must answer “what happens
+            if I act?” Without transitions and rewards, there is no notion of a better or
+            worse future — only better or worse predictions of someone else’s labels.
+          </p>
+        </div>
+
+        <h3 class="practice-h3">Open-loop plans shatter under noise</h3>
+        <div class="prose-study">
+          <p>
+            Suppose the plan says “go right, right, up.” If the first right slips into a
+            pit, the remaining plan is nonsense. Closed-loop decisions — actions that
+            depend on the <em>current</em> state — are mandatory. That is a policy
+            \(\pi(a\mid s)\), not a fixed tape of actions.
+          </p>
+        </div>
+
+        <h3 class="practice-h3">Deterministic planners refuse probability</h3>
+        <div class="prose-study">
+          <p>
+            Real robots slip. Dice roll. Opponents move. If your math assumes
+            \(P(s'\mid s,a)\in\{0,1\}\), then either you pretend the world is sharp or you
+            invent ad-hoc patches. MDPs put the distribution in the model from day one.
+          </p>
+        </div>
+
+        <h3 class="practice-h3">Imitation compounds error</h3>
+        <div class="prose-study">
+          <p>
+            Behavior cloning trains \(\hat\pi(a\mid s)\) on expert states. Once the learner
+            takes a slightly wrong action, it visits states the expert never showed —
+            and the trained policy has no preference signal there. Without rewards or a
+            recovery objective, small mistakes become catastrophic trajectories.
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Failure mode in one sentence</span>
+          <p>
+            Pre-MDP tools either ignored dynamics, ignored uncertainty, ignored delayed
+            reward, or ignored closed-loop feedback — and sequential agents need all four.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="gap">
+        <h2>4. The missing pieces</h2>
+        <div class="prose-study">
+          <p>
+            To state the sequential decision problem properly we need names for:
+          </p>
+        </div>
+        <table class="practice-table">
+          <thead>
+            <tr><th>Piece</th><th>Why it matters</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>State \(s\)</td><td>What the agent knows when it decides</td></tr>
+            <tr><td>Action \(a\)</td><td>What it can choose</td></tr>
+            <tr><td>Transition \(P(s'\mid s,a)\)</td><td>How the world reacts (possibly randomly)</td></tr>
+            <tr><td>Reward \(R\)</td><td>Scalar feedback for preference</td></tr>
+            <tr><td>Discount \(\gamma\)</td><td>How much future matters vs now</td></tr>
+            <tr><td>Policy \(\pi(a\mid s)\)</td><td>Closed-loop strategy, not open-loop tape</td></tr>
+            <tr><td>Return \(G_t\)</td><td>Long-horizon score to maximize in expectation</td></tr>
+          </tbody>
+        </table>
+        <div class="prose-study">
+          <p>
+            Pack those into one object and you have an MDP. That is not fashion — it is
+            the smallest language in which “optimal sequential behavior under uncertainty”
+            is even a well-posed question.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="mdp-answer">
+        <h2>5. What the MDP buys us</h2>
+        <div class="prose-study">
+          <p>
+            Once \(\mathcal{M}=(S,A,P,R,\gamma)\) is on the table:
+          </p>
+          <ul>
+            <li>We can define value functions \(V^{\pi}\) and \(Q^{\pi}\) (Chapter&nbsp;02).</li>
+            <li>We get Bellman equations — local consistency of long-horizon return.</li>
+            <li>We can run Dynamic Programming when \(P\) is known (Chapter&nbsp;03).</li>
+            <li>We can learn from samples when \(P\) is unknown (TD, Q-learning, later chapters).</li>
+          </ul>
+          <p>
+            Every later algorithm is still negotiating with this same object. If the MDP
+            assumption is wrong (non-Markov sensors, missing state), the mathematics
+            quietly lies — which is why state design matters as much as the optimizer.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Takeaway</span>
+          <p>
+            We need MDPs because earlier frameworks could not jointly express
+            <em>dynamics + uncertainty + delayed reward + closed-loop policies</em>.
+            The MDP is the language. RL is what we do when we speak that language —
+            with a model, or from experience.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>6. What follows</h2>
+        <div class="prose-study">
+          <p>
+            Chapter&nbsp;01 writes the MDP down carefully: the tuple, the Markov property,
+            returns, and policies. Then values and Bellman equations turn the definition
+            into computation.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li><a href="index.html">Chapter 01 · MDP</a> — formal definition and gridworld lab.</li>
+            <li><a href="value.html">Chapter 02 · Value</a> — \(V^{\pi}\), \(Q^{\pi}\), Bellman.</li>
+            <li><a href="practice.html">Practice</a> — one \(2\times 3\) world for the whole stack.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Next chapter</p>
+            <h3>Markov Decision Processes</h3>
+            <p>States, actions, \(P\), \(R\), \(\gamma\) — the contract itself.</p>
+          </div>
+          <a class="btn primary" href="index.html">Continue →</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Chapter 00 · Why MDPs</p>
+    <p class="muted">Motivation before notation.</p>
+  </footer>
+
+  <script src="nav.js"></script>
+</body>
+</html>

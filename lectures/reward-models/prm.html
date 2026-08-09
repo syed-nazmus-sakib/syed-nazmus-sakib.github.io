@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>06 · Process Reward Model · Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl · Rewards</span>
+    </a>
+    <nav class="chapter-nav" aria-label="Chapters">
+      <a href="index.html">00 · Overview</a>
+      <a href="scalar.html">01 · Scalar</a>
+      <a href="pointwise.html">02 · Pointwise</a>
+      <a href="pairwise.html">03 · Pairwise</a>
+      <a href="listwise.html">04 · Listwise</a>
+      <a href="orm.html">05 · ORM</a>
+      <a class="active" href="prm.html">06 · PRM</a>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#overview">1. First look</a></li>
+        <li><a href="#def">2. Exact definition</a></li>
+        <li><a href="#qt">3. What \(q_t\) means</a></li>
+        <li><a href="#arch">4. Architecture</a></li>
+        <li><a href="#data">5. Training data</a></li>
+        <li><a href="#loss">6. Training loss</a></li>
+        <li><a href="#example">7. Complete example</a></li>
+        <li><a href="#auto">8. Automatic labels</a></li>
+        <li><a href="#agg">9. Scoring a full solution</a></li>
+        <li><a href="#search">10. PRM-guided search</a></li>
+        <li><a href="#rl">11. PRM as RL reward</a></li>
+        <li><a href="#improve">12. What PRMs improve</a></li>
+        <li><a href="#limits">13. Critical limitations</a></li>
+        <li><a href="#gen">14. Generative PRMs</a></li>
+        <li><a href="#core">15. Final understanding</a></li>
+        <li><a href="#lab">16. Laboratory</a></li>
+        <li><a href="#worked">17. Worked loss</a></li>
+        <li><a href="#next">18. What comes next</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Reward Models · Chapter 06</p>
+      <h1 class="study-title">Process <em>reward model</em> (PRM)</h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        A classical discriminative PRM scores every reasoning step (or prefix), not only
+        the finished answer. This chapter defines \(q_t\), separates local step correctness
+        from prefix value, builds the architecture and BCE loss, works a discount example,
+        covers aggregation and search, and ends with RL use, limitations, and a short look
+        at generative PRMs.
+      </div>
+
+
+      <section class="study-section" id="overview">
+        <h2>1. First look at a PRM</h2>
+        <div class="prose-study">
+          <p class="lead">
+            A PRM evaluates every reasoning step, rather than only the final answer.
+          </p>
+        </div>
+        <div class="eq-block">
+          \[
+            \text{Problem} \rightarrow s_1 \rightarrow s_2 \rightarrow \cdots \rightarrow s_T
+          \]
+        </div>
+        <div class="prose-study">
+          <p>It produces a score for each step:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            r_1,\; r_2,\; \ldots,\; r_T
+          \]
+        </div>
+        <div class="prose-study">
+          <p>where \(r_t\) indicates whether step \(t\) is good or correct.</p>
+        </div>
+
+        <h3>Example</h3>
+        <div class="prose-study">
+          <p>Problem:</p>
+          <blockquote>A shirt costs $80 with a 25% discount.</blockquote>
+          <p>Reasoning:</p>
+          <ol>
+            <li>\(25\%\) of \(80\) is \(20\)</li>
+            <li>Add \(20\) to \(80\)</li>
+            <li>Final price is \(100\)</li>
+          </ol>
+          <p>PRM scores:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            r_1=0.98,\qquad r_2=0.04,\qquad r_3=0.02
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            It detects that <strong>Step 2 is where the reasoning became wrong</strong>.
+            The correct step is:
+          </p>
+        </div>
+        <div class="eq-block">
+          \[
+            80-20=60
+          \]
+        </div>
+
+        <h3>Architecture (intuition)</h3>
+        <div class="prose-study">
+          <p>
+            After each reasoning step, the model reads the entire reasoning prefix
+            \(x,s_1,\ldots,s_t\) and produces a score:
+          </p>
+        </div>
+        <div class="eq-block">
+          \[
+            r_t = f_\theta(x,\, s_{\leq t})
+          \]
+        </div>
+        <div class="prose-study">
+          <ul>
+            <li>\(x\): problem</li>
+            <li>\(s_t\): current reasoning step</li>
+            <li>\(s_{\leq t}\): all steps up to \(t\)</li>
+            <li>\(r_t\): predicted step quality</li>
+          </ul>
+          <p>Usually:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            r_t = \sigma(w^\top h_t + b)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>where \(h_t\) is the hidden state at the end of step \(t\).</p>
+        </div>
+
+        <h3>Training (intuition)</h3>
+        <div class="prose-study">
+          <p>Each step receives a label:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            z_t=
+            \begin{cases}
+            1, &amp; \text{correct step}\\
+            0, &amp; \text{incorrect step}
+            \end{cases}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>Loss:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            \mathcal{L}
+            =
+            -\sum_{t=1}^{T}
+            \big[
+              z_t\log r_t
+              +
+              (1-z_t)\log(1-r_t)
+            \big]
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            So the PRM learns to give high scores to correct steps and low scores to
+            incorrect ones.
+          </p>
+        </div>
+
+        <h3>How it improves reasoning</h3>
+        <div class="prose-study">
+          <p>During search, suppose the model generates three possible next steps:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            s_A:0.92,\qquad s_B:0.17,\qquad s_C:0.75
+          \]
+        </div>
+        <div class="prose-study">
+          <p>The system continues with \(A\) or \(C\) and removes \(B\). Thus a PRM can:</p>
+          <ul>
+            <li>detect mistakes early</li>
+            <li>guide beam search or tree search</li>
+            <li>select better complete solutions</li>
+            <li>provide dense rewards during RL</li>
+          </ul>
+        </div>
+
+        <h3>PRM versus ORM</h3>
+        <table class="practice-table">
+          <thead>
+            <tr><th>ORM</th><th>PRM</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Scores complete solution</td><td>Scores every step</td></tr>
+            <tr><td>One final reward</td><td>Multiple intermediate rewards</td></tr>
+            <tr><td>Easier to label</td><td>Harder to label</td></tr>
+            <tr><td>Cannot locate errors</td><td>Can locate errors</td></tr>
+            <tr><td>Sparse feedback</td><td>Dense feedback</td></tr>
+          </tbody>
+        </table>
+        <div class="thm-box">
+          <span class="box-label">Core difference</span>
+          \[
+            \boxed{\text{ORM: Did the solution succeed?}}
+            \qquad
+            \boxed{\text{PRM: Was each reasoning step good?}}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The rest of this chapter makes the same ideas rigorous: exact definitions,
+            what \(q_t\) really means, training details, aggregation, search, and limits.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="def">
+        <h2>2. Exact mathematical definition</h2>
+        <div class="prose-study">
+          <p class="lead">
+            We now make the same idea precise. We focus first on the classical discriminative PRM.
+            Generative PRMs come later.
+          </p>
+          <p>Suppose a problem is \(x\) and the model generates a solution with \(T\) reasoning steps:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            s_1,\; s_2,\; \ldots,\; s_T
+          \]
+        </div>
+        <div class="prose-study">
+          <p>A PRM evaluates every reasoning prefix:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            (x,s_1),\quad
+            (x,s_1,s_2),\quad
+            \ldots,\quad
+            (x,s_1,\ldots,s_T)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>At step \(t\), it predicts:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            q_t = f_\theta(x,\, s_{\leq t})
+          \]
+        </div>
+        <div class="prose-study">
+          <ul>
+            <li>\(s_{\leq t}=(s_1,\ldots,s_t)\): all steps up to \(t\)</li>
+            <li>\(f_\theta\): PRM with parameters \(\theta\)</li>
+            <li>\(q_t\in[0,1]\): predicted quality of step \(t\) (or of the prefix)</li>
+          </ul>
+          <p>So the output is a vector, not one final reward:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            [q_1,\, q_2,\, \ldots,\, q_T]
+          \]
+        </div>
+      </section>
+
+      <section class="study-section" id="qt">
+        <h2>3. What exactly does \(q_t\) mean?</h2>
+        <div class="prose-study">
+          <p class="lead">
+            This is the most important subtlety. Two different meanings are both often called PRM scores.
+          </p>
+        </div>
+
+        <h3>A. Local-correctness PRM</h3>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            q_t
+            =
+            P(s_t\text{ is correct}\mid x,\, s_{\lt t})
+          \]
+        </div>
+        <div class="prose-study">
+          <p>It asks: given all previous reasoning, is the current step logically correct?</p>
+          <p>Example: \(q_3=0.08\) means Step 3 is probably incorrect.</p>
+        </div>
+
+        <h3>B. Prefix-value PRM</h3>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            V_t
+            =
+            P(\text{eventual correct answer}\mid x,\, s_{\leq t})
+          \]
+        </div>
+        <div class="prose-study">
+          <p>It asks: from this partial solution, how likely are we to eventually solve the problem?</p>
+          <p>
+            A step may be technically correct but have low value. Example: “Let us check one
+            billion possibilities manually.” That may be valid, yet \(V_t\approx 0\) because
+            the strategy is unlikely to finish.
+          </p>
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Key distinction</span>
+          \[
+            \boxed{\text{step correctness}\neq\text{future success probability}}
+          \]
+        </div>
+        <div class="note-box">
+          <span class="box-label">In practice</span>
+          <p>
+            Classical human-supervised PRMs such as PRM800K primarily label whether each
+            step is correct and reasonable. Automatically labelled methods such as
+            Math-Shepherd often estimate whether a prefix can lead to a correct final answer
+            through sampled continuations, which is closer to a value estimate.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="arch">
+        <h2>4. PRM architecture</h2>
+        <div class="prose-study">
+          <p>Suppose the solution is formatted with explicit step endings:</p>
+        </div>
+        <div class="bellman-trace" style="max-width:36rem">
+<pre style="margin:0;font-family:inherit;white-space:pre-wrap">
+Problem: ...
+
+Step 1: ...
+&lt;STEP&gt;
+
+Step 2: ...
+&lt;STEP&gt;
+
+Step 3: ...
+&lt;STEP&gt;
+</pre>
+        </div>
+        <div class="prose-study">
+          <p>
+            The transformer produces a hidden vector at every token. At the end of Step \(t\),
+            we take the hidden state \(h_t\). This vector represents \(x+s_1+\cdots+s_t\).
+          </p>
+          <p>The reward head converts it into logits:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            \ell_t = W h_t + b
+          \]
+        </div>
+        <div class="prose-study">
+          <p>For binary labels we may have two logits \(\ell_t^{+}\) and \(\ell_t^{-}\), then:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            q_t
+            =
+            P(\text{positive})
+            =
+            \frac{e^{\ell_t^{+}}}{e^{\ell_t^{+}}+e^{\ell_t^{-}}}
+          \]
+        </div>
+        <div class="flow-steps" style="max-width:32rem">
+          <div class="flow-step">Problem + steps</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Transformer</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">Hidden state at each step ending</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Classification head</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">\(q_1, q_2, \ldots, q_T\)</div>
+        </div>
+        <div class="note-box">
+          <span class="box-label">PRM800K detail</span>
+          <p>
+            The original PRM800K work trained the model to predict a correctness token after
+            the final token of every step; one forward pass could score the entire solution.
+            Human annotators used positive, negative, and neutral labels.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="data">
+        <h2>5. Training data</h2>
+        <div class="prose-study">
+          <p>A PRM dataset contains solutions with a label for every step:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            \mathcal{D}
+            =
+            \Big\{
+            \big(
+              x^{(i)},\,
+              s^{(i)}_1,\ldots,s^{(i)}_{T_i},\,
+              y^{(i)}_1,\ldots,y^{(i)}_{T_i}
+            \big)
+            \Big\}_{i=1}^{N}
+          \]
+        </div>
+        <div class="prose-study">
+          <ul>
+            <li>\(N\): number of solutions</li>
+            <li>\(y_t=1\): step is correct</li>
+            <li>\(y_t=0\): step is incorrect</li>
+          </ul>
+          <p>Example:</p>
+        </div>
+        <div class="bellman-trace" style="max-width:28rem">
+<pre style="margin:0;font-family:inherit;white-space:pre-wrap">
+Step 1 → positive
+Step 2 → positive
+Step 3 → negative
+</pre>
+        </div>
+        <div class="eq-block">
+          \[
+            [y_1,y_2,y_3]=[1,1,0]
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            PRM800K contained roughly 800,000 human step labels across about 75,000 solutions,
+            with annotators marking steps positive, negative, or neutral.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="loss">
+        <h2>6. Training loss</h2>
+        <div class="prose-study">
+          <p>For binary labels, the loss for Step \(t\) is ordinary BCE:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            \mathcal{L}_t
+            =
+            -\big[
+              y_t\log q_t
+              +
+              (1-y_t)\log(1-q_t)
+            \big]
+          \]
+        </div>
+        <div class="prose-study">
+          <p>The total loss averages over steps:</p>
+        </div>
+        <div class="thm-box">
+          <span class="box-label">PRM loss</span>
+          \[
+            \boxed{
+              \mathcal{L}_{\mathrm{PRM}}
+              =
+              -\frac{1}{T}
+              \sum_{t=1}^{T}
+              \big[
+                y_t\log q_t
+                +
+                (1-y_t)\log(1-q_t)
+              \big]
+            }
+          \]
+        </div>
+        <div class="prose-study">
+          <p>This is simply binary cross-entropy applied at every step.</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="example">
+        <h2>7. Complete mathematical example</h2>
+        <div class="prose-study">
+          <p>Problem:</p>
+          <blockquote>
+            An item costs $120. It receives a 25% discount, then 10% VAT is applied to the
+            discounted price.
+          </blockquote>
+          <p>Candidate reasoning:</p>
+        </div>
+
+        <div class="board-grid" style="grid-template-columns:1fr;max-width:36rem">
+          <div class="board-cell">
+            <span class="cell-label">Step 1</span>
+            <strong>\(25\%\) of \(120 = 0.25\times 120 = 30\)</strong>
+            <p>Correct: \(y_1=1\)</p>
+          </div>
+          <div class="board-cell">
+            <span class="cell-label">Step 2</span>
+            <strong>\(120-30=90\)</strong>
+            <p>Correct: \(y_2=1\)</p>
+          </div>
+          <div class="board-cell">
+            <span class="cell-label">Step 3</span>
+            <strong>\(10\%\) VAT \(=0.10\times 120=12\)</strong>
+            <p>Incorrect: VAT should use \(90\), not \(120\). So \(y_3=0\).</p>
+          </div>
+          <div class="board-cell">
+            <span class="cell-label">Step 4</span>
+            <strong>\(90+12=102\)</strong>
+            <p>Depends on the previous error, so also invalid: \(y_4=0\).</p>
+          </div>
+        </div>
+
+        <div class="prose-study">
+          <p>True answer:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            90 + 0.10(90) = 99
+          \]
+        </div>
+
+        <h3>PRM prediction</h3>
+        <div class="prose-study">
+          <p>Suppose the PRM outputs:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            [q_1,q_2,q_3]=[0.97,\,0.92,\,0.15]
+          \]
+        </div>
+        <div class="note-box">
+          <span class="box-label">Masking after first error</span>
+          <p>
+            The training scheme may stop supervising after the first incorrect step, so
+            Step 4 can be masked out. The original PRM800K setup deliberately supervised
+            only up to the first incorrect step in many comparisons.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>The loss is:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            \mathcal{L}
+            =
+            -\frac{1}{3}
+            \big[
+              \log(0.97)
+              +
+              \log(0.92)
+              +
+              \log(1-0.15)
+            \big]
+            =
+            -\frac{1}{3}
+            \big[
+              \log(0.97)
+              +
+              \log(0.92)
+              +
+              \log(0.85)
+            \big]
+          \]
+        </div>
+        <div class="prose-study">
+          <p>Approximately \(\mathcal{L}\approx 0.092\). This is small because:</p>
+          <ul>
+            <li>correct Steps 1 and 2 received high probabilities</li>
+            <li>incorrect Step 3 received a low probability</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section" id="auto">
+        <h2>8. Automatically creating PRM labels</h2>
+        <div class="prose-study">
+          <p>
+            Human annotation is expensive. An automatic method can use rollouts.
+            Suppose the prefix is \(z_t=(x,s_1,\ldots,s_t)\). Generate \(M\) possible
+            continuations \(c^{(1)},\ldots,c^{(M)}\). For each continuation, check the
+            final answer:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            R^{(m)}
+            =
+            \begin{cases}
+            1, &amp; \text{correct final answer}\\
+            0, &amp; \text{incorrect final answer}
+            \end{cases}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>Then estimate the prefix value:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            \hat{V}_t
+            =
+            \frac{1}{M}\sum_{m=1}^{M} R^{(m)}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>Example: five continuations give labels \([1,1,0,1,0]\), so</p>
+        </div>
+        <div class="eq-block">
+          \[
+            \hat{V}_t
+            =
+            \frac{1+1+0+1+0}{5}
+            =
+            0.6
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Interpretation: sixty percent of continuations from this prefix reached the
+            correct answer. This does <strong>not</strong> prove the current step is
+            correct. A later continuation may repair an earlier error, or reach the right
+            answer accidentally.
+          </p>
+        </div>
+        <div class="note-box">
+          <span class="box-label">Math-Shepherd and after</span>
+          <p>
+            Math-Shepherd introduced this rollout-style automatic supervision. Later studies
+            found that Monte Carlo labels can be less reliable than high-quality human or
+            judge-based process labels because they measure recoverability rather than pure
+            local correctness.
+            (<a href="https://arxiv.org/abs/2312.08935" target="_blank" rel="noopener">arXiv:2312.08935</a>)
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="agg">
+        <h2>9. How do we score a complete solution?</h2>
+        <div class="prose-study">
+          <p>
+            A PRM gives multiple scores \(q_1,\ldots,q_T\). We need one score to compare
+            complete solutions.
+          </p>
+        </div>
+
+        <h3>Product aggregation</h3>
+        <div class="eq-block">
+          <span class="eq-tag">(12)</span>
+          \[
+            S_{\mathrm{product}}
+            =
+            \prod_{t=1}^{T} q_t
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This approximates the probability that every step is correct. The original
+            PRM800K experiments used the product of step-correctness probabilities for
+            complete-solution ranking.
+          </p>
+        </div>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Solution A</h4>
+            <p class="mono-line">[0.98, 0.96, 0.15]</p>
+            <div class="eq-block tight" style="margin:0.5rem 0">
+              \[
+                S_A = 0.98\times 0.96\times 0.15 \approx 0.141
+              \]
+            </div>
+          </div>
+          <div class="compare-card">
+            <h4>Solution B</h4>
+            <p class="mono-line">[0.88, 0.85, 0.82]</p>
+            <div class="eq-block tight" style="margin:0.5rem 0">
+              \[
+                S_B = 0.88\times 0.85\times 0.82 \approx 0.613
+              \]
+            </div>
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            Although A begins strongly, its final step is suspicious. The product selects B.
+          </p>
+        </div>
+
+        <h3>Minimum aggregation</h3>
+        <div class="eq-block">
+          <span class="eq-tag">(13)</span>
+          \[
+            S_{\min}=\min_t q_t
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This asks: what is the weakest step? For Solution A, \(S_{\min}=0.15\). Useful
+            because one major logical error can invalidate an entire proof.
+          </p>
+        </div>
+
+        <h3>Length problem</h3>
+        <div class="prose-study">
+          <p>Products penalize long solutions. Ten steps each scoring \(0.9\):</p>
+        </div>
+        <div class="eq-block">
+          \[
+            0.9^{10}\approx 0.349
+            \qquad\text{vs}\qquad
+            0.9^{3}\approx 0.729
+          \]
+        </div>
+        <div class="prose-study">
+          <p>So an alternative is average log probability:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(14)</span>
+          \[
+            S_{\log}
+            =
+            \frac{1}{T}\sum_{t=1}^{T}\log q_t
+          \]
+        </div>
+        <div class="prose-study">
+          <p>or its geometric mean:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(15)</span>
+          \[
+            S_{\mathrm{geo}}
+            =
+            \Big(\prod_{t=1}^{T} q_t\Big)^{1/T}
+          \]
+        </div>
+      </section>
+
+      <section class="study-section" id="search">
+        <h2>10. PRM-guided search</h2>
+        <div class="prose-study">
+          <p>
+            Suppose the current reasoning prefix is \(z_t\). The generator proposes \(K\)
+            possible next steps \(a_1,\ldots,a_K\). The PRM evaluates
+            \(q_j=f_\theta(z_t,a_j)\).
+          </p>
+          <p>Example: \(q_1=0.91\), \(q_2=0.18\), \(q_3=0.76\). Keep Steps 1 and 3; reject Step 2.</p>
+          <p>A beam-search version maintains \(B\) promising prefixes:</p>
+        </div>
+        <div class="bellman-trace" style="max-width:40rem">
+<pre style="margin:0;font-family:inherit;white-space:pre-wrap">
+1. Generate K next steps from every prefix
+2. Score each new step with the PRM
+3. Add score to the cumulative branch score
+4. Keep the best B branches
+5. Repeat until final answers are produced
+</pre>
+        </div>
+        <div class="prose-study">
+          <p>For a local-correctness PRM, a cumulative branch score can be:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(16)</span>
+          \[
+            C_t
+            =
+            \sum_{i=1}^{t}\log q_i
+            =
+            \log\prod_{i=1}^{t} q_i
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            PRMs are commonly evaluated through best-of-\(N\) reranking and guided search,
+            where they select promising solutions or branches from multiple generated
+            candidates.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="rl">
+        <h2>11. PRM as an RL reward</h2>
+        <div class="prose-study">
+          <p>An ORM provides one reward \(R_T\). A PRM can provide dense rewards \(r_1,\ldots,r_T\).</p>
+          <p>For example \(r_t=\log q_t\). The policy is encouraged to generate steps with higher PRM scores.</p>
+          <p>For a value-style PRM, a cleaner shaping reward is:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(17)</span>
+          \[
+            r_t = V_t - V_{t-1}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>Then the telescoping sum is:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            \sum_{t=1}^{T} r_t
+            =
+            \sum_{t=1}^{T}(V_t-V_{t-1})
+            =
+            V_T - V_0
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            So the model is rewarded when a step increases the estimated probability of
+            final success. Math-Shepherd demonstrated both PRM-based reranking and stepwise
+            PPO training, although PRM-based RL remains vulnerable to inaccurate rewards and
+            reward hacking.
+            (<a href="https://arxiv.org/abs/2312.08935" target="_blank" rel="noopener">arXiv:2312.08935</a>)
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="improve">
+        <h2>12. What PRMs actually improve</h2>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Error localization</h4>
+            <p>Instead of \(R_{\mathrm{final}}=0\), we obtain \([0.96,\,0.91,\,0.07,\,0.03]\). The first likely error is Step 3.</p>
+          </div>
+          <div class="compare-card">
+            <h4>Better credit assignment</h4>
+            <p>The model knows which steps were useful and which caused failure.</p>
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            <strong>Better search:</strong> incorrect branches can be removed before spending
+            computation completing them.
+          </p>
+          <p>
+            Process supervision was shown to outperform outcome supervision in the original
+            PRM800K best-of-\(N\) mathematical reasoning experiments, especially as the
+            number of candidate solutions increased.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="limits">
+        <h2>13. Critical limitations</h2>
+        <div class="prose-study">
+          <p>A PRM score is not proof of correctness:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            q_t=0.99 \;\not\Rightarrow\; s_t\text{ is certainly correct}
+          \]
+        </div>
+        <table class="practice-table">
+          <thead>
+            <tr><th>#</th><th>Problem</th><th>Why it hurts</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td>Step granularity</td><td>One “step” may contain several logical operations.</td></tr>
+            <tr><td>2</td><td>Error propagation</td><td>After the first error, later steps are hard to label.</td></tr>
+            <tr><td>3</td><td>Recovery ambiguity</td><td>A model may correct an earlier mistake.</td></tr>
+            <tr><td>4</td><td>Style bias</td><td>Polished or verbose reasoning may look more convincing.</td></tr>
+            <tr><td>5</td><td>Outcome leakage</td><td>The PRM may judge mostly from the final answer.</td></tr>
+            <tr><td>6</td><td>Distribution shift</td><td>A math PRM may fail on harder or unfamiliar problems.</td></tr>
+            <tr><td>7</td><td>Reward hacking</td><td>A generator may learn reasoning that looks good to the verifier.</td></tr>
+          </tbody>
+        </table>
+        <div class="note-box">
+          <span class="box-label">Benchmarks</span>
+          <p>
+            ProcessBench and PRMBench found substantial weaknesses in current PRMs,
+            particularly in generalizing to difficult problems and identifying fine-grained
+            reasoning errors.
+            (<a href="https://arxiv.org/abs/2412.06559" target="_blank" rel="noopener">arXiv:2412.06559</a>)
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="gen">
+        <h2>14. Current evolution: generative PRMs</h2>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Classical PRM</h4>
+            <p class="mono-line">step → score</p>
+          </div>
+          <div class="compare-card">
+            <h4>Generative PRM</h4>
+            <p class="mono-line">step → verification reasoning → verdict</p>
+          </div>
+        </div>
+        <div class="bellman-trace" style="max-width:40rem">
+<pre style="margin:0;font-family:inherit;white-space:pre-wrap">
+The step divides both sides by 4, but the coefficient is 3.
+Therefore, this transformation is invalid.
+
+Verdict: Incorrect
+</pre>
+        </div>
+        <div class="prose-study">
+          <p>
+            Systems such as THINKPRM and GenPRM generate verification reasoning before
+            assigning a judgment, allowing verifier computation to scale at inference time.
+            They are more computationally expensive than direct classifiers but reported
+            stronger process evaluation in their experiments.
+            (<a href="https://arxiv.org/abs/2504.16828" target="_blank" rel="noopener">arXiv:2504.16828</a>)
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="core">
+        <h2>15. Final understanding</h2>
+        <div class="thm-box">
+          <span class="box-label">Remember</span>
+          \[
+            \boxed{
+              \text{PRM: }
+              (x,s_1,\ldots,s_t)
+              \rightarrow
+              \text{quality of the reasoning process at step }t
+            }
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            A PRM is not simply an ORM repeated several times. Its central purpose is to
+            learn where reasoning remains valid, where it breaks, and which partial paths
+            are worth continuing.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section lab-wide" id="lab">
+        <h2>16. Laboratory · step scores and aggregation</h2>
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Three-step PRM scores</h3>
+            <span>Product · min · geo · loss</span>
+          </div>
+          <div class="btn-row" style="margin-bottom:0.75rem">
+            <button type="button" class="btn small" id="prmExDiscount">VAT discount</button>
+            <button type="button" class="btn small ghost" id="prmExShirt">Shirt $80</button>
+            <button type="button" class="btn small ghost" id="prmExA">Solution A</button>
+            <button type="button" class="btn small ghost" id="prmExB">Solution B</button>
+          </div>
+          <label class="slider-label">
+            \(q_1\) <input type="range" id="prmQ1" min="0.01" max="0.99" step="0.01" value="0.97" />
+            <strong id="prmQ1L">0.97</strong>
+          </label>
+          <label class="slider-label">
+            \(q_2\) <input type="range" id="prmQ2" min="0.01" max="0.99" step="0.01" value="0.92" />
+            <strong id="prmQ2L">0.92</strong>
+          </label>
+          <label class="slider-label">
+            \(q_3\) <input type="range" id="prmQ3" min="0.01" max="0.99" step="0.01" value="0.15" />
+            <strong id="prmQ3L">0.15</strong>
+          </label>
+          <label class="slider-label">
+            Labels \(y\) for loss (1=correct, 0=wrong on step 3)
+            <input type="range" id="prmY3" min="0" max="1" step="1" value="0" />
+            <strong id="prmY3L">y = [1, 1, 0]</strong>
+          </label>
+          <div class="stat-strip">
+            <div><span>\(S_{\mathrm{product}}\)</span><strong id="prmProd">-</strong></div>
+            <div><span>\(S_{\min}\)</span><strong id="prmMin">-</strong></div>
+            <div><span>\(S_{\mathrm{geo}}\)</span><strong id="prmGeo">-</strong></div>
+            <div><span>\(\mathcal{L}\)</span><strong id="prmLoss">-</strong></div>
+          </div>
+          <div class="bellman-trace" id="prmTrace" style="margin-top:0.75rem">
+            Drag step scores to compare aggregations.
+          </div>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>17. Worked loss, step by step</h2>
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Labels for the discount path: \(y=[1,1,0]\) (mask after first error).</li>
+            <li class="hidden-step">PRM scores: \(q=[0.97,0.92,0.15]\).</li>
+            <li class="hidden-step">Term 1: \(-\log(0.97)\approx 0.0305\).</li>
+            <li class="hidden-step">Term 2: \(-\log(0.92)\approx 0.0834\).</li>
+            <li class="hidden-step">Term 3: \(-\log(0.85)\approx 0.1625\) because \(1-q_3=0.85\).</li>
+            <li class="hidden-step">Average: \(\mathcal{L}\approx(0.0305+0.0834+0.1625)/3\approx 0.092\).</li>
+            <li class="hidden-step">Product score \(0.97\times 0.92\times 0.15\approx 0.134\). Weakest step is \(0.15\).</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>18. What comes next</h2>
+        <div class="prose-study">
+          <p>
+            Next chapters move along other axes of the taxonomy: value models that estimate
+            future success of a prefix, multi-objective heads, and generative or
+            critique-then-score verifiers.
+          </p>
+        </div>
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="orm.html" style="color:inherit;text-decoration:none">&larr; ORM</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Up next</p>
+            <h3>Value / future-success model</h3>
+            <p>Score a prefix by how likely it is to finish correctly.</p>
+          </div>
+          <span class="next-lock">Chapter 07 · soon</span>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Reward Models · 06 PRM</p>
+    <p class="muted">Every step. A process score.</p>
+  </footer>
+  <script src="prm.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

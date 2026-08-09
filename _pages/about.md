@@ -13,40 +13,55 @@ redirect_from:
 
 /* Intro */
 .port-intro p {
-  font-size: 1.05em;
-  line-height: 1.85;
-  color: #444;
-  margin-bottom: 0.6em;
-  text-align: justify;
+  font-size: 1em;
+  line-height: 1.75;
+  color: #334155;
+  margin-bottom: 0.9em;
+  text-align: left;
 }
 .port-interests {
-  margin-top: 10px;
+  margin-top: 16px;
   font-size: 0.92em;
-  color: #555;
+  color: #475569;
 }
-.port-interests strong { color: #2c3e50; }
+.port-interests strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #64748b;
+  font-size: 0.82em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.port-intro a {
+  color: #334155 !important;
+  font-weight: 600;
+  text-decoration-color: #cbd5e1;
+  text-underline-offset: 2px;
+}
 .int-tag {
   display: inline-block;
-  background: #eef2ff;
-  color: #3730a3;
-  border-radius: 20px;
-  padding: 2px 12px;
-  margin: 3px 3px;
-  font-size: 0.88em;
-  font-weight: 500;
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 3px 8px;
+  margin: 3px 3px 3px 0;
+  font-size: 0.82em;
+  font-weight: 600;
 }
 
 /* Section headers */
 .port-section-title {
-  font-size: 1.2em;
+  font-size: 1.12em;
   font-weight: 700;
-  color: #1a202c;
-  border-bottom: 2px solid #4f46e5;
-  padding-bottom: 6px;
-  margin: 36px 0 18px 0;
+  color: #0f172a;
+  border-bottom: 1px solid #cbd5e1;
+  padding-bottom: 8px;
+  margin: 42px 0 16px 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  letter-spacing: -0.01em;
+  scroll-margin-top: 5rem;
 }
 
 /* News */
@@ -70,26 +85,28 @@ redirect_from:
 
 /* Publication cards */
 .pub-card {
-  border: 1px solid #e2e8f0;
-  border-left: 4px solid #4f46e5;
-  border-radius: 8px;
-  padding: 16px 18px;
-  margin-bottom: 14px;
-  background: #fafbff;
-  transition: box-shadow 0.2s;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 15px 16px;
+  margin-bottom: 12px;
+  background: #fff;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-.pub-card:hover { box-shadow: 0 4px 16px rgba(79,70,229,0.1); }
+.pub-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.05);
+}
 .pub-title {
   font-weight: 700;
-  font-size: 1em;
-  color: #1e293b;
+  font-size: 0.98em;
+  color: #0f172a;
   display: block;
-  margin-bottom: 8px;
-  line-height: 1.5;
+  margin-bottom: 7px;
+  line-height: 1.45;
   text-decoration: none;
   transition: color 0.2s;
 }
-a.pub-title:hover { color: #4f46e5; }
+a.pub-title:hover { color: #334155; }
 .pub-links {
   display: flex;
   flex-wrap: wrap;
@@ -99,45 +116,47 @@ a.pub-title:hover { color: #4f46e5; }
 }
 .pub-links a {
   font-size: 0.8em;
-  padding: 3px 12px;
-  border-radius: 5px;
+  padding: 3px 9px;
+  border-radius: 4px;
   font-weight: 600;
   text-decoration: none;
-  transition: all 0.2s;
+  transition: background 0.2s, border-color 0.2s;
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
-.pub-links .link-arxiv { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-.pub-links .link-arxiv:hover { background: #fecaca; }
-.pub-links .link-hf { background: #fefce8; color: #a16207; border: 1px solid #fde68a; }
-.pub-links .link-hf:hover { background: #fde68a; }
-.pub-links .link-project { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
-.pub-links .link-project:hover { background: #bbf7d0; }
+.pub-links .link-arxiv,
+.pub-links .link-hf,
+.pub-links .link-project {
+  background: #fff;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+.pub-links .link-arxiv:hover,
+.pub-links .link-hf:hover,
+.pub-links .link-project:hover { background: #f8fafc; border-color: #94a3b8; }
 .pub-info {
   font-size: 0.88em;
-  color: #555;
+  color: #64748b;
 }
 .pub-info .pub-status-text {
   font-weight: 600;
-  color: #b45309;
+  color: #334155;
 }
 .pub-info .pub-venue {
   font-weight: 700;
-  color: #4f46e5;
-  font-style: italic;
+  color: #334155;
 }
 
 /* Experience cards */
 .exp-card {
-  border-left: 4px solid #10b981;
-  padding: 12px 16px;
-  margin-bottom: 20px;
-  background: #f9fafb;
-  border-radius: 0 8px 8px 0;
+  border: 1px solid #e5e7eb !important;
+  border-left: 3px solid #64748b !important;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: #fff;
+  border-radius: 0 6px 6px 0;
 }
-.exp-card.orange { border-color: #f59e0b; }
-.exp-card.purple { border-color: #8b5cf6; }
 .exp-org { font-weight: 700; font-size: 0.98em; color: #1a202c; }
 .exp-role { font-size: 0.85em; color: #6b7280; margin: 3px 0 8px 0; }
 .exp-card ul { margin: 0; padding-left: 18px; }
@@ -180,7 +199,7 @@ a.pub-title:hover { color: #4f46e5; }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 0;
+  padding: 10px 0;
   border-bottom: 1px solid #f3f4f6;
   font-size: 0.93em;
   color: #374151;
@@ -203,12 +222,15 @@ a.pub-title:hover { color: #4f46e5; }
 @media (max-width: 600px) { .proj-grid { grid-template-columns: 1fr; } }
 .proj-card {
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 14px;
+  border-radius: 6px;
+  padding: 16px;
   background: white;
-  transition: box-shadow 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-.proj-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+.proj-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.05);
+}
 .proj-title { font-weight: 700; font-size: 0.95em; color: #1e293b; margin-bottom: 6px; }
 .proj-desc { font-size: 0.86em; color: #6b7280; line-height: 1.55; margin-bottom: 8px; }
 .tech-tag {
@@ -216,6 +238,7 @@ a.pub-title:hover { color: #4f46e5; }
   font-size: 0.75em;
   background: #f1f5f9;
   color: #475569;
+  border: 1px solid #e2e8f0;
   padding: 2px 8px;
   border-radius: 4px;
   margin: 2px 2px 2px 0;
@@ -225,100 +248,80 @@ a.pub-title:hover { color: #4f46e5; }
 
 <div class="port-intro">
 <p>
-I am a final-year student in <strong>Robotics and Mechatronics Engineering</strong> at the <strong>University of Dhaka</strong>, working at the intersection of intelligent systems, multimodal AI, and real-world decision support. My research focuses on designing scalable AI solutions that translate advanced machine learning methods into practical applications across healthcare, agriculture, and critical infrastructure.
+I am a final-year student in <strong>Robotics and Mechatronics Engineering</strong> at the <strong>University of Dhaka</strong>. My research focuses on multimodal and agentic AI, trustworthy decision-making, and practical machine learning systems for healthcare, agriculture, and critical infrastructure.
 </p>
 <p>
-I currently hold two concurrent research positions — as a <strong>Research Assistant</strong> at <a href="https://cortexai-lab.github.io/" target="_blank" style="color:#4f46e5; font-weight:600;">Cortex AI Lab</a> and a <strong>Research Intern</strong> at the <a href="https://www.dndlab.org/" target="_blank" style="color:#4f46e5; font-weight:600;">Data and Design Lab (CARS)</a>. At Cortex AI Lab, my work centers on multimodal and agent-based AI, including vision-language systems for biomedical reasoning, visual question answering, and structured diagnostic support. At CARS, I develop large-scale data analytics and machine learning pipelines for power system monitoring, failure prediction, and reliability assessment using nationwide electricity and consumption data.
-</p>
-<p>
-My broader research interests include multimodal learning, biomedical AI, agentic systems, and trustworthy AI. I have contributed to projects spanning plant disease diagnosis, vision-language benchmarking, power quality assessment, and autonomous robotic systems. I currently have research papers under review at major venues including <em>NeurIPS 2026</em>, <em>EMNLP 2026</em>, and <em>Nature Scientific Data</em>, and one paper accepted at <em>ACL 2026 Findings</em>.
+I am a <strong>Research Assistant</strong> at <a href="https://cortexai-lab.github.io/" target="_blank" rel="noopener">Cortex AI Lab</a> and a <strong>Research Intern</strong> at the <a href="https://www.dndlab.org/" target="_blank" rel="noopener">Data and Design Lab (CARS)</a>. My work spans vision-language reasoning, multi-agent systems, and machine learning pipelines for power-system monitoring. My publications include public preprints and work accepted at <em>ACL 2026 Findings</em>.
 </p>
 <div class="port-interests">
-  <strong>Research Interests: &nbsp;</strong>
+  <strong>Research Interests</strong>
   <span class="int-tag">Multimodal Learning</span>
-  <span class="int-tag">Biomedical AI</span>
   <span class="int-tag">Vision-Language Models</span>
-  <span class="int-tag">Agentic Systems</span>
+  <span class="int-tag">Biomedical AI</span>
+  <span class="int-tag">Agentic AI</span>
   <span class="int-tag">Trustworthy AI</span>
-  <span class="int-tag">LLM Agent Safety</span>
-  <span class="int-tag">Multi-Agent Systems</span>
   <span class="int-tag">Reinforcement Learning</span>
 </div>
 </div>
 
-<div class="port-section-title">📄 Publications &amp; Preprints</div>
+<div class="port-section-title" id="research">Publications &amp; Manuscripts</div>
 
 <div class="pub-card">
-  <a href="https://arxiv.org/pdf/2602.05354" target="_blank" class="pub-title">MIRAGE: Do Web Agents Investigate Before They Decide?</a>
+  <a href="https://arxiv.org/abs/2602.05354" target="_blank" rel="noopener" class="pub-title">PATHWAYS: Evaluating Investigation and Context Discovery in AI Web Agents</a>
   <div class="pub-links">
-    <a href="https://arxiv.org/pdf/2602.05354" target="_blank" class="link-arxiv">📄 ArXiv</a>
-    <a href="/" class="link-hf">🤗 HuggingFace</a>
-    <a href="/" class="link-project">🌐 Project Page</a>
+    <a href="https://arxiv.org/abs/2602.05354" target="_blank" rel="noopener" class="link-arxiv">Paper</a>
   </div>
-  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">NeurIPS 2026</span></div>
+  <div class="pub-info"><span class="pub-status-text">Preprint</span> · 2026</div>
 </div>
 
 <div class="pub-card">
   <span class="pub-title">Thinking Like a Botanist: Challenging Multimodal Language Models with Intent Driven Chain-of-Inquiry</span>
   <div class="pub-links">
-    <a href="/" class="link-arxiv">📄 ArXiv</a>
-    <a href="/" class="link-hf">🤗 HuggingFace</a>
-    <a href="https://syed-nazmus-sakib.github.io/PlantInquiryVQA/" target="_blank" class="link-project">🌐 Project Page</a>
+    <a href="https://syed-nazmus-sakib.github.io/PlantInquiryVQA/" target="_blank" rel="noopener" class="link-project">Project page</a>
   </div>
   <div class="pub-info"><span class="pub-status-text">Accepted</span> at <span class="pub-venue">ACL 2026 Findings</span></div>
 </div>
 
 <div class="pub-card">
-  <a href="https://arxiv.org/pdf/2508.17117" target="_blank" class="pub-title">PlantVillageVQA: A Visual Question Answering Dataset for Benchmarking Vision-Language Models in Plant Science</a>
+  <a href="https://arxiv.org/abs/2508.17117" target="_blank" rel="noopener" class="pub-title">PlantExpertVQA: A Visual Question Answering Dataset for Benchmarking Vision-Language Models in Plant Science</a>
   <div class="pub-links">
-    <a href="https://arxiv.org/pdf/2508.17117" target="_blank" class="link-arxiv">📄 ArXiv</a>
-    <a href="/" class="link-hf">🤗 HuggingFace</a>
-    <a href="/" class="link-project">🌐 Project Page</a>
+    <a href="https://arxiv.org/abs/2508.17117" target="_blank" rel="noopener" class="link-arxiv">Paper</a>
   </div>
   <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">Nature Scientific Data</span></div>
 </div>
 
 <div class="pub-card">
-  <a href="https://arxiv.org/pdf/2508.17107" target="_blank" class="pub-title">SugarcaneShuffleNet: A Very Fast, Lightweight Convolutional Neural Network for Diagnosis of 15 Sugarcane Leaf Diseases</a>
+  <a href="https://arxiv.org/abs/2508.17107" target="_blank" rel="noopener" class="pub-title">SugarcaneShuffleNet: A Very Fast, Lightweight Convolutional Neural Network for Diagnosis of 15 Sugarcane Leaf Diseases</a>
   <div class="pub-links">
-    <a href="https://arxiv.org/pdf/2508.17107" target="_blank" class="link-arxiv">📄 ArXiv</a>
-    <a href="/" class="link-hf">🤗 HuggingFace</a>
-    <a href="/" class="link-project">🌐 Project Page</a>
+    <a href="https://arxiv.org/abs/2508.17107" target="_blank" rel="noopener" class="link-arxiv">Paper</a>
   </div>
   <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">Computers and Electronics in Agriculture</span></div>
 </div>
 
 <div class="pub-card">
   <span class="pub-title">MemeEconomy: Do LLM Agents Trade Ethics for Survival?</span>
-  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">NeurIPS 2026</span></div>
+  <div class="pub-info"><span class="pub-status-text">Manuscript</span> · 2026</div>
 </div>
 
 <div class="pub-card">
   <span class="pub-title">The Surface You Test Is Not the Surface That Breaks</span>
   <div class="pub-links">
-    <a href="https://github.com/syed-nazmus-sakib/surface-adaptive-injection" target="_blank" class="link-project">💻 Code</a>
+    <a href="https://github.com/syed-nazmus-sakib/surface-adaptive-injection" target="_blank" rel="noopener" class="link-project">Code</a>
   </div>
-  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">EMNLP 2026</span></div>
+  <div class="pub-info"><span class="pub-status-text">Manuscript</span> · 2026</div>
 </div>
 
 <div class="pub-card">
   <span class="pub-title">PhyDrawGen: Physically Grounded Diagram Generation from Natural Language</span>
-  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">EMNLP 2026</span></div>
+  <div class="pub-info"><span class="pub-status-text">Manuscript</span> · 2026</div>
 </div>
 
 <div class="pub-card">
   <span class="pub-title">Predicting Groundwater Recharge Potential across Various Physiographic Divisions of Bangladesh using Generative Data Augmentation</span>
-  <div class="pub-links">
-    <a href="/" class="link-arxiv">📄 ArXiv</a>
-    <a href="/" class="link-hf">🤗 HuggingFace</a>
-    <a href="/" class="link-project">🌐 Project Page</a>
-  </div>
-  <div class="pub-info"><span class="pub-status-text">Under Review</span> at <span class="pub-venue">Journal of Hydrology</span></div>
+  <div class="pub-info"><span class="pub-status-text">Manuscript</span> · 2026</div>
 </div>
 
----
-
-<div class="port-section-title">🔬 Research &amp; Professional Experience</div>
+<div class="port-section-title" id="experience">Research &amp; Professional Experience</div>
 
 <div class="exp-card">
   <div class="exp-org"><a href="https://cortexai-lab.github.io/" target="_blank" style="color:inherit; text-decoration:none; border-bottom:1px dashed #aaa;">Cortex AI Lab</a>, University of Dhaka</div>
@@ -374,49 +377,41 @@ My broader research interests include multimodal learning, biomedical AI, agenti
   </ul>
 </div>
 
-<div class="port-section-title">🏆 Awards &amp; Competitions</div>
+<div class="port-section-title" id="awards">Awards &amp; Competitions</div>
 
 <ul class="award-list">
   <li>
-    <span>🌍</span>
     <span style="flex:1"><strong>Global Nominee</strong> — NASA Space Apps Challenge</span>
     <span class="award-year">2024</span>
   </li>
   <li>
-    <span>🥈</span>
     <span style="flex:1"><strong>Runner-up</strong> — DU AI Challenge</span>
     <span class="award-year">2025</span>
   </li>
   <li>
-    <span>🥈</span>
     <span style="flex:1"><strong>Runner-up</strong> — KUET Datathon</span>
     <span class="award-year">2025</span>
   </li>
   <li>
-    <span>🥈</span>
     <span style="flex:1"><strong>Runner-up</strong> — Technocrats V2 IUBAT Hackathon</span>
     <span class="award-year">2024</span>
   </li>
   <li>
-    <span>🏅</span>
     <span style="flex:1"><strong>Regional Champion</strong> — National High School Programming Contest (NHSPC)</span>
     <span class="award-year">2019</span>
   </li>
   <li>
-    <span>🎖️</span>
     <span style="flex:1"><strong>Kaggle Expert</strong> — Multiple podium finishes in ML competitions</span>
     <span class="award-year">Ongoing</span>
   </li>
 </ul>
 
----
-
-<div class="port-section-title">💻 Featured Projects</div>
+<div class="port-section-title" id="projects">Selected Engineering Projects</div>
 
 <div class="proj-grid">
 
   <div class="proj-card">
-    <div class="proj-title">🤖 Mobile Differential Drive Robot</div>
+    <div class="proj-title">Mobile Differential Drive Robot</div>
     <div class="proj-desc">Full Gazebo simulation and ROS2 control stack for a mobile diff-drive robot. Built with URDF/Xacro modeling and a complete ROS2 integration pipeline.</div>
     <span class="tech-tag">ROS2</span>
     <span class="tech-tag">Gazebo</span>
@@ -425,7 +420,7 @@ My broader research interests include multimodal learning, biomedical AI, agenti
   </div>
 
   <div class="proj-card">
-    <div class="proj-title">📊 EDAPipeline</div>
+    <div class="proj-title">EDAPipeline</div>
     <div class="proj-desc">Automated exploratory data analysis Python package with smart visualization, outlier detection, and correlation analysis out of the box.</div>
     <span class="tech-tag">Python</span>
     <span class="tech-tag">Pandas</span>
@@ -434,7 +429,7 @@ My broader research interests include multimodal learning, biomedical AI, agenti
   </div>
 
   <div class="proj-card">
-    <div class="proj-title">🔍 Pathfinding Visualizer</div>
+    <div class="proj-title">Pathfinding Visualizer</div>
     <div class="proj-desc">Interactive visualizer for classic pathfinding algorithms — DFS, A*, and Dynamic A* — with real-time animation built in Pygame.</div>
     <span class="tech-tag">Python</span>
     <span class="tech-tag">Pygame</span>
@@ -443,7 +438,7 @@ My broader research interests include multimodal learning, biomedical AI, agenti
   </div>
 
   <div class="proj-card">
-    <div class="proj-title">🌐 RMEDU Robotronics Fest Website</div>
+    <div class="proj-title">RMEDU Robotronics Fest Website</div>
     <div class="proj-desc">Responsive event website for the university's annual Robotronics Festival, built with a modern Next.js and TypeScript stack.</div>
     <span class="tech-tag">Next.js</span>
     <span class="tech-tag">TypeScript</span>

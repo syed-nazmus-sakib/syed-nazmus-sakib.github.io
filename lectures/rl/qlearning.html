@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>05 · Q-learning &amp; Deep Q-Networks — Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="why.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl</span>
+    </a>
+            <nav class="chapter-nav" aria-label="Chapters">
+      <a href="why.html">00 · Why</a>
+      <a href="index.html">01 · MDP</a>
+      <a href="value.html">02 · Value</a>
+      <a href="practice.html">Practice</a>
+      <a href="dp.html">03 · DP</a>
+      <a href="td.html">04 · TD</a>
+      <a class="active" href="qlearning.html">05 · DQN</a>
+      <a href="pg.html">06 · PG</a>
+      <a href="trpo.html">07 · TRPO</a>
+      <a href="ppo.html">08 · PPO</a>
+      <a href="grpo.html">09 · GRPO</a>
+      <span class="locked">10 · SAC</span>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#overview">1. Overview</a></li>
+        <li><a href="#tabular">2. Tabular Q-learning</a></li>
+        <li><a href="#convergence">3. Convergence</a></li>
+        <li><a href="#maxbias">4. Max &amp; overestimation</a></li>
+        <li><a href="#naive">5. Why naïve deep Q fails</a></li>
+        <li><a href="#replay">6. Experience replay</a></li>
+        <li><a href="#target">7. Target networks</a></li>
+        <li><a href="#dqn">8. DQN algorithm</a></li>
+        <li><a href="#loss">9. Loss, gradients, tricks</a></li>
+        <li><a href="#double">10. Double DQN</a></li>
+        <li><a href="#dueling">11. Dueling &amp; PER</a></li>
+        <li><a href="#rainbow">12. Rainbow &amp; beyond</a></li>
+        <li><a href="#lab">13. Laboratory</a></li>
+        <li><a href="#worked">14. Worked calculations</a></li>
+        <li><a href="#next">15. What follows</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Chapter 05 · Value-based deep RL</p>
+      <h1 class="study-title">Q-learning &amp; <em>Deep Q</em>-Networks</h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Q-learning is off-policy TD control: it learns \(Q^*\) while behaving with any
+        exploratory policy, by bootstrapping from \(\max_{a'}Q(s',a')\). This chapter
+        develops tabular Q-learning carefully (update, convergence conditions, maximisation
+        bias), then explains why a literal neural substitution \(Q(s,a;\theta)\) is unstable.
+        The Deep Q-Network (DQN) stabilises that substitution with two ideas — experience
+        replay and a lagged target network — which we derive as responses to specific failure
+        modes. We then cover Double DQN, dueling architectures, prioritised replay, and the
+        Rainbow stack. The laboratory implements tabular Q-learning with optional replay and
+        target freezes so you can watch the DQN machinery operate without a GPU.
+      </div>
+
+      <!-- 1 -->
+      <section class="study-section" id="overview">
+        <h2>1. Overview</h2>
+        <div class="prose-study">
+          <p class="lead">
+            Chapter&nbsp;04 introduced Q-learning as the off-policy sibling of SARSA. Here we
+            slow down and go deep: first the tabular algorithm as a stochastic approximation
+            of the Bellman optimality operator, then the engineering that made the same idea
+            work with deep networks on Atari (Mnih et al., 2013/2015).
+          </p>
+          <p>
+            Historically this is the hinge between “textbook RL” and “deep RL.” Everything
+            that follows in the value-based line — Double DQN, PER, Rainbow, C51, QR-DQN —
+            patches a pathology of the basic DQN recipe. The actor–critic / policy-gradient
+            line (next chapters) is a different response to related instability.
+          </p>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section class="study-section" id="tabular">
+        <h2>2. Tabular Q-learning</h2>
+
+        <div class="def-box">
+          <span class="box-label">Definition 2.1 · Q-learning update</span>
+          <p>
+            After observing transition \((s_t,a_t,r_{t+1},s_{t+1})\),
+            \[
+              Q(s_t,a_t)
+              \leftarrow
+              Q(s_t,a_t)
+              + \alpha_t
+              \Big(
+                r_{t+1}
+                + \gamma \max_{a'} Q(s_{t+1},a')
+                - Q(s_t,a_t)
+              \Big),
+            \]
+            with the understanding that \(\max_{a'}Q(s_{t+1},a')=0\) if \(s_{t+1}\) is terminal.
+          </p>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            The quantity in parentheses is the TD error for the optimality backup:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            \delta_t
+            =
+            r_{t+1} + \gamma \max_{a'} Q(s_{t+1},a') - Q(s_t,a_t).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Compare to the Bellman optimality equation (Chapter&nbsp;02):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            Q^*(s,a)
+            =
+            \mathbb{E}\!\left[
+              r + \gamma \max_{a'} Q^*(s',a')
+              \,\middle|\, s,a
+            \right].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Q-learning is a <strong>sample backup</strong> of (2): one realised
+            \((r,s')\) stands in for the expectation over \(P\), and the current table
+            stands in for \(Q^*\). Behavior policy \(\beta\) (often \(\varepsilon\)-greedy
+            w.r.t. \(Q\)) only decides which \((s,a)\) pairs are sampled; the target always
+            points at the greedy/optimal backup.
+          </p>
+        </div>
+
+        <h3>2.1 Pseudocode</h3>
+        <div class="eq-block tight">
+          <pre style="margin:0;font-family:var(--font-mono);font-size:0.78rem;line-height:1.55;color:var(--ink-soft);white-space:pre-wrap">Initialize Q(s,a) arbitrarily; Q(terminal,·)=0
+For each episode:
+  Initialize s
+  While s is not terminal:
+    a ← behavior(s)          # e.g. ε-greedy(Q)
+    Take a, observe r, s'
+    Q(s,a) ← Q(s,a) + α [ r + γ max_a' Q(s',a') − Q(s,a) ]
+    s ← s'</pre>
+        </div>
+
+        <h3>2.2 Greedy readout</h3>
+        <div class="prose-study">
+          <p>
+            At test time (and inside the target),
+            \(\pi(s)\in\arg\max_a Q(s,a)\). No model of \(P\) is required — that is why
+            Q-learning is the canonical model-free control algorithm for discrete actions.
+          </p>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section class="study-section" id="convergence">
+        <h2>3. Convergence (tabular)</h2>
+        <div class="thm-box">
+          <span class="box-label">Theorem 3.1 · Watkins &amp; Dayan (informal)</span>
+          <p>
+            In a finite MDP with bounded rewards, discount \(\gamma\in[0,1)\), learning rates
+            satisfying \(\sum_t \alpha_t(s,a)=\infty\) and
+            \(\sum_t \alpha_t(s,a)^2 &lt; \infty\) for every pair \((s,a)\) visited, and every
+            pair visited infinitely often, \(Q_t \to Q^*\) with probability 1.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            Proof idea: cast the update as a noisy contraction toward the unique fixed point
+            of \(\mathcal{T}^*\). The max operator is a non-expansion in
+            \(\|\cdot\|_\infty\); multiplied by \(\gamma\) it becomes a contraction. Stochastic
+            approximation theory then gives almost-sure convergence under the step-size and
+            visitation conditions.
+          </p>
+          <p>
+            Two practical corollaries:
+          </p>
+          <ol>
+            <li>You must keep exploring forever (or long enough) — fixed \(\varepsilon&gt;0\), or decaying \(\varepsilon\), or visiting schedules.</li>
+            <li>The result is for <em>tables</em>. It does <strong>not</strong> automatically transfer to neural \(Q_\theta\).</li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section class="study-section" id="maxbias">
+        <h2>4. The \(\max\) operator and overestimation</h2>
+        <div class="prose-study">
+          <p>
+            Let \(\hat Q(s',a') = Q^*(s',a') + \epsilon_{a'}\) with zero-mean noise. Then
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            \mathbb{E}\big[\max_{a'}\hat Q(s',a')\big]
+            \;\ge\;
+            \max_{a'}\mathbb{E}\big[\hat Q(s',a')\big]
+            =
+            \max_{a'} Q^*(s',a').
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Jensen’s inequality for the convex \(\max\) function: noisy estimates make
+            \(\max_{a'}\hat Q\) <strong>optimistically biased</strong>. Q-learning inherits
+            that bias in every bootstrap. In tables with enough visits the noise dies and the
+            bias vanishes asymptotically; early in learning — and chronically with function
+            approximation — overestimation can pick wrong actions and destabilise updates.
+          </p>
+          <p>
+            Double Q-learning (van Hasselt, 2010) and Double DQN (Section&nbsp;10) decorrelate
+            <em>action selection</em> from <em>action evaluation</em> to reduce this bias.
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · SARSA vs Q-learning (reprise)</span>
+          <p>
+            SARSA’s target \(\gamma Q(s',a')\) with \(a'\sim\pi_\varepsilon\) does not take a
+            hard max over noisy estimates in the same way, and evaluates the exploring policy.
+            Q-learning’s hard max is exactly what buys off-policy optimality — and exactly
+            what invites overestimation. There is no free lunch in that design choice.
+          </p>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section class="study-section" id="naive">
+        <h2>5. Why naïve deep Q-learning fails</h2>
+        <div class="prose-study">
+          <p>
+            Replace the table by a neural network \(Q(s,a;\theta)\) and minimise
+            \(\big(r+\gamma\max_{a'}Q(s',a';\theta)-Q(s,a;\theta)\big)^2\) by gradient
+            descent on the same \(\theta\) that appears in the target. Three pathologies hit
+            at once:
+          </p>
+          <ol>
+            <li>
+              <strong>Correlated samples.</strong> Consecutive Atari frames (or robot steps)
+              are highly dependent. SGD assumes roughly i.i.d. minibatches; online updates
+              chase a moving, correlated stream and overfit the recent trajectory.
+            </li>
+            <li>
+              <strong>Non-stationary targets.</strong> The bootstrap target depends on
+              \(\theta\). Every gradient step moves the target. Optimising a regression
+              problem whose labels move with the weights is unstable — especially with a
+              flexible approximator.
+            </li>
+            <li>
+              <strong>Deadly triad.</strong> Function approximation + bootstrapping +
+              off-policy sampling (Chapter&nbsp;04) has no general convergence guarantee;
+              divergence is possible.
+            </li>
+          </ol>
+          <p>
+            DQN’s two headline fixes address (1) and (2) directly. The triad is mitigated,
+            not eliminated — hence later tricks and the rise of on-policy deep policy gradients.
+          </p>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section class="study-section" id="replay">
+        <h2>6. Experience replay</h2>
+        <div class="def-box">
+          <span class="box-label">Definition 6.1 · Replay buffer</span>
+          <p>
+            Store transitions \((s,a,r,s',\mathrm{done})\) in a buffer \(\mathcal{D}\) of
+            capacity \(N\) (FIFO). Each learning step, draw a minibatch of size \(B\)
+            uniformly (or by priority — Section&nbsp;11) and perform a gradient update on
+            that minibatch.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            Why it helps:
+          </p>
+          <ul>
+            <li><strong>Breaks temporal correlation</strong> — random minibatches mix distant experiences.</li>
+            <li><strong>Data efficiency</strong> — each transition is reused many times (off-policy learning makes this valid in principle).</li>
+            <li><strong>Smooths learning</strong> — averages over a broader state distribution than the current episode.</li>
+          </ul>
+          <p>
+            Cost: the buffer’s distribution lags the current policy (old exploratory data).
+            Extreme policy shifts can make old data off-policy in a harmful way; in practice
+            large buffers and slow \(\varepsilon\) schedules keep this manageable for DQN-style
+            discrete control.
+          </p>
+        </div>
+
+        <div class="remark-box">
+          <span class="box-label">Remark · Why SARSA rarely uses huge replay</span>
+          <p>
+            SARSA is on-policy: the target uses \(a'\sim\pi_{\mathrm{current}}\). Replaying
+            old \((s,a,a')\) under a new \(\pi\) is incorrect without importance sampling.
+            Q-learning’s \(\max\) target does not need the behavior’s next action — replay
+            fits naturally.
+          </p>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section class="study-section" id="target">
+        <h2>7. Target networks</h2>
+        <div class="prose-study">
+          <p>
+            Introduce a second network \(Q(s,a;\theta^-)|\) whose weights \(\theta^-\) are a
+            lagged copy of \(\theta\). The TD target becomes
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            y_t
+            =
+            r_{t+1}
+            + \gamma \max_{a'} Q(s_{t+1}, a'; \theta^-).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Online network \(\theta\) is trained to match \(y_t\); \(\theta^-\) is held fixed
+            for \(C\) steps (hard update: \(\theta^- \leftarrow \theta\)) or tracked slowly
+            (soft / Polyak: \(\theta^- \leftarrow \tau\theta + (1-\tau)\theta^-\)).
+          </p>
+          <p>
+            Intuition: freeze the bootstrap bootstrap source so the regression target is a
+            slowly moving “label generator.” You still bootstrap, but not into a target that
+            jitters every minibatch.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Design note</span>
+          <p>
+            Hard updates every \(C\in[10^3,10^4]\) steps were used in the original DQN paper.
+            Soft updates with small \(\tau\) (e.g. \(0.005\)) are common in continuous-control
+            cousins (DDPG/TD3/SAC). Both implement the same idea: target lag.
+          </p>
+        </div>
+      </section>
+
+      <!-- 8 -->
+      <section class="study-section" id="dqn">
+        <h2>8. The DQN algorithm (Mnih et al.)</h2>
+        <div class="prose-study">
+          <p>
+            Putting the pieces together for Atari-scale discrete control:
+          </p>
+        </div>
+        <div class="eq-block tight">
+          <pre style="margin:0;font-family:var(--font-mono);font-size:0.75rem;line-height:1.5;color:var(--ink-soft);white-space:pre-wrap">Initialize online Q_θ, target Q_θ⁻ ← Q_θ, replay D
+For step t = 1, 2, …:
+  With prob ε: a_t ~ Uniform(A); else a_t = argmax_a Q(s_t,a; θ)
+  Execute a_t, observe r_t, s_{t+1}, done
+  Store (s_t, a_t, r_t, s_{t+1}, done) in D
+  Sample minibatch {(s_j,a_j,r_j,s_j',d_j)} from D
+  y_j = r_j + γ (1−d_j) max_a' Q(s_j', a'; θ⁻)
+  Gradient descent on (1/B) Σ_j (y_j − Q(s_j,a_j; θ))²
+  Every C steps: θ⁻ ← θ
+  Decay ε</pre>
+        </div>
+        <div class="prose-study">
+          <p>
+            State preprocessing in Atari (for completeness): grayscale, downsample, stack
+            the last 4 frames (approximate Markov state — Chapter&nbsp;01), reward clipping
+            to \(\{−1,0,+1\}\) for stability across games.
+          </p>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">Architecture sketch</span>
+          <p>
+            Classic DQN CNN: conv layers over the frame stack → fully connected →
+            \(|A|\) outputs (one Q-value per action). Evaluating \(\arg\max_a Q(s,a)\) is one
+            forward pass. This output layout is why DQN wants <em>discrete</em> actions;
+            continuous \(A\) needs actor–critic / DPG instead.
+          </p>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section class="study-section" id="loss">
+        <h2>9. Loss, gradients, and training details</h2>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            \mathcal{L}(\theta)
+            =
+            \mathbb{E}_{(s,a,r,s')\sim\mathcal{D}}
+            \Big[
+              \big(
+                r + \gamma \max_{a'} Q(s',a';\theta^-)
+                - Q(s,a;\theta)
+              \big)^2
+            \Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Important implementation subtleties:
+          </p>
+          <ul>
+            <li>
+              <strong>Stop-gradient on \(y\).</strong> Treat \(y=r+\gamma\max Q_{\theta^-}\)
+              as a constant w.r.t. \(\theta\). Do not backprop through the target network
+              (or through \(\max\) into \(\theta^-\)).
+            </li>
+            <li>
+              <strong>Huber loss</strong> (Smooth L1) is often used instead of pure MSE to
+              reduce the effect of large TD errors.
+            </li>
+            <li>
+              <strong>Gradient clipping</strong> and careful learning rates (Adam/RMSProp)
+              matter; DQN is famously hyperparameter-sensitive.
+            </li>
+            <li>
+              <strong>Terminal masking:</strong> multiply the bootstrap by \((1-\mathrm{done})\).
+            </li>
+          </ul>
+        </div>
+
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            \nabla_\theta \mathcal{L}
+            \approx
+            -\,\mathbb{E}\Big[
+              \delta\,
+              \nabla_\theta Q(s,a;\theta)
+            \Big],
+            \qquad
+            \delta = y - Q(s,a;\theta).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Same structural form as tabular \(Q \leftarrow Q + \alpha\delta\), with
+            \(\nabla_\theta Q\) generalising the “indicator of cell \((s,a)\)”.
+          </p>
+        </div>
+      </section>
+
+      <!-- 10 -->
+      <section class="study-section" id="double">
+        <h2>10. Double DQN</h2>
+        <div class="prose-study">
+          <p>
+            Standard DQN uses the target network for both selecting and evaluating the max:
+            \(\max_{a'}Q(s',a';\theta^-)\). Double DQN (van Hasselt et al., 2016) uses the
+            <em>online</em> net to select and the <em>target</em> net to evaluate:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            y
+            =
+            r + \gamma\,
+            Q\!\left(
+              s',\,
+              \arg\max_{a'} Q(s',a';\theta),\,
+              \theta^-
+            \right).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Selection can still be optimistic, but evaluation uses a different set of weights,
+            cutting the systematic overestimation that a single noisy \(\max\) produces.
+            Empirically this improves value accuracy and often policies on Atari.
+          </p>
+        </div>
+      </section>
+
+      <!-- 11 -->
+      <section class="study-section" id="dueling">
+        <h2>11. Dueling networks &amp; prioritised replay</h2>
+
+        <h3>11.1 Dueling architecture</h3>
+        <div class="prose-study">
+          <p>
+            Factor \(Q\) into a state-value stream \(V(s)\) and an advantage stream \(A(s,a)\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            Q(s,a)
+            =
+            V(s)
+            +
+            \Big(
+              A(s,a) - \tfrac{1}{|A|}\sum_{a'} A(s,a')
+            \Big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The subtraction identifies \(Q\) (otherwise \(V\) and \(A\) are unidentifiable up
+            to a constant). Benefit: the network can learn which states are valuable even when
+            the action does not matter much — useful when many actions have similar outcomes.
+          </p>
+        </div>
+
+        <h3>11.2 Prioritised Experience Replay (PER)</h3>
+        <div class="prose-study">
+          <p>
+            Sample transitions with probability proportional to TD-error magnitude
+            \(p_i \propto |\delta_i|^\omega\), then correct the bias with importance-sampling
+            weights \(w_i = (N\cdot P(i))^{-\beta}\). Idea: replay surprising transitions more
+            often. Hyperparameters \(\omega,\beta\) anneal during training.
+          </p>
+        </div>
+      </section>
+
+      <!-- 12 -->
+      <section class="study-section" id="rainbow">
+        <h2>12. Rainbow and the wider family</h2>
+        <div class="prose-study">
+          <p>
+            <strong>Rainbow</strong> (Hessel et al., 2018) combines: Double DQN, dueling,
+            PER, multi-step returns, distributional RL (C51 — learn a distribution over
+            returns, not a scalar mean), and noisy nets (learned exploration instead of
+            \(\varepsilon\)-greedy). Ablations showed distributional RL, multi-step, and PER
+            among the largest gains.
+          </p>
+          <p>
+            Further lines: QR-DQN / IQN (quantile distributions), Rainbow variants, and
+            model-based extensions. For continuous actions the value-based \(\arg\max\) story
+            ends — DDPG/TD3/SAC take over with actor networks (later chapters).
+          </p>
+        </div>
+
+        <div class="dl-inline">
+          <div>
+            <dt>DQN</dt>
+            <dd>Replay + target net + CNN Q.</dd>
+          </div>
+          <div>
+            <dt>DDQN</dt>
+            <dd>Decouple select / evaluate to cut overestimation.</dd>
+          </div>
+          <div>
+            <dt>Rainbow</dt>
+            <dd>Stack of orthogonal improvements on the DQN skeleton.</dd>
+          </div>
+        </div>
+      </section>
+
+      <!-- 13 LAB -->
+      <section class="study-section lab-wide" id="lab">
+        <h2>13. Laboratory · Q-learning with DQN machinery</h2>
+        <div class="prose-study">
+          <p>
+            Same 4×8 cliff as Chapter&nbsp;04, but now you can toggle <strong>replay</strong>
+            and a <strong>target table</strong> (tabular stand-in for \(\theta^-\)). This is
+            not a neural net — it is the algorithmic skeleton of DQN made inspectable:
+            correlated online updates vs shuffled replay, and bootstrapping from a lagged
+            \(Q^-\) vs from live \(Q\).
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Tabular DQN-style control</h3>
+            <span>Replay · target lag · Double option</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0.85rem;margin-bottom:1rem">
+            <div class="control-block">
+              <span class="control-label">Machinery</span>
+              <label class="toggle"><input type="checkbox" id="useReplay" checked /><span>Experience replay</span></label>
+              <label class="toggle"><input type="checkbox" id="useTarget" checked /><span>Target network (lagged Q⁻)</span></label>
+              <label class="toggle"><input type="checkbox" id="useDouble" /><span>Double Q target</span></label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Hyperparameters</span>
+              <label class="slider-label">α <input type="range" id="qlAlpha" min="0.05" max="1" step="0.05" value="0.40" /><strong id="qlAlphaL">0.40</strong></label>
+              <label class="slider-label">γ <input type="range" id="qlGamma" min="0.5" max="0.99" step="0.01" value="0.95" /><strong id="qlGammaL">0.95</strong></label>
+              <label class="slider-label">ε <input type="range" id="qlEps" min="0" max="0.5" step="0.05" value="0.15" /><strong id="qlEpsL">0.15</strong></label>
+              <label class="slider-label">Target sync every N updates <input type="range" id="qlSync" min="1" max="50" step="1" value="10" /><strong id="qlSyncL">10</strong></label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Run</span>
+              <div class="btn-row">
+                <button type="button" class="btn small" id="qlStep">1 episode</button>
+                <button type="button" class="btn small ghost" id="qlMany">100 episodes</button>
+                <button type="button" class="btn small ghost" id="qlReset">Reset</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="split" style="grid-template-columns:1fr 1fr;gap:1rem">
+            <div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:0 0 0.5rem">Online Q · greedy</h4>
+              <div class="dp-grid" id="qlGrid"></div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:1rem 0 0.5rem">Target Q⁻ · max</h4>
+              <div class="dp-grid" id="qlGridTgt"></div>
+            </div>
+            <div>
+              <div class="stat-strip">
+                <div><span>Episodes</span><strong id="qlEp">0</strong></div>
+                <div><span>Updates</span><strong id="qlUp">0</strong></div>
+                <div><span>Buffer</span><strong id="qlBuf">0</strong></div>
+                <div><span>Avg |δ|</span><strong id="qlDelta">—</strong></div>
+                <div><span>Last G</span><strong id="qlG">—</strong></div>
+                <div><span>Avg G₂₀</span><strong id="qlGavg">—</strong></div>
+                <div><span>Syncs</span><strong id="qlSyncs">0</strong></div>
+                <div><span>Overest. proxy</span><strong id="qlOver">—</strong></div>
+              </div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:1rem 0 0.5rem">Ledger</h4>
+              <div class="bellman-trace" id="qlTrace">Enable replay + target, run episodes. Compare online vs Q⁻ grids; watch buffer size and sync count.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 14 -->
+      <section class="study-section" id="worked">
+        <h2>14. Worked calculations</h2>
+
+        <h3>14.1 One Q-learning step</h3>
+        <div class="prose-study">
+          <p>
+            \(Q(s,a)=0.5\), \(\alpha=0.1\), \(\gamma=0.99\), \(r=1\), next Q-values
+            \((2.0, 2.4, 1.1)\). Then \(\max=2.4\),
+            \(\delta=1+0.99\cdot 2.4-0.5=2.876\),
+            \(Q\leftarrow 0.5+0.1\cdot 2.876=0.7876\).
+          </p>
+        </div>
+
+        <h3>14.2 Double target vs vanilla</h3>
+        <div class="prose-study">
+          <p>
+            Online Q at \(s'\): \((5.0, 4.0)\). Target Q⁻: \((3.0, 4.5)\).
+            Vanilla DQN target uses \(\max Q^-=4.5\).
+            Double DQN selects \(\arg\max Q_{\mathrm{online}}=a_0\), evaluates
+            \(Q^-(s',a_0)=3.0\). Same state, different bootstrap — Double is less optimistic
+            here.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Vanilla y = r + γ max_a' Q⁻(s',a').</li>
+            <li class="hidden-step">Double: a* = argmax_a Q(s',a;θ), y = r + γ Q(s',a*;θ⁻).</li>
+            <li class="hidden-step">Example: max Q⁻=4.5 but Q⁻(a*)=3.0 → lower target.</li>
+            <li class="hidden-step">Replay: store (s,a,r,s',done); sample i.i.d.-ish minibatches.</li>
+            <li class="hidden-step">Every C updates: θ⁻ ← θ (hard sync), or soft Polyak.</li>
+            <li class="hidden-step">Loss L = E[(y − Q_θ(s,a))²] with y stop-grad.</li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- 15 -->
+      <section class="study-section" id="next">
+        <h2>15. What follows</h2>
+        <div class="prose-study">
+          <p>
+            Q-learning + DQN dominate <em>discrete</em> action spaces. Continuous control
+            needs a different story: policy gradients and actor–critics (REINFORCE → A2C →
+            TRPO/PPO) or deterministic policy gradients (DDPG/TD3) and entropy-regularised
+            soft Q-learning (SAC). Those chapters come next.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Mnih et al., 2015 — Human-level control through deep RL (DQN Nature paper).</li>
+            <li>van Hasselt et al., 2016 — Deep Reinforcement Learning with Double Q-learning.</li>
+            <li>Hessel et al., 2018 — Rainbow.</li>
+            <li><a href="td.html">Chapter 04</a> — TD, SARSA, deadly triad.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="td.html" style="color:inherit;text-decoration:none">← Temporal-Difference Learning</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next chapter</p>
+            <h3>Policy Gradients</h3>
+            <p>REINFORCE, baselines, actor–critic — leave argmax_a Q behind.</p>
+          </div>
+          <a class="btn primary" href="pg.html">Continue →</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Chapter 05 · Q-learning &amp; Deep Q-Networks</p>
+    <p class="muted">From tabular off-policy control to replay, targets, Double DQN, and Rainbow.</p>
+  </footer>
+
+  <script src="qlearning.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

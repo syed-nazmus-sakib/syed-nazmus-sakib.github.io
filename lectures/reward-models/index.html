@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>00 · What Are Reward Models - Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl · Rewards</span>
+    </a>
+    <nav class="chapter-nav" aria-label="Chapters">
+      <a class="active" href="index.html">00 · Overview</a>
+      <a href="scalar.html">01 · Scalar</a>
+      <a href="pointwise.html">02 · Pointwise</a>
+      <a href="pairwise.html">03 · Pairwise</a>
+      <a href="listwise.html">04 · Listwise</a>
+      <a href="orm.html">05 · ORM</a>
+      <a href="prm.html">06 · PRM</a>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#pipeline" style="text-decoration:none">Pipeline</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#what">1. What is a reward model?</a></li>
+        <li><a href="#pipeline">2. Where it fits</a></li>
+        <li><a href="#vs">3. RM vs SFT vs RL</a></li>
+        <li><a href="#why">4. Why it matters</a></li>
+        <li><a href="#axes">5. How we classify RMs</a></li>
+        <li><a href="#roadmap">6. Learning roadmap</a></li>
+        <li><a href="#example">7. One running example</a></li>
+        <li><a href="#next">8. What follows</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Reward Models · Course overview</p>
+      <h1 class="study-title">What is a <em>reward model</em>?</h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        A reward model (RM) is a learned judge. It looks at a prompt and a candidate
+        answer (or a reasoning step) and returns a score, a preference, or a critique.
+        In modern LLM and VLM training it sits between supervised fine-tuning and
+        reinforcement learning: humans (or programs) teach the judge, then the judge
+        teaches the policy. This page places the RM in the full training pipeline,
+        contrasts it with SFT and RL, and maps the architectures we will study next.
+      </div>
+
+      <section class="study-section" id="what">
+        <h2>1. What is a reward model?</h2>
+        <div class="prose-study">
+          <p class="lead">
+            The language model generates text. The reward model judges that text.
+          </p>
+          <p>
+            In the simplest form:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            (x, y) \;\mapsto\; r_\theta(x,y)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Here \(x\) is the prompt, \(y\) is a response, and \(r_\theta\) is a number
+            (or a probability, or a ranking, depending on the architecture).
+          </p>
+          <p>
+            The RM is not the agent that chats with users. It is the scoring function
+            used to select answers, filter data, guide search, or drive RL.
+          </p>
+        </div>
+
+        <div class="def-box">
+          <span class="box-label">One-sentence definition</span>
+          <p>
+            A reward model is a learned preference or correctness function that turns
+            human, programmatic, or synthetic feedback into a signal a training loop can use.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="pipeline">
+        <h2>2. Where it fits in LLM / VLM training</h2>
+        <div class="prose-study">
+          <p>
+            Think of three big stages. The reward model lives mainly in the last one.
+          </p>
+        </div>
+
+        <div class="flow-steps">
+          <div class="flow-step"><strong>Pre-training</strong> · predict next token on huge corpora. Learn language and world knowledge. No RM yet.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step"><strong>Supervised fine-tuning (SFT)</strong> · imitate high-quality demos. Learn the format of helpful answers. Still no RM required.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight"><strong>Post-training with feedback</strong> · collect preferences or verifications, train an RM, then optimize the policy with that RM (RLHF, RLAIF, GRPO, …).</div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            A common RLHF loop looks like this:
+          </p>
+        </div>
+
+        <div class="board-grid" style="grid-template-columns:1fr;max-width:36rem;gap:8px" aria-label="RLHF loop">
+          <div class="board-cell" style="min-height:auto;padding:0.85rem 1rem;align-items:flex-start">
+            <span class="cell-label">1 · Collect</span>
+            <strong style="font-size:0.95rem;font-weight:500;color:var(--ink-soft)">Humans (or another model) rank or label answers</strong>
+          </div>
+          <div class="board-cell" style="min-height:auto;padding:0.85rem 1rem;align-items:flex-start">
+            <span class="cell-label">2 · Train RM</span>
+            <strong style="font-size:0.95rem;font-weight:500;color:var(--ink-soft)">Fit a judge so preferred answers get higher scores</strong>
+          </div>
+          <div class="board-cell" style="min-height:auto;padding:0.85rem 1rem;align-items:flex-start">
+            <span class="cell-label">3 · Optimize policy</span>
+            <strong style="font-size:0.95rem;font-weight:500;color:var(--ink-soft)">PPO / GRPO / best-of-N use the judge as the reward</strong>
+          </div>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">Not only chat models</span>
+          <p>
+            The same pattern appears for VLMs (image + text), math tutors, code agents, and
+            tool-using systems. Whenever “good behavior” is hard to write as a hard rule,
+            a learned reward model is a practical substitute.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="vs">
+        <h2>3. Reward model vs SFT vs RL</h2>
+        <table class="practice-table">
+          <thead>
+            <tr><th></th><th>SFT</th><th>Reward model</th><th>RL (with RM)</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Learns</td>
+              <td>How to imitate demos</td>
+              <td>How to score candidates</td>
+              <td>How to act for higher score</td>
+            </tr>
+            <tr>
+              <td>Needs</td>
+              <td>\((x,y^*)\) pairs</td>
+              <td>Preferences or labels</td>
+              <td>A reward signal (often the RM)</td>
+            </tr>
+            <tr>
+              <td>Output</td>
+              <td>A policy \(\pi\)</td>
+              <td>A judge \(r_\theta\)</td>
+              <td>An improved policy \(\pi\)</td>
+            </tr>
+            <tr>
+              <td>Role</td>
+              <td>Start from good behavior</td>
+              <td>Define “better”</td>
+              <td>Climb that definition</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="prose-study">
+          <p>
+            Short version:
+          </p>
+          <ul>
+            <li><strong>SFT</strong> copies answers.</li>
+            <li><strong>RM</strong> learns what “better” means.</li>
+            <li><strong>RL</strong> pushes the generator toward higher RM scores.</li>
+          </ul>
+          <p>
+            You can use an RM without RL (best-of-\(N\), filtering, search). You cannot do
+            classical RLHF-style preference optimization without some reward or preference
+            signal. That signal is often a reward model.
+          </p>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Common confusion</span>
+          <p>
+            People say “we did RLHF” when they only trained a preference model and reranked.
+            Reranking uses the RM at inference. RLHF also updates the generator’s weights
+            with that signal. Both are useful. They are not the same thing.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="why">
+        <h2>4. Why reward models are important</h2>
+        <div class="prose-study">
+          <ol>
+            <li>
+              <strong>Humans are slow.</strong>
+              You cannot ask a person to score every RL sample. An RM amortizes human
+              (or verifier) judgment into a fast network.
+            </li>
+            <li>
+              <strong>Preferences are relative.</strong>
+              People are better at “A beats B” than at giving absolute scores. RMs turn
+              those comparisons into a usable number.
+            </li>
+            <li>
+              <strong>RL needs a scalar (or dense) signal.</strong>
+              PPO and friends expect a reward. The RM is how preference data becomes that reward.
+            </li>
+            <li>
+              <strong>Process needs denser feedback.</strong>
+              For math and agents, checking only the final answer wastes most of the trajectory.
+              Process reward models score steps along the way.
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="axes">
+        <h2>5. How we classify reward models</h2>
+        <div class="prose-study">
+          <p>
+            “ORM versus PRM” is only one axis. A full taxonomy has four.
+          </p>
+        </div>
+
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>1 · What it outputs</h4>
+            <p>One scalar, several objectives, a pairwise preference, a distribution, or a written critique.</p>
+            <p class="mono-line">score · preference · critique</p>
+          </div>
+          <div class="compare-card">
+            <h4>2 · What it evaluates</h4>
+            <p>Whole answer (ORM), each step (PRM), or future success of a prefix (value model).</p>
+            <p class="mono-line">outcome · process · value</p>
+          </div>
+        </div>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>3 · How it is trained</h4>
+            <p>Binary classification, pairwise ranking, listwise ranking, regression, or generative supervision.</p>
+            <p class="mono-line">point · pair · list · gen</p>
+          </div>
+          <div class="compare-card">
+            <h4>4 · Where labels come from</h4>
+            <p>Humans, another AI, unit tests / compilers, environment reward, or rollouts.</p>
+            <p class="mono-line">human · AI · verifier · rollout</p>
+          </div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Example: a classical InstructGPT reward model is
+            <em>scalar + outcome + pairwise + human</em>.
+            A Math-Shepherd-style PRM is closer to
+            <em>scalar/process + rollout labels</em>.
+            A judge LLM that writes “A is better because…” is
+            <em>generative + pairwise</em>.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="roadmap">
+        <h2>6. Learning roadmap</h2>
+        <div class="prose-study">
+          <p>
+            We study architectures one by one, with worked numerical examples on every page.
+          </p>
+        </div>
+        <table class="practice-table">
+          <thead>
+            <tr><th>#</th><th>Architecture</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>01</td><td><a href="scalar.html">Scalar discriminative RM</a> (classical RLHF)</td><td>Open</td></tr>
+            <tr><td>02</td><td><a href="pointwise.html">Pointwise binary verifier</a></td><td>Open</td></tr>
+            <tr><td>03</td><td><a href="pairwise.html">Direct pairwise comparator</a></td><td>Open</td></tr>
+            <tr><td>04</td><td><a href="listwise.html">Listwise ranking RM</a></td><td>Open</td></tr>
+            <tr><td>05</td><td><a href="orm.html">Outcome Reward Model (ORM)</a></td><td>Open</td></tr>
+            <tr><td>06</td><td><a href="prm.html">Process Reward Model (PRM)</a></td><td>Open</td></tr>
+            <tr><td>07</td><td>Value / future-success model</td><td>Soon</td></tr>
+            <tr><td>08</td><td>Multi-head / multi-objective RM</td><td>Soon</td></tr>
+            <tr><td>09</td><td>Generative reward model</td><td>Soon</td></tr>
+            <tr><td>10</td><td>Critique-then-score (reasoning RM)</td><td>Soon</td></tr>
+            <tr><td>11</td><td>Implicit reward model</td><td>Soon</td></tr>
+            <tr><td>12</td><td>Personalized / conditional RM</td><td>Soon</td></tr>
+            <tr><td>13</td><td>Ensemble / uncertainty-aware RM</td><td>Soon</td></tr>
+            <tr><td>14</td><td>Hybrid learned + rule-based systems</td><td>Soon</td></tr>
+          </tbody>
+        </table>
+        <div class="prose-study">
+          <p>
+            Categories overlap on purpose. A PRM can be discriminative or generative.
+            An ORM can be pointwise or pairwise. We separate ideas so each page can
+            stay focused on one clear mechanism.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="example">
+        <h2>7. One running example</h2>
+        <div class="prose-study">
+          <p>
+            Prompt:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            x=\text{“Explain why the sky appears blue.”}
+          \]
+        </div>
+        <div class="prose-study">
+          <p><strong>Response A</strong> (better):</p>
+          <p>
+            Blue light is scattered more strongly than red light by molecules in the atmosphere.
+          </p>
+          <p><strong>Response B</strong> (worse):</p>
+          <p>
+            The sky reflects the blue color of the ocean.
+          </p>
+          <p>
+            A human marks \(A \succ B\). Different architectures will handle this pair
+            differently:
+          </p>
+          <ul>
+            <li><strong>Scalar RM:</strong> learn \(r(A)>r(B)\) via Bradley-Terry.</li>
+            <li><strong>Pointwise:</strong> if we have absolute labels, score each as correct/incorrect (harder for open-ended prose).</li>
+            <li><strong>Direct comparator:</strong> read \(A\) and \(B\) together and predict \(P(A\succ B)\).</li>
+            <li><strong>Listwise:</strong> if we have four candidates, rank the whole list at once.</li>
+          </ul>
+          <p>
+            We reuse this sky example (and a math discount example for PRMs) across chapters
+            so the differences stay concrete.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>8. What follows</h2>
+        <div class="prose-study">
+          <p>
+            Next we build the classical scalar discriminative reward model from scratch:
+            Transformer backbone, linear head, Bradley-Terry loss, and a full numerical walkthrough.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Christiano et al., 2017; Stiennon et al., 2020; Ouyang et al., 2022 (InstructGPT).</li>
+            <li>Lightman et al., 2023 (PRM800K); Wang et al., 2024 (Math-Shepherd).</li>
+            <li>Pearl RL course (<code>../ppo.html</code>, <code>../grpo.html</code>) for how RMs are consumed.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Next chapter</p>
+            <h3>Scalar discriminative RM</h3>
+            <p>One number per answer. Learned from \(A \succ B\).</p>
+          </div>
+          <a class="btn primary" href="scalar.html">Start →</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Reward Models · Overview</p>
+    <p class="muted">Judge first. Then optimize. Examples over jargon.</p>
+  </footer>
+
+  <script src="nav.js"></script>
+</body>
+</html>

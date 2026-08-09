@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>07 · TRPO — Pearl</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("pearl-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="pearl-field" aria-hidden="true"></div>
+  <div class="steam" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="why.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">Pearl</span>
+    </a>
+            <nav class="chapter-nav" aria-label="Chapters">
+      <a href="why.html">00 · Why</a>
+      <a href="index.html">01 · MDP</a>
+      <a href="value.html">02 · Value</a>
+      <a href="practice.html">Practice</a>
+      <a href="dp.html">03 · DP</a>
+      <a href="td.html">04 · TD</a>
+      <a href="qlearning.html">05 · DQN</a>
+      <a href="pg.html">06 · PG</a>
+      <a class="active" href="trpo.html">07 · TRPO</a>
+      <a href="ppo.html">08 · PPO</a>
+      <a href="grpo.html">09 · GRPO</a>
+      <span class="locked">10 · SAC</span>
+    </nav>
+    <div class="topbar-actions">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#overview">1. Overview</a></li>
+        <li><a href="#problem">2. The instability problem</a></li>
+        <li><a href="#cpi">3. Conservative policy iteration</a></li>
+        <li><a href="#surrogate">4. Surrogate objective</a></li>
+        <li><a href="#kl">5. KL trust region</a></li>
+        <li><a href="#trpo-opt">6. TRPO optimization problem</a></li>
+        <li><a href="#natural">7. Natural gradient &amp; Fisher</a></li>
+        <li><a href="#cg">8. Conjugate gradients</a></li>
+        <li><a href="#linesearch">9. Line search</a></li>
+        <li><a href="#algo">10. Full algorithm</a></li>
+        <li><a href="#gae">11. Advantages in practice</a></li>
+        <li><a href="#theory">12. Theory notes</a></li>
+        <li><a href="#ppo-bridge">13. Bridge to PPO</a></li>
+        <li><a href="#lab">14. Laboratory</a></li>
+        <li><a href="#worked">15. Worked calculations</a></li>
+        <li><a href="#next">16. What follows</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main">
+      <p class="chapter-kicker">Chapter 07 · Trust-region policy optimization</p>
+      <h1 class="study-title"><em>TRPO</em></h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Trust Region Policy Optimization (Schulman et al., 2015) stabilizes on-policy policy
+        gradients by maximizing a surrogate for expected improvement subject to a hard
+        constraint on how far the new policy may move from the old one in KL divergence.
+        This chapter derives the surrogate from performance-difference lemmas, formulates
+        the constrained problem, connects it to the natural policy gradient via the Fisher
+        information matrix, and unpacks the practical solver: Hessian-vector products,
+        conjugate gradients, and a backtracking line search. We close with the conceptual
+        jump to PPO’s clipped objective. The laboratory visualizes surrogate improvement vs
+        mean KL on a tabular softmax policy so the trust-region trade-off is concrete.
+      </div>
+
+      <!-- 1 -->
+      <section class="study-section" id="overview">
+        <h2>1. Overview</h2>
+        <div class="prose-study">
+          <p class="lead">
+            Chapter&nbsp;06 ended with a warning: Euclidean steps in \(\theta\)-space are the
+            wrong geometry for policies. TRPO is the paper that took that warning seriously
+            and built a usable deep RL algorithm around a <em>trust region</em> in policy space.
+          </p>
+          <p>
+            TRPO sits between vanilla REINFORCE/A2C and PPO. It is more principled (and more
+            expensive) than PPO; PPO is best understood as “TRPO’s idea, without conjugate
+            gradients.” Reading TRPO carefully makes PPO’s clipping feel inevitable rather
+            than arbitrary.
+          </p>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section class="study-section" id="problem">
+        <h2>2. The instability problem (restated precisely)</h2>
+        <div class="prose-study">
+          <p>
+            On-policy methods collect data under \(\pi_{\theta_{\mathrm{old}}}\), compute a
+            gradient estimate, update to \(\theta_{\mathrm{new}}\), then <em>must discard</em>
+            that data. If the update collapses \(\pi\) (e.g. one action’s probability jumps
+            to nearly 1 in many states), subsequent rollouts are useless and recovery is slow.
+          </p>
+          <p>
+            Two mismatches drive collapse:
+          </p>
+          <ol>
+            <li>
+              <strong>Parameter vs distribution.</strong> \(\|\Delta\theta\|_2\) small does not
+              imply \(\mathrm{KL}(\pi_{\theta}\,\|\,\pi_{\theta+\Delta\theta})\) small.
+            </li>
+            <li>
+              <strong>Surrogate vs true objective.</strong> The gradient is usually of a
+              local approximation to \(J\), valid only near \(\theta_{\mathrm{old}}\). Large
+              steps leave the region where the approximation holds.
+            </li>
+          </ol>
+          <p>
+            TRPO addresses both: optimize a local surrogate, and constrain step size in
+            <em>KL</em>, not in Euclidean \(\theta\).
+          </p>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section class="study-section" id="cpi">
+        <h2>3. Conservative policy improvement</h2>
+        <div class="prose-study">
+          <p>
+            Kakade &amp; Langford’s conservative policy iteration and related performance
+            difference lemmas bound how much \(J\) can change when you switch policies.
+            Informally, for policies \(\pi\) and \(\pi'\),
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            J(\pi') - J(\pi)
+            =
+            \mathbb{E}_{s\sim d^{\pi'},\, a\sim\pi'}
+            \big[ A^{\pi}(s,a) \big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Exact, but awkward: the expectation uses the <em>new</em> occupancy \(d^{\pi'}\),
+            which you do not have until you deploy \(\pi'\). Replace \(d^{\pi'}\) by
+            \(d^{\pi}\) and you get a first-order surrogate that matches the true improvement
+            to linear order in the policy change:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            L_\pi(\pi')
+            \;=\;
+            J(\pi)
+            +
+            \mathbb{E}_{s\sim d^{\pi},\, a\sim\pi'}
+            \big[ A^{\pi}(s,a) \big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Then \(L_\pi(\pi)=J(\pi)\) and \(\nabla_{\pi'} L_\pi|_{\pi'=\pi} = \nabla J\)
+            (in the appropriate sense). Maximizing \(L_\pi\) is therefore a sensible local
+            proxy for maximizing \(J\) — <em>provided</em> \(\pi'\) stays near \(\pi\) so that
+            \(d^{\pi'}\approx d^{\pi}\) and higher-order terms remain small.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Theorem 3.1 · Improvement lower bound (schematic)</span>
+          <p>
+            Under mild conditions there exists \(C&gt;0\) such that
+            \[
+              J(\pi')
+              \;\ge\;
+              L_\pi(\pi')
+              - C\cdot
+              \mathbb{E}_{s\sim d^{\pi}}
+              \big[
+                \mathrm{KL}\big(\pi'(\cdot\mid s)\,\|\,\pi(\cdot\mid s)\big)
+              \big].
+            \]
+            Maximizing \(L_\pi\) while keeping mean KL small therefore lower-bounds true
+            improvement — the theoretical heart of TRPO.
+          </p>
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section class="study-section" id="surrogate">
+        <h2>4. Importance-sampled surrogate</h2>
+        <div class="prose-study">
+          <p>
+            Sampling \(a\sim\pi'\) in (2) is inconvenient when you only have data from \(\pi\).
+            Rewrite with importance weights:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            L_\pi(\pi')
+            =
+            J(\pi)
+            +
+            \mathbb{E}_{s\sim d^{\pi},\, a\sim\pi}
+            \left[
+              \frac{\pi'(a\mid s)}{\pi(a\mid s)}
+              A^{\pi}(s,a)
+            \right].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            In parameterized form, with \(\theta_{\mathrm{old}}\) fixed during an update and
+            \(\theta\) the free variable,
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            L_{\theta_{\mathrm{old}}}(\theta)
+            =
+            \mathbb{E}_{t}
+            \left[
+              \frac{\pi_\theta(a_t\mid s_t)}{\pi_{\theta_{\mathrm{old}}}(a_t\mid s_t)}
+              \hat A_t
+            \right].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            (Constant \(J(\pi_{\theta_{\mathrm{old}}})\) dropped — it does not affect
+            \(\arg\max_\theta\).) The ratio
+            \(r_t(\theta)=\pi_\theta(a_t\mid s_t)/\pi_{\theta_{\mathrm{old}}}(a_t\mid s_t)\)
+            is the same object PPO will later clip.
+          </p>
+        </div>
+
+        <div class="remark-box">
+          <span class="box-label">Remark · On-policy data</span>
+          <p>
+            The expectation in (4) is estimated from rollouts of \(\pi_{\theta_{\mathrm{old}}}\).
+            After the update you throw the batch away. TRPO is firmly on-policy — unlike DQN
+            or SAC.
+          </p>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section class="study-section" id="kl">
+        <h2>5. The KL trust region</h2>
+        <div class="def-box">
+          <span class="box-label">Definition 5.1 · Mean KL constraint</span>
+          <p>
+            TRPO constrains the average forward KL under the state distribution of the old
+            policy:
+            \[
+              \bar D_{\mathrm{KL}}
+              \big(\theta_{\mathrm{old}},\theta\big)
+              =
+              \mathbb{E}_{s\sim d^{\pi_{\theta_{\mathrm{old}}}}}
+              \Big[
+                \mathrm{KL}\big(
+                  \pi_{\theta_{\mathrm{old}}}(\cdot\mid s)
+                  \,\big\|\,
+                  \pi_{\theta}(\cdot\mid s)
+                \big)
+              \Big]
+              \;\le\;
+              \delta.
+            \]
+            Typical \(\delta\) in deep RL: on the order of \(10^{-2}\) (e.g. \(0.01\)).
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            Why KL rather than total variation or parameter norms?
+          </p>
+          <ul>
+            <li>Appears naturally in the improvement lower bound (Theorem&nbsp;3.1).</li>
+            <li>Local quadratic approximation of KL is the Fisher information metric — connects to natural gradients.</li>
+            <li>Invariant to reparameterization of \(\theta\) (to first order) — Euclidean \(\|\Delta\theta\|\) is not.</li>
+          </ul>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · Forward vs reverse KL</span>
+          <p>
+            TRPO uses
+            \(\mathrm{KL}(\pi_{\mathrm{old}}\,\|\,\pi_{\mathrm{new}})\) — mode-covering /
+            zero-avoiding relative to the old policy: \(\pi_{\mathrm{new}}\) is discouraged
+            from putting tiny mass where \(\pi_{\mathrm{old}}\) had mass. The opposite
+            direction would behave differently; do not swap them casually when reading code.
+          </p>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section class="study-section" id="trpo-opt">
+        <h2>6. The TRPO optimization problem</h2>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            \begin{aligned}
+              \theta_{k+1}
+              &=
+              \arg\max_{\theta}
+              \;
+              L_{\theta_k}(\theta)\\
+              &\quad\text{s.t.}\quad
+              \bar D_{\mathrm{KL}}(\theta_k,\theta) \le \delta.
+            \end{aligned}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This is a constrained nonlinear program in high dimension. TRPO solves a
+            <strong>local approximation</strong>:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            \begin{aligned}
+              \maximize_{x}\quad
+              & g^\top x \\
+              \text{s.t.}\quad
+              & \tfrac12 x^\top F x \le \delta,
+            \end{aligned}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            where \(x=\theta-\theta_k\), \(g=\nabla_\theta L_{\theta_k}(\theta)|_{\theta_k}\)
+            is the policy gradient (same direction as \(\nabla J\) at \(\theta_k\)), and
+            \(F\) is the Fisher information matrix — the Hessian of mean KL at \(x=0\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            F
+            =
+            \nabla^2_\theta
+            \bar D_{\mathrm{KL}}(\theta_k,\theta)
+            \big|_{\theta=\theta_k}
+            =
+            \mathbb{E}_{s,a\sim\pi_{\theta_k}}
+            \big[
+              \nabla_\theta\log\pi_{\theta_k}(a\mid s)\,
+              \nabla_\theta\log\pi_{\theta_k}(a\mid s)^\top
+            \big].
+          \]
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section class="study-section" id="natural">
+        <h2>7. Natural gradient connection</h2>
+        <div class="prose-study">
+          <p>
+            The solution of the quadratic program (6) is analytic:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            x
+            =
+            \sqrt{\frac{2\delta}{g^\top F^{-1} g}}
+            \;
+            F^{-1} g.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The direction \(F^{-1}g\) is exactly the <strong>natural policy gradient</strong>
+            from Chapter&nbsp;06. The scalar rescales the step to sit on the KL ball boundary
+            \(\tfrac12 x^\top F x = \delta\) (approximately). TRPO = natural gradient step
+            with an explicitly enforced trust-region radius, plus a line search to repair
+            approximation error.
+          </p>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">Geometry</span>
+          <p>
+            \(F\) defines a Riemannian metric on parameter space whose geodesics locally
+            track KL. Steepest ascent of \(J\) in that metric is \(F^{-1}\nabla J\). Euclidean
+            ascent ignores the metric — hence brittle steps.
+          </p>
+        </div>
+      </section>
+
+      <!-- 8 -->
+      <section class="study-section" id="cg">
+        <h2>8. Computing \(F^{-1}g\) without forming \(F\)</h2>
+        <div class="prose-study">
+          <p>
+            For a deep net, \(F\) is \(|\theta|\times|\theta|\) — impossible to materialize
+            or invert. TRPO never builds \(F\). It only needs Hessian-vector products
+            \(Fv\), estimated by autodiff:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            F v
+            =
+            \nabla_\theta
+            \Big(
+              \big(\nabla_\theta \bar D_{\mathrm{KL}}\big)^\top v
+            \Big)
+            \Big|_{\theta_k}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            <strong>Conjugate gradient (CG)</strong> solves \(F x = g\) using a sequence of
+            such products — typically \(10\)–\(15\) iterations — yielding
+            \(x\approx F^{-1}g\) well enough for the step direction. Then rescale as in (8).
+          </p>
+          <p>
+            Damping: practice often uses \(F+\varepsilon I\) for numerical stability
+            (Levenberg–Marquardt style).
+          </p>
+        </div>
+
+        <div class="def-box">
+          <span class="box-label">Definition 8.1 · Fisher-vector product</span>
+          <p>
+            Any routine that, given vector \(v\), returns an estimate of \(Fv\) without
+            instantiating \(F\). This is the computational core that PPO later avoids entirely.
+          </p>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section class="study-section" id="linesearch">
+        <h2>9. Backtracking line search</h2>
+        <div class="prose-study">
+          <p>
+            The quadratic model (6) can disagree with the true surrogate and true KL.
+            TRPO therefore proposes \(x\) from (8), then tries
+            \(\theta \leftarrow \theta_k + \beta^j x\) for \(j=0,1,2,\ldots\) (e.g.
+            \(\beta=0.8\)) until both hold:
+          </p>
+          <ol>
+            <li>Surrogate improves: \(L_{\theta_k}(\theta) &gt; L_{\theta_k}(\theta_k)\) (or a small positive threshold).</li>
+            <li>Empirical mean KL \(\le \delta\).</li>
+          </ol>
+          <p>
+            If no step satisfies the constraints, skip the update. This is why TRPO is
+            conservative in the everyday sense as well as the Kakade–Langford sense.
+          </p>
+        </div>
+      </section>
+
+      <!-- 10 -->
+      <section class="study-section" id="algo">
+        <h2>10. Full algorithm (practical TRPO)</h2>
+        <div class="eq-block tight">
+          <pre style="margin:0;font-family:var(--font-mono);font-size:0.72rem;line-height:1.5;color:var(--ink-soft);white-space:pre-wrap">For iteration k = 1, 2, …:
+  Collect trajectories with π_{θ_k}
+  Compute advantages Â_t (typically GAE)
+  Estimate g = ∇_θ L_{θ_k}(θ) |_{θ_k}
+  Use CG with Fisher-vector products to get x ≈ F⁻¹ g
+  Rescale x so that ½ xᵀ F x ≈ δ
+  Line search along x for KL ≤ δ and L improvement
+  θ_{k+1} ← accepted point
+  Fit value function V_φ on returns / TD targets (separate regression)</pre>
+        </div>
+        <div class="prose-study">
+          <p>
+            Value function fitting is usually an ordinary supervised problem (MSE on returns
+            or GAE-style targets) — not constrained by the KL trust region. Some
+            implementations use a separate trust region or conjugacy for \(V\) as well; the
+            original paper focuses the KL constraint on the policy.
+          </p>
+        </div>
+      </section>
+
+      <!-- 11 -->
+      <section class="study-section" id="gae">
+        <h2>11. Advantages in TRPO practice</h2>
+        <div class="prose-study">
+          <p>
+            TRPO’s theory is written with \(A^{\pi}\); practice uses GAE(\(\gamma,\lambda\))
+            from Chapter&nbsp;06:
+            \(\hat A_t=\sum_l(\gamma\lambda)^l\delta_{t+l}\). Advantage normalization
+            (subtract mean, divide by std within batch) is common for variance control.
+          </p>
+          <p>
+            Multiple SGD epochs over the <em>same</em> batch are <strong>not</strong> free
+            in TRPO the way they later are (somewhat) in PPO — the surrogate and KL are
+            defined w.r.t. \(\theta_k\), and the hard constraint is enforced once per
+            iteration via CG + line search, not via many small clipped steps.
+          </p>
+        </div>
+      </section>
+
+      <!-- 12 -->
+      <section class="study-section" id="theory">
+        <h2>12. Theory notes &amp; caveats</h2>
+        <div class="prose-study">
+          <ul>
+            <li>
+              The monotonic improvement guarantee holds for the idealized problem (maximize
+              \(L\) under KL); approximations (sampling, CG truncation, neural nets, GAE bias)
+              void the literal guarantee. Empirically TRPO is still far more stable than
+              vanilla PG.
+            </li>
+            <li>
+              Forward KL constraint does not by itself prevent all bad updates; line search
+              on the <em>empirical</em> surrogate matters.
+            </li>
+            <li>
+              TRPO scales poorly to very large policies because CG needs many backprops per
+              update. That cost is a primary industrial reason PPO won.
+            </li>
+            <li>
+              Compatible with discrete and continuous policies (softmax / Gaussian), as long
+              as \(\log\pi\) and KL (or its Hessian-vector product) are tractable.
+            </li>
+          </ul>
+        </div>
+
+        <div class="analysis-box">
+          <span class="box-label">Analysis · TRPO vs DQN stability stories</span>
+          <p>
+            DQN stabilizes <em>value</em> bootstrapping (replay + target net). TRPO stabilizes
+            <em>policy</em> steps (KL ball + surrogate). Different objects, same moral: unconstrained
+            deep TD / deep PG updates are too aggressive; insert a lag or a trust region.
+          </p>
+        </div>
+      </section>
+
+      <!-- 13 -->
+      <section class="study-section" id="ppo-bridge">
+        <h2>13. Bridge to PPO</h2>
+        <div class="prose-study">
+          <p>
+            PPO keeps the importance-ratio surrogate (4) but replaces the hard KL constraint
+            with a <strong>clipped</strong> objective:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            L^{\mathrm{CLIP}}(\theta)
+            =
+            \mathbb{E}_t
+            \Big[
+              \min\big(
+                r_t(\theta)\hat A_t,\;
+                \mathrm{clip}(r_t(\theta), 1-\varepsilon, 1+\varepsilon)\hat A_t
+              \big)
+            \Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Clipping removes incentive to push \(r_t\) far outside \([1-\varepsilon,1+\varepsilon]\),
+            mimicking a trust region without Fisher-vector products or CG. PPO also often
+            adds an adaptive KL penalty variant. Next chapter derives (10) carefully and
+            contrasts it with TRPO step by step.
+          </p>
+        </div>
+      </section>
+
+      <!-- 14 LAB -->
+      <section class="study-section lab-wide" id="lab">
+        <h2>14. Laboratory · trust region on a softmax policy</h2>
+        <div class="prose-study">
+          <p>
+            Tabular softmax policy on a 4×4 goal grid (same spirit as Chapter&nbsp;06). Each
+            “TRPO-style step” estimates advantages by Monte Carlo, forms the surrogate
+            gradient in logit space, takes a natural-ish step (diagonal Fisher approximation
+            — full CG is overkill for a table), then <strong>backtracks</strong> until mean KL
+            \(\le\delta\) and surrogate improves. Compare to an unconstrained Euclidean step
+            of similar raw magnitude — watch KL explode and returns dip.
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Surrogate vs KL ball</h3>
+            <span>Line search · δ constraint</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.85rem;margin-bottom:1rem">
+            <div class="control-block">
+              <span class="control-label">Trust region</span>
+              <label class="slider-label">δ (mean KL) <input type="range" id="trpoDelta" min="0.001" max="0.1" step="0.001" value="0.01" /><strong id="trpoDeltaL">0.010</strong></label>
+              <label class="slider-label">γ <input type="range" id="trpoGamma" min="0.8" max="0.99" step="0.01" value="0.95" /><strong id="trpoGammaL">0.95</strong></label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Update type</span>
+              <div class="btn-row">
+                <button type="button" class="btn small" id="trpoTrust">TRPO-style step</button>
+                <button type="button" class="btn small ghost" id="trpoVanilla">Vanilla PG step</button>
+              </div>
+              <div class="btn-row" style="margin-top:0.4rem">
+                <button type="button" class="btn small ghost" id="trpoRoll">Collect batch</button>
+                <button type="button" class="btn small ghost" id="trpoReset">Reset π</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="split" style="grid-template-columns:1fr 1fr;gap:1rem">
+            <div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:0 0 0.5rem">Policy (greedy)</h4>
+              <div class="dp-grid" id="trpoGrid"></div>
+              <p class="caption tight">Collect a batch first, then take a trust-region or vanilla step.</p>
+            </div>
+            <div>
+              <div class="stat-strip">
+                <div><span>Batch eps</span><strong id="trpoBatchN">0</strong></div>
+                <div><span>Mean |Â|</span><strong id="trpoAdv">—</strong></div>
+                <div><span>Surrogate Δ</span><strong id="trpoL">—</strong></div>
+                <div><span>Mean KL</span><strong id="trpoKL">—</strong></div>
+                <div><span>Line steps</span><strong id="trpoLS">—</strong></div>
+                <div><span>Avg G₀</span><strong id="trpoG">—</strong></div>
+              </div>
+              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:1rem 0 0.5rem">Solver ledger</h4>
+              <div class="bellman-trace" id="trpoTrace">Collect batch → TRPO-style step. Ledger shows proposed KL, backtracking, and accepted ΔL.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 15 -->
+      <section class="study-section" id="worked">
+        <h2>15. Worked calculations</h2>
+        <div class="prose-study">
+          <p>
+            <strong>Quadratic trust step.</strong> Suppose 1-D \(\theta\), \(g=2\), \(F=4\),
+            \(\delta=0.01\). Natural direction \(F^{-1}g=0.5\). Scale
+            \(\eta=\sqrt{2\delta/(g F^{-1} g)}=\sqrt{0.02/(2\cdot 0.5)}=\sqrt{0.02}=0.1414\).
+            Step \(x=\eta\cdot 0.5\approx 0.0707\). Check:
+            \(\tfrac12 F x^2=\tfrac12\cdot 4\cdot(0.0707)^2\approx 0.01=\delta\).
+          </p>
+          <p>
+            <strong>Importance ratio.</strong> Old \(\pi_{\mathrm{old}}(a|s)=0.25\), new
+            \(0.40\), \(\hat A=2\). Contribution to surrogate:
+            \(rA=(0.40/0.25)\cdot 2=3.2\). If \(\hat A=-2\), contribution \(-3.2\) — TRPO
+            still uses the linear surrogate; PPO would clip the ratio when it tries to move
+            too far against a negative advantage.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Roll out π_old; compute Â (GAE or MC).</li>
+            <li class="hidden-step">Form L(θ)=E[(π_θ/π_old) Â]; compute g=∇L at θ_old.</li>
+            <li class="hidden-step">Estimate Fv via KL Hessian-vector products; CG ⇒ x≈F⁻¹g.</li>
+            <li class="hidden-step">Rescale x onto ½ xᵀFx = δ.</li>
+            <li class="hidden-step">Backtrack βʲx until KL≤δ and L improves.</li>
+            <li class="hidden-step">Refit V; repeat. PPO will replace steps 3–5 by clipping r(θ).</li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- 16 -->
+      <section class="study-section" id="next">
+        <h2>16. What follows</h2>
+        <div class="prose-study">
+          <p>
+            <strong>PPO</strong> keeps TRPO’s surrogate ratio and advantage machinery but
+            substitutes clipping (and optional KL penalties) for conjugate gradients. After
+            PPO, the course returns to off-policy continuous control (DDPG/TD3) and
+            entropy-regularized soft actor–critic (SAC).
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Schulman et al., 2015 — Trust Region Policy Optimization.</li>
+            <li>Kakade &amp; Langford — Approximately optimal approximate RL (CPI).</li>
+            <li>Schulman et al. — High-dimensional continuous control using GAE.</li>
+            <li><a href="pg.html">Chapter 06</a> — policy gradient theorem, natural gradient motivation.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="pg.html" style="color:inherit;text-decoration:none">← Policy Gradients</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Up next</p>
+            <h3>PPO</h3>
+            <p>Clipped surrogates — TRPO’s idea without CG.</p>
+          </div>
+          <a class="btn primary" href="ppo.html">Continue →</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Pearl · Chapter 07 · TRPO</p>
+    <p class="muted">Surrogate improvement · KL trust region · Fisher · CG · line search · bridge to PPO.</p>
+  </footer>
+
+  <script src="trpo.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>
