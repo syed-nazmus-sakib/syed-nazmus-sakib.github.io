@@ -406,6 +406,19 @@ I am a <strong>Research Assistant</strong> at <a href="https://cortexai-lab.gith
   </li>
 </ul>
 
+<div class="port-section-title" id="lectures">Lecture Series</div>
+
+<div class="pub-card">
+  <a href="/lectures/rl/" class="pub-title">Pearl: A Reinforcement Learning Lecture Series</a>
+  <div class="pub-links">
+    <a href="/lectures/rl/why.html" class="link-project">Start at Lecture 00</a>
+    <a href="/lectures/rl/practice.html" class="link-project">Interactive Practice</a>
+  </div>
+  <div class="pub-info">
+    A self-contained, interactive web lecture series on reinforcement learning — from Markov Decision Processes, value functions, and Bellman equations through dynamic programming, temporal-difference learning, Q-learning &amp; DQN, and on to modern policy optimization: policy gradients, TRPO, PPO, and GRPO. Ten lectures with in-browser visualizations, plus a unified gridworld playground for hands-on practice.
+  </div>
+</div>
+
 <div class="port-section-title" id="projects">Selected Engineering Projects</div>
 
 <div class="proj-grid">
