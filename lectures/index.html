@@ -1,30 +1,40 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Lectures · Nazmus Sakib</title>
-  <link rel="stylesheet" href="../block.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lecture Notes · Syed Nazmus Sakib</title>
+  <meta name="description" content="Interactive lecture notes on reinforcement learning, reward models, and self-supervised learning by Syed Nazmus Sakib.">
+  <link rel="icon" href="/images/favicon-32x32.png" sizes="32x32">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/assets/css/site.css">
 </head>
-<body>
-  <a class="back" href="../index.html">← Nazmus Sakib</a>
+<body class="directory-page">
+  <main class="directory-shell">
+    <a class="directory-back" href="/">← Syed Nazmus Sakib</a>
+    <p class="eyebrow">Teaching</p>
+    <h1>Lecture Notes</h1>
+    <p class="directory-intro">Self-contained notes and interactive browser demonstrations covering selected topics in machine learning.</p>
 
-  <section>
-    <h2>Lectures</h2>
-    <ul class="entries">
-      <li>
-        <span class="kind">RL</span>
-        <a href="rl/why.html">Reinforcement learning</a>
-      </li>
-      <li>
-        <span class="kind">Rewards</span>
-        <a href="reward-models/index.html">Reward models</a>
-      </li>
-      <li>
-        <span class="kind">SSL</span>
-        <a href="ssl/index.html">Self-supervised learning</a>
-      </li>
-    </ul>
-  </section>
+    <div class="directory-list">
+      <a class="directory-item" href="/lectures/rl/why.html">
+        <span class="directory-kind">Series</span>
+        <span><strong>Reinforcement Learning</strong><small>From MDPs and value functions through PPO and GRPO</small></span>
+        <span class="directory-arrow" aria-hidden="true">→</span>
+      </a>
+      <a class="directory-item" href="/lectures/reward-models/">
+        <span class="directory-kind">Notes</span>
+        <span><strong>Reward Models</strong><small>Pointwise, pairwise, listwise, scalar, ORM, and PRM formulations</small></span>
+        <span class="directory-arrow" aria-hidden="true">→</span>
+      </a>
+      <a class="directory-item" href="/lectures/ssl/">
+        <span class="directory-kind">Notes</span>
+        <span><strong>Self-Supervised Learning</strong><small>Concepts, methods, and selected paper walkthroughs</small></span>
+        <span class="directory-arrow" aria-hidden="true">→</span>
+      </a>
+    </div>
+  </main>
 </body>
 </html>
