@@ -1,2 +1,11 @@
 _site/
 
+# macOS metadata created on external drives
+._*
+.DS_Store
+
+# Local source figures; the public site uses images/publications instead
+main-fig/
+
+# Temporary local design demos
+_demo-*.html
