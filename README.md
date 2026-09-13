@@ -115,31 +115,31 @@ I'm a passionate researcher and student deeply immersed in the world of **Roboti
 
 # 📄 Publications
 
-> All papers currently **Under Review**
+Selected publications and preprints.
 
 <table align="center" border="0" cellspacing="0" cellpadding="12" width="100%">
 
   <tr>
     <td width="6%" align="center"><b>01</b></td>
     <td>
-      <b><a href="https://arxiv.org/pdf/2602.05354">PATHWAYS: Evaluating Investigation and Context Discovery in AI Web Agents</a></b><br/>
-      <sub>📍 Under Review — <i>ICML 2026</i></sub>
+      <b><a href="https://arxiv.org/abs/2602.05354">Do Web Agents Investigate Before They Decide?</a></b><br/>
+      <sub>Preprint · 2026</sub>
     </td>
   </tr>
 
   <tr>
     <td width="6%" align="center"><b>02</b></td>
     <td>
-      <b><a href="https://openreview.net/pdf?id=9PtO3zbwQM">Thinking Like a Botanist: Challenging Multimodal Language Models with Intent Driven Chain-of-Inquiry</a></b><br/>
-      <sub>📍 Accepted — <i>ACL 2026 Findings</i></sub>
+      <b><a href="https://aclanthology.org/2026.findings-acl.1741/">Thinking Like a Botanist: Challenging Multimodal Language Models with Intent-Driven Chain-of-Inquiry</a></b><br/>
+      <sub>Published in <i>Findings of ACL 2026</i></sub>
     </td>
   </tr>
 
   <tr>
     <td width="6%" align="center"><b>03</b></td>
     <td>
-      <b><a href="https://arxiv.org/pdf/2508.17117">PlantVillageVQA: A Visual Question Answering Dataset for Benchmarking Vision-Language Models in Plant Science</a></b><br/>
-      <sub>📍 Under Review — <i>Nature Scientific Data</i> &nbsp;|&nbsp; IF: 8.2</sub>
+      <b><a href="https://www.nature.com/articles/s41597-026-07779-y">PlantExpertVQA: A Visual Question Answering Dataset for Benchmarking Vision-Language Models in Plant Science</a></b><br/>
+      <sub>Published in <i>Scientific Data</i> · 2026</sub>
     </td>
   </tr>
 
@@ -147,7 +147,7 @@ I'm a passionate researcher and student deeply immersed in the world of **Roboti
     <td width="6%" align="center"><b>04</b></td>
     <td>
       <b><a href="https://arxiv.org/pdf/2508.17107">SugarcaneShuffleNet: A Very Fast, Lightweight Convolutional Neural Network for Diagnosis of 15 Sugarcane Leaf Diseases</a></b><br/>
-      <sub>📍 Under Review — <i>Computers and Electronics in Agriculture</i> &nbsp;|&nbsp; IF: 8.9</sub>
+      <sub>Under Review at <i>Computers and Electronics in Agriculture</i></sub>
     </td>
   </tr>
 
@@ -155,7 +155,7 @@ I'm a passionate researcher and student deeply immersed in the world of **Roboti
     <td width="6%" align="center"><b>05</b></td>
     <td>
       <b>Predicting Groundwater Recharge Potential across Various Physiographic Divisions of Bangladesh using Generative Data Augmentation</b><br/>
-      <sub>📍 Under Review — <i>Journal of Hydrology</i></sub>
+      <sub>Accepted at <i>Journal of Hydrology: Regional Studies</i></sub>
     </td>
   </tr>
 
