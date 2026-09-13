@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://syed-nazmus-sakib.github.io/sitemap.xml
