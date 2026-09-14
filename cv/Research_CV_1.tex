@@ -1,0 +1,218 @@
+\documentclass[a4paper,10pt]{article}
+
+% ============================ PACKAGES ============================
+\usepackage[margin=0.66in]{geometry}
+\usepackage{xcolor}
+\usepackage{fontawesome5}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{helvet}
+\usepackage{microtype}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{amssymb}
+\renewcommand{\familydefault}{\sfdefault}
+
+% ============================ COLORS =============================
+\definecolor{accent}{RGB}{0,78,152}
+\definecolor{textgray}{RGB}{33,33,33}
+\definecolor{descgray}{RGB}{86,86,86}
+\definecolor{rulegray}{RGB}{200,205,212}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=accent,
+    urlcolor=accent,
+    pdfborder={0 0 0},
+    pdftitle={Syed Nazmus Sakib - Robotics Research CV},
+    pdfauthor={Syed Nazmus Sakib}
+}
+
+\pagestyle{empty}
+\color{textgray}
+\setlength{\parindent}{0pt}
+
+% ========================= SECTION STYLE =========================
+\titleformat{\section}
+{\large\bfseries\scshape\raggedright\color{accent}}
+{}{0em}{}[{\color{rulegray}\titlerule[1pt]}]
+\titlespacing*{\section}{0pt}{7pt}{3.5pt}
+
+% ========================= CUSTOM MACROS =========================
+\newcommand{\me}{\textbf{Syed Nazmus Sakib}}
+
+% Header line: #1 Title #2 Dates #3 Org #4 Location
+\newcommand{\entry}[4]{%
+    \noindent\textbf{#1} \hfill \textit{#2} \\
+    \textit{\color{descgray}#3} \hfill {\color{descgray}#4}%
+}
+
+% Project: #1 title #2 dates #3 subtitle/tools #4 optional link
+\newcommand{\project}[4]{%
+    \noindent\textbf{#1} \hfill \textit{#2}\\
+    {\small\color{descgray}#3}\hfill #4%
+}
+
+% Publication entry: #1 title #2 authors #3 venue/status #4 links #5 description
+\newcommand{\pub}[5]{%
+    \noindent\textbf{#1}\par
+    {\small\color{descgray}#2}\par
+    {\small\itshape #3}\hfill #4\par
+    {\small\color{descgray}#5}%
+    \addvspace{4pt}
+}
+
+\newcommand{\status}[1]{{\color{accent}\bfseries #1}}
+
+\setlist[itemize]{nosep,leftmargin=1.25em,itemsep=2pt,topsep=2.5pt}
+
+% ============================ DOCUMENT ===========================
+\begin{document}
+
+% ----------------------------- HEADER ----------------------------
+\begin{center}
+    {\Huge\bfseries Syed Nazmus Sakib} \\[4pt]
+    {\color{descgray}\normalsize Research Assistant, Cortex AI Lab $\mid$ B.Sc. Student, University of Dhaka} \\[7pt]
+    {\small
+    \href{https://syed-nazmus-sakib.github.io/}{\faGlobe~Portfolio} \enspace\textcolor{rulegray}{|}\enspace
+    \href{https://scholar.google.com/citations?user=4j76UvsAAAAJ\&hl=en}{\faGraduationCap~Scholar} \enspace\textcolor{rulegray}{|}\enspace
+    \href{https://github.com/syed-nazmus-sakib}{\faGithub~GitHub} \enspace\textcolor{rulegray}{|}\enspace
+    \href{https://www.linkedin.com/in/nazmus-sakib-syed}{\faLinkedin~LinkedIn} \enspace\textcolor{rulegray}{|}\enspace
+    \href{mailto:syednazmus-2021211399@rme.du.ac.bd}{\faEnvelope~Mail}
+    }
+\end{center}
+\vspace{-3pt}
+
+% ------------------------ RESEARCH INTERESTS ---------------------
+\section*{Research Interests}
+Multi-Modal AI $\cdot$ Agentic AI $\cdot$ Reinforcement Learning $\cdot$ Physical Intelligence $\cdot$ Robot Learning $\cdot$ Embodied AI $\cdot$ Vision--Language--Action Models $\cdot$ Multi-Agent Systems
+
+% --------------------------- EDUCATION ---------------------------
+\section*{Education}
+\entry{B.Sc. in Robotics and Mechatronics Engineering}{Sep 2022 -- Oct 2026 (expected)}{University of Dhaka}{Dhaka, Bangladesh}
+
+% ------------------------ RESEARCH EXPERIENCE --------------------
+\section*{Research Experience}
+
+\entry{Research Assistant}{Mar 2025 -- Present}{CortexAI Lab, University of Dhaka}{Dhaka, Bangladesh}
+\begin{itemize}
+    \item First-authored research on multimodal reasoning and autonomous-agent safety, including papers in Findings of ACL 2026 and Scientific Data, and preprints under review at NeurIPS 2026.
+    \item Built large-scale evaluation resources, including PlantInquiryVQA (138K QA pairs), PlantExpertVQA (193K QA pairs) and agentic moderation benchmarks.
+    \item Trained MemeAgent, a 2B-parameter verifier reaching 87.8\% in-distribution auditing accuracy and outperforming zero-shot frontier baselines.
+\end{itemize}
+\vspace{3pt}
+
+\entry{Research Intern}{Nov 2024 -- Present}{Data and Design Lab, CARS, University of Dhaka}{Dhaka, Bangladesh}
+\begin{itemize}
+    \item Analyzed large-scale billing and distribution data for power-quality assessment in an industry-focused research project on power supply around Dhaka City.
+    \item Developed machine learning pipelines for failure prediction, anomaly detection and load/demand forecasting from power-quality meter data.
+    \item Contributed to an electricity-domain conversational assistant that answers billing, outage and power-quality queries in natural language.
+\end{itemize}
+\vspace{3pt}
+
+\entry{R\&D Engineer}{Nov 2023 -- Jul 2025}{Tech Topia}{Dhaka, Bangladesh}
+\begin{itemize}
+    \item Designed robotics and IoT automation systems using Arduino and ESP32, including hardware--software integration for industrial applications.
+\end{itemize}
+
+% --------------------------- PUBLICATIONS ------------------------
+\section*{Selected Publications}
+
+\pub
+{Thinking Like a Botanist: Challenging Multimodal Language Models with Intent-Driven Chain-of-Inquiry}
+{\me, Nafiul Haque, Shahrear Bin Amin, H.~M.~Abdullah, M.~M.~Hasan, Mohammad Zabed Hossain, Shifat E. Arman}
+{\status{Accepted}, Findings of ACL 2026}
+{\href{https://aclanthology.org/2026.findings-acl.1741/}{[ACL Anthology]} \href{https://arxiv.org/abs/2604.20983}{[arXiv]}}
+{Introduces PlantInquiryVQA with 24,964 expert-curated images and 138,078 QA pairs; structured inquiry improves diagnostic correctness and reduces hallucination in vision--language models.}
+
+\pub
+{Do Web Agents Investigate Before They Decide?}
+{\me, Nafiul Haque, Tapodhir Karmakar Taton, Shahrear Bin Amin, Shifat E. Arman}
+{\status{Preprint}}
+{\href{https://arxiv.org/abs/2602.05354}{[arXiv]}}
+{Benchmark of 750 multi-step tasks isolating investigative competence across eight LLM agents; reveals navigation--discovery gaps, contradiction failures and investigative hallucination.}
+
+\pub
+{MemeEconomy: Do LLM Agents Trade Ethics for Survival?}
+{\me, Nafiul Haque, Ahnaf Tahmid Manan, M.~M.~Mahabub Morshed, Shifat E. Arman}
+{\status{Preprint} $\cdot$ Under Review, NeurIPS 2026}
+{}
+{Multimodal multi-agent market simulation across 300 events; develops a compact verifier for auditing harmful agent behavior under survival pressure.}
+
+\pub
+{PlantExpertVQA: A Visual Question Answering Dataset for Benchmarking Vision--Language Models in Plant Science}
+{\me, Nafiul Haque, Mohammad Zabed Hossain, Shifat E. Arman}
+{\status{Published}, Scientific Data (Nature), 2026}
+{\href{https://www.nature.com/articles/s41597-026-07779-y}{[Nature]} \href{https://arxiv.org/abs/2508.17117}{[arXiv]}}
+{Large-scale agricultural VQA resource containing 193,609 QA pairs over 55,448 images, 14 crop species and 38 disease conditions.}
+
+\pub
+{The Surface You Test Is Not the Surface That Breaks}
+{\me, Nafiul Haque, Shahrear Bin Amin, Shifat E. Arman}
+{\status{Preprint}}
+{\href{https://arxiv.org/abs/2605.30454}{[arXiv]} \href{https://github.com/syed-nazmus-sakib/surface-adaptive-injection}{[code]}}
+{Shows that prompt-injection vulnerability is a model-by-surface interaction; a surface-adaptive attacker improves attack success across 13 language models.}
+
+\pub
+{PhyDrawGen: Physically Grounded Diagram Generation from Natural Language}
+{Nafiul Haque, \me$^\dagger$, Shifat E. Arman}
+{\status{Preprint}}
+{\href{https://arxiv.org/abs/2605.30512}{[arXiv]}}
+{Neuro-symbolic system coupling language-based scene extraction with deterministic geometric and physical constraint solving over 1,449 diagram-generation problems.}
+
+\pub
+{SugarcaneShuffleNet: A Very Fast, Lightweight CNN for Diagnosis of 15 Sugarcane Leaf Diseases}
+{Shifat E. Arman, H.~M.~Abdullah, \me, R.~M.~Saiem, S.~N.~Asha, M.~M.~Hasan, et al.}
+{\status{Under Review}, Computers and Electronics in Agriculture}
+{\href{https://arxiv.org/abs/2508.17107}{[arXiv]}}
+{Lightweight visual model reaching 98.02\% accuracy at 4.14 ms per image for deployment on resource-constrained devices.}
+
+\noindent{\footnotesize\color{descgray}$\dagger$ Equal contribution (co-first author). Complete publication list: \href{https://scholar.google.com/citations?user=4j76UvsAAAAJ\&hl=en}{Google Scholar}.}
+
+% ------------------------ RESEARCH PROJECTS ----------------------
+\section*{Research Projects}
+
+\project{Long-Horizon Mobile Manipulation and Robust Skill Composition}{2026 -- Present}{Independent research using ManiSkill / MS-HAB, PyTorch and simulation-based evaluation}{}
+\begin{itemize}
+    \item Reproduced and evaluated a long-horizon TidyHouse pipeline using 21 pretrained Pick, Place and Navigate policies, with strict success, reachability and failure-stage diagnostics.
+    \item Designed controlled handoff experiments showing that robot-state mismatch, rather than object-state mismatch, dominated chained Pick$\rightarrow$Place degradation; localized major physical failures to base/torso contacts and force-limit trips.
+    \item Improved full-chain success from 0.7\% to 2.2\% by tuning global base damping and force limits, validated over three seeds with confidence intervals, per-skill analysis and representative rollout videos.
+\end{itemize}
+\vspace{3pt}
+
+\project{Mobile Differential-Drive Robot}{2025}{ROS 2, Gazebo, Xacro, URDF and autonomous exploration}{\href{https://github.com/syed-nazmus-sakib/explorer-bot}{\faGithub~GitHub}}
+\begin{itemize}
+    \item Built a complete ROS 2 simulation package covering robot modeling, differential-drive control, sensor integration and autonomous exploration in Gazebo.
+\end{itemize}
+\vspace{2pt}
+
+\project{Hexapod Robot}{2024}{C++, CMake, inverse kinematics and gait generation}{\href{https://github.com/syed-nazmus-sakib/hexapod}{\faGithub~GitHub}}
+\begin{itemize}
+    \item Implemented inverse-kinematics-based leg control, coordinated gait generation and motion planning for a six-legged robotic platform.
+\end{itemize}
+
+% --------------------------- SKILLS ------------------------------
+\section*{Technical Skills}
+{\renewcommand{\arraystretch}{1.12}%
+\begin{tabularx}{\linewidth}{@{} >{\bfseries\color{textgray}}p{0.24\linewidth} >{\raggedright\arraybackslash\color{descgray}}X @{}}
+    Programming & Python, C++, SQL, JavaScript, TypeScript \\
+    Agentic AI & LLM agents, tool use, multi-agent simulation, prompt-injection robustness, benchmark design \\
+    Robot Learning & PyTorch, Gymnasium, ManiSkill / MS-HAB, reinforcement learning, policy evaluation \\
+    Simulation \& Robotics & Isaac Sim, Isaac Lab, MuJoCo, ROS 2, Gazebo, URDF, Xacro, kinematics, motion planning \\
+    Perception \& ML & OpenCV, Transformers, vision--language models, TensorFlow, Scikit-learn \\
+    Hardware \& Engineering & Arduino, ESP32, Autodesk Fusion 360, Docker, Git, Linux, MLflow \\
+\end{tabularx}}
+
+% --------------------------- HONORS ------------------------------
+\section*{Honors \& Awards}
+\begin{itemize}
+    \item \textbf{Global Nominee,} NASA Space Apps Challenge 2024
+    \item \textbf{Runner-up,} KUET Datathon 2025; \textbf{Runner-up,} DU AI Challenge 2025; \textbf{Runner-up,} Technocrats V2 IUBAT Hackathon 2024
+    \item \textbf{Regional Champion,} National High School Programming Contest 2019
+    \item \textbf{Kaggle Expert} with multiple competition podium finishes
+\end{itemize}
+
+\end{document}
