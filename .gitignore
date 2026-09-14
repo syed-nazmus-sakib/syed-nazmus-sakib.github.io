@@ -9,3 +9,6 @@ main-fig/
 
 # Temporary local design demos
 _demo-*.html
+
+# LaTeX CV sources stay local; only the built PDF is published
+*.tex
