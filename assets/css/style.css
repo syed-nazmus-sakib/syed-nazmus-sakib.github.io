@@ -660,6 +660,7 @@ blockquote {
 
 .intro__text p {
   margin: 0 0 1rem;
+  text-align: justify;
 }
 
 .intro__lede {
@@ -774,7 +775,18 @@ blockquote {
 }
 
 .intro__aside .link-pills {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  width: 200px;
+  max-width: 100%;
+}
+
+.intro__aside .link-pill {
   justify-content: center;
+  padding: 0.62rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
 }
 
 .intro__status {
@@ -2432,7 +2444,12 @@ blockquote {
   }
 
   .intro__aside .link-pills {
-    justify-content: flex-start;
+    width: 100%;
+    max-width: 240px;
+  }
+
+  .intro__text p {
+    text-align: left;
   }
 
   .intro__lede {
