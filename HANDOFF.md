@@ -21,9 +21,12 @@ Serif headings (Newsreader) over a sans body (Inter), a single accent colour, an
 3. If it is a selected paper, add a `<li class="spub">` block to `index.html` and update the snapshot counts.
 4. Add a line to News and Updates on the homepage.
 
+## Lecture series
+
+`lectures/` hosts self-contained, hand-written series beyond the portfolio pages — each with its own theme layer (`styles.css`), shared nav script, and optional interactive labs. Existing series: Reinforcement Learning (`lectures/rl/`), Reward Models ("Pearl", `lectures/reward-models/`), Self-Supervised Learning ("Steeped", `lectures/ssl/`), and 3D & 4D Reconstruction ("Blueprint", `lectures/3d/`, added October 2026 as CVPR-research-prep course notes; Lecture 01 is live and Modules 02–11 are locked stubs in its roadmap). Series are linked from `lectures/index.html` and `sitemap.xml`.
+
 ## Open items
 
 - News dates on the homepage are month-level estimates and should be confirmed.
-- MemeEconomy has no public link yet.
 - No public email address is shown on the site.
 - The accent colour is still the maroon of the original design.

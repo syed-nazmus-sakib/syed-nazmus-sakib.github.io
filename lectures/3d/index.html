@@ -1,0 +1,1841 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lecture 01 · What does it mean to reconstruct the world? — Blueprint</title>
+  <meta name="description" content="Blueprint · a field course on 3D and 4D reconstruction. Lecture 01 builds the inverse problem: cameras, projection, ambiguity, stereo, bundle adjustment, and the road to 4D." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("blueprint-theme");
+        document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light");
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+
+  <header class="topbar">
+    <a class="brand" href="index.html" aria-label="Blueprint home">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      <span class="brand-text">Blueprint</span>
+    </a>
+    <nav class="chapter-nav" aria-label="Lectures">
+      <a class="active" aria-current="page" href="index.html">L01 · Foundations</a>
+      <span class="locked">L02 · Classical stereo — next</span>
+      <span class="locked">L03–L11 · upcoming</span>
+    </nav>
+    <div class="topbar-actions">
+      <a class="all-lectures" href="../">All lectures</a>
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Switch to dark theme">
+        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Dark</span>
+      </button>
+      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
+    </div>
+  </header>
+
+  <div class="layout-book" id="top">
+    <nav class="toc" aria-label="On this page">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#roadmap">Roadmap</a></li>
+        <li><a href="#problem">1. The problem</a></li>
+        <li><a href="#distinction">2. 3D vs 4D</a></li>
+        <li><a href="#camera">3. Cameras</a></li>
+        <li><a href="#one-pixel">4. One image, many depths</a></li>
+        <li><a href="#stereo">5. Stereo</a></li>
+        <li><a href="#lab">Lab 01 · Bench</a></li>
+        <li><a href="#worked">Worked example</a></li>
+        <li><a href="#complete-eq">6. Full camera equation</a></li>
+        <li><a href="#classical">7. Classical reconstruction</a></li>
+        <li><a href="#motion">8. Optical &amp; scene flow</a></li>
+        <li><a href="#representations">9. Representations</a></li>
+        <li><a href="#timeline">10. Timeline</a></li>
+        <li><a href="#research">11. Research problems</a></li>
+        <li><a href="#checkpoint">Checkpoint</a></li>
+        <li><a href="#next">Lecture 2</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main" id="content" tabindex="-1">
+      <p class="chapter-kicker">Blueprint · A field course on 3D &amp; 4D reconstruction · Lecture 01</p>
+      <h1 class="study-title">What does it mean to <em>reconstruct</em> the world?</h1>
+
+      <div class="abstract">
+        <strong>Course stance.</strong>
+        We study this as a proper graduate-level computer vision course — but with one
+        difference: the ultimate objective is to understand the field well enough to
+        identify and develop <em>original research for CVPR</em>. I assume you are starting
+        from zero in 3D computer vision while being comfortable learning mathematics,
+        deep learning, and optimization. For every major concept we cover the intuition,
+        the mathematical derivation, the implementation, the foundational papers, the
+        modern developments, and the limitations — and we keep distinguishing what
+        previous researchers have <em>already solved</em> from what remains an
+        <em>open problem</em>. This lecture develops the foundations, including our first
+        real equations for reconstructing 3D from photographs, and explains why 4D is
+        significantly harder.
+      </div>
+
+      <!-- ROADMAP -->
+      <section class="study-section" id="roadmap">
+        <h2>Our learning roadmap</h2>
+        <div class="prose-study">
+          <p>
+            Eleven modules, in order. Module 01 is today&rsquo;s lecture; everything after it
+            is scaffolding we will fill in as the course progresses. The animations marked
+            below are just the shape of the course — the content of each lecture will be
+            developed in full, exactly like this one.
+          </p>
+        </div>
+        <div class="phase-grid">
+          <a class="phase" href="#problem"><span class="phase-num">Module 01</span><span class="has-phase phase-tag phase-tag--today">Today</span><span class="phase-title">Foundations</span><p class="phase-blurb">Pixels, geometry, depth, cameras, projection, ambiguity.</p></a>
+          <div class="phase phase--up"><span class="phase-num">Module 02</span><span class="has-phase phase-tag phase-tag--next">Next</span><span class="phase-title">Classical 3D reconstruction</span><p class="phase-blurb">Stereo vision, triangulation, SfM, SLAM, bundle adjustment.</p></div>
+          <div class="phase phase--up"><span class="phase-num">Module 03</span><span class="phase-tag phase-tag--up">Upcoming</span><span class="phase-title">3D representations</span><p class="phase-blurb">Point clouds, meshes, voxels, occupancy fields, SDFs.</p></div>
+          <div class="phase phase--up"><span class="phase-num">Module 04</span><span class="phase-tag phase-tag--up">Upcoming</span><span class="phase-title">Neural 3D reconstruction</span><p class="phase-blurb">NeRF, volume rendering, differentiable rendering.</p></div>
+          <div class="phase phase--up"><span class="phase-num">Module 05</span><span class="phase-tag phase-tag--up">Upcoming</span><span class="phase-title">Gaussian splatting</span><p class="phase-blurb">3DGS, Gaussian projection, optimization and rasterization.</p></div>
+          <div class="phase phase--up"><span class="phase-num">Module 06</span><span class="phase-tag phase-tag--up">Upcoming</span><span class="phase-title">3D foundation models</span><p class="phase-blurb">Depth Anything, DUSt3R, MASt3R, VGGT, VGGT-Ω.</p></div>
+          <div class="phase phase--up"><span class="phase-num">Module 07</span><span class="phase-tag phase-tag--up">Upcoming</span><span class="phase-title">4D fundamentals</span><p class="phase-blurb">Scene flow, optical flow, motion, temporal correspondence.</p></div>
+          <div class="phase phase--up"><span class="phase-num">Module 08</span><span class="phase-tag phase-tag--up">Upcoming</span><span class="phase-title">Neural 4D reconstruction</span><p class="phase-blurb">D-NeRF, dynamic radiance fields, K-Planes, 4DGS.</p></div>
+          <div class="phase phase--up"><span class="phase-num">Module 09</span><span class="phase-tag phase-tag--up">Upcoming</span><span class="phase-title">Modern 4D architectures</span><p class="phase-blurb">MoRe, Any4D, 4RC, feed-forward reconstruction.</p></div>
+          <div class="phase phase--up"><span class="phase-num">Module 10</span><span class="phase-tag phase-tag--up">Upcoming</span><span class="phase-title">Evaluation and benchmarks</span><p class="phase-blurb">Geometry, motion, temporal consistency, uncertainty.</p></div>
+          <div class="phase phase--up"><span class="phase-num">Module 11</span><span class="phase-tag phase-tag--up">Upcoming</span><span class="phase-title">Open research problems</span><p class="phase-blurb">Failure modes, research hypotheses, CVPR experiments.</p></div>
+        </div>
+        <div class="prose-study">
+          <p>
+            We&rsquo;ll develop the foundations today, including our first real equations for
+            reconstructing 3D from photographs — and explaining why 4D is significantly
+            harder.
+          </p>
+        </div>
+      </section>
+
+      <!-- 1 THE PROBLEM -->
+      <section class="study-section" id="problem">
+        <h2>1. Understanding the problem before the models</h2>
+        <div class="prose-study">
+          <p class="lead">
+            Imagine a photograph of a street. The image contains buildings, roads, windows,
+            and possibly vehicles. You can recognize these objects immediately.
+          </p>
+          <p>
+            But imagine I ask you something different. <em>Can you tell me the exact
+            distance from the camera to every building? Can you reconstruct the building
+            surfaces that aren&rsquo;t visible? Could you move a virtual camera around the
+            scene and see what the street looks like from a completely different
+            viewpoint?</em>
+          </p>
+          <p>
+            A regular image cannot directly provide all that information.
+          </p>
+          <p>
+            It records a <strong>two-dimensional projection of a three-dimensional
+            world</strong>. This creates the fundamental problem of 3D reconstruction.
+          </p>
+        </div>
+
+        <figure class="study-figure">
+          <div class="plate">
+            <div class="plate-inner">
+              <svg viewBox="0 0 760 300" role="img" aria-label="An observed photograph inverting into a wireframe reconstruction">
+                <!-- photograph -->
+                <rect x="40" y="30" width="300" height="212" rx="6" class="field"/>
+                <rect x="66" y="96" width="52" height="146" class="stroke"/>
+                <rect x="126" y="62" width="72" height="180" class="stroke"/>
+                <rect x="206" y="112" width="62" height="130" class="stroke"/>
+                <rect x="276" y="134" width="42" height="108" class="stroke"/>
+                <path class="stroke-thin" d="M66 126h52M66 156h52M66 186h52M92 96v146"/>
+                <path class="stroke-thin" d="M126 98h72M126 134h72M126 170h72M126 206h72M162 62v180"/>
+                <path class="stroke-thin" d="M206 142h62M206 172h62M206 202h62M237 112v130"/>
+                <text x="190" y="264" text-anchor="middle" class="lbl">I = R(S, C) · one photograph</text>
+                <!-- invert arrow -->
+                <line x1="356" y1="136" x2="420" y2="136" class="stroke-acc"/>
+                <polygon points="432,136 418,130 418,142" class="dot"/>
+                <text x="394" y="120" text-anchor="middle" class="lbl-acc">invert?</text>
+                <!-- wireframe -->
+                <path class="stroke-thin dash" d="M522 58h122v156h-122z"/>
+                <path class="stroke" d="M488 86h122v156h-122z"/>
+                <path class="stroke" d="M488 86 522 58M610 86 644 58M488 242 522 214M610 242 644 214"/>
+                <path class="stroke-thin dash" d="M470 258h230M470 268h230"/>
+                <text x="566" y="288" text-anchor="middle" class="lbl">Ŝ — many worlds match</text>
+              </svg>
+            </div>
+            <div class="plate-title">
+              <span class="fig-no">FIG 01</span><span>Two worlds, one photograph</span><span class="fig-note">NOT TO SCALE</span>
+            </div>
+          </div>
+          <figcaption>Conceptual diagram: recovering a 3D representation from an observed image. The reconstructed scene might be represented as points, surfaces, or a continuous field.</figcaption>
+        </figure>
+
+        <div class="prose-study">
+          <p>
+            Mathematically, let the real three-dimensional scene be
+            \(\mathcal S\), the camera parameters be \(C\), and the image
+            formation process be \(\mathcal R\). The camera produces an image:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            I=\mathcal R(\mathcal S,\;C)
+          \]
+        </div>
+        <div class="prose-study">
+          <ul>
+            <li>\(I\) is the observed photograph.</li>
+            <li>\(\mathcal S\) is the 3D scene, including its geometry and appearance.</li>
+            <li>\(C\) describes the camera position, orientation, and optical properties.</li>
+            <li>\(\mathcal R\) is the process of converting the 3D scene into pixels, including visibility, lighting, and projection.</li>
+          </ul>
+          <p>
+            This is the <strong>forward problem</strong>: going from a known world to an
+            image. Reconstruction reverses that process:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            I \longrightarrow \widehat{\mathcal S}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The symbol \(\widehat{\mathcal S}\) means our <em>estimate</em> of the actual
+            scene. And here is the first fundamental insight:
+          </p>
+        </div>
+        <p class="punch">
+          Generating an image from known 3D geometry is comparatively well-defined.
+          Recovering the original 3D geometry from an image is not.
+        </p>
+        <div class="prose-study">
+          <p>
+            Why? Because <strong>many different 3D scenes can produce exactly the same
+            photograph</strong>. We&rsquo;ll quantify that claim precisely in §4.
+          </p>
+        </div>
+      </section>
+
+      <!-- 2 3D VS 4D -->
+      <section class="study-section" id="distinction">
+        <h2>2. What is the difference between 3D and 4D?</h2>
+        <div class="prose-study">
+          <p>Consider a ball on a table.</p>
+        </div>
+
+        <figure class="study-figure">
+          <div class="plate">
+            <div class="plate-inner">
+              <svg viewBox="0 0 760 250" role="img" aria-label="A static scene versus a scene changing over time">
+                <line x1="380" y1="22" x2="380" y2="238" class="stroke-thin dash"/>
+                <!-- left: 3D -->
+                <text x="200" y="46" text-anchor="middle" class="lbl">3D — one instant</text>
+                <line x1="70" y1="192" x2="330" y2="192" class="stroke"/>
+                <line x1="92" y1="192" x2="92" y2="226" class="stroke-thin"/>
+                <line x1="308" y1="192" x2="308" y2="226" class="stroke-thin"/>
+                <ellipse cx="200" cy="190" rx="24" ry="4" class="field"/>
+                <circle cx="200" cy="164" r="26" class="stroke"/>
+                <text x="200" y="124" text-anchor="middle" class="lbl-acc">X = (3, 1, 1)</text>
+                <text x="200" y="248" text-anchor="middle" class="lbl-mut">Where is the ball? What radius? What shape is the table?</text>
+                <!-- right: 4D -->
+                <text x="560" y="46" text-anchor="middle" class="lbl">4D — a scene that evolves</text>
+                <path class="stroke-thin dash" d="M424 180 Q 520 116 692 176"/>
+                <circle cx="430" cy="172" r="18" class="stroke"/>
+                <circle cx="540" cy="143" r="18" class="stroke"/>
+                <circle cx="655" cy="167" r="18" class="stroke"/>
+                <text x="430" y="212" text-anchor="middle" class="lbl-mut">t = 0</text>
+                <text x="540" y="184" text-anchor="middle" class="lbl-mut">t = 1</text>
+                <text x="655" y="206" text-anchor="middle" class="lbl-mut">t = 2</text>
+                <text x="560" y="236" text-anchor="middle" class="lbl-acc">X(t) = X₀ + vt</text>
+              </svg>
+            </div>
+            <div class="plate-title">
+              <span class="fig-no">FIG 02</span><span>A ball on a table, in 3D and in 4D</span><span class="fig-note">NOT TO SCALE</span>
+            </div>
+          </div>
+          <figcaption>3D asks <em>where is the ball? How does it move? Where is it at each timestamp?</em> — the last question is the extra one that 4D adds.</figcaption>
+        </figure>
+
+        <div class="prose-study">
+          <p>
+            In 3D, a point has three spatial coordinates:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            \mathbf X= \begin{bmatrix} X\\ Y\\ Z \end{bmatrix}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Here \(X,Y,Z\) specify its position along the three spatial axes. In 4D
+            reconstruction, the scene evolves with time \(t\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            \mathbf X(t)= \begin{bmatrix} X(t)\\ Y(t)\\ Z(t) \end{bmatrix}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>For a ball moving at constant velocity, we could write:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            \mathbf X(t)=\mathbf X_0+\mathbf v\,t
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            where \(\mathbf X_0\) is its initial position, \(\mathbf v\) is its 3D velocity
+            vector, and \(t\) is elapsed time. For example:
+            \(\mathbf X_0=(1,2,3)\), \(\mathbf v=(0.5,0,0)\). Then at \(t=2\) seconds:
+          </p>
+        </div>
+        <div class="eq-block">
+          \[
+            \mathbf X(2)=(2,2,3)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The ball has moved one spatial unit along the X-axis. For a deforming object,
+            such as a waving cloth, the problem is more complex: thousands of points may
+            change position differently over time. A useful abstract representation is:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            \mathcal S(t)=\{\,\mathcal G(t),\;\mathcal A(t)\,\}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Here \(\mathcal G(t)\) describes the geometry at time \(t\), and
+            \(\mathcal A(t)\) describes its appearance — which might also change with
+            time. The resulting sequence of observations is:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            I_t=\mathcal R(\mathcal S(t),\,C_t)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Notice that the camera \(C_t\) can move as well. That introduces one of the
+            hardest challenges in 4D reconstruction:
+          </p>
+        </div>
+        <div class="warn-box">
+          <span class="box-label">The central difficulty</span>
+          <p>
+            We must distinguish movement of the <em>world</em> from movement of the
+            <em>camera</em>. We return to exactly this in §8, where the coupling becomes
+            an equation.
+          </p>
+        </div>
+
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th>Property</th><th>3D</th><th>4D</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Geometry</td><td>Static or single instant</td><td>Changes over time</td></tr>
+              <tr><td>Typical input</td><td>One or multiple images</td><td>Video or synchronized images</td></tr>
+              <tr><td>Depth</td><td>Required</td><td>Required across time</td></tr>
+              <tr><td>Camera pose</td><td>Often unknown</td><td>May change every frame</td></tr>
+              <tr><td>Object motion</td><td>Not necessarily modeled</td><td>Central to the task</td></tr>
+              <tr><td>Point correspondence</td><td>Across camera views</td><td>Across views and timestamps</td></tr>
+              <tr><td>Example</td><td>Reconstruct a house</td><td>Reconstruct a walking person</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            One subtle point: <strong>4D reconstruction does not always output a single,
+            persistent, physically accurate mesh</strong>. Some methods output depth maps
+            and motion fields; others represent a time-varying radiance field, Gaussian
+            particles, or deforming surfaces. These are related but different outputs, and
+            the differences will matter enormously when we read research papers (§10).
+          </p>
+        </div>
+      </section>
+
+      <!-- 3 CAMERA -->
+      <section class="study-section" id="camera">
+        <h2>3. How does a camera convert 3D into 2D?</h2>
+        <div class="prose-study">
+          <p>
+            This is probably the most important mathematical foundation of the entire
+            field. If you understand this section properly, the equations in NeRF,
+            Gaussian splatting, DUSt3R, VGGT, and many 4D reconstruction models will
+            become much easier to understand.
+          </p>
+          <h3>3.1 · The pinhole camera model</h3>
+          <p>
+            Imagine a camera looking at a ball. Light from the ball travels toward the
+            camera and is projected onto an image plane.
+          </p>
+        </div>
+
+        <figure class="study-figure">
+          <div class="plate">
+            <div class="plate-inner">
+              <svg viewBox="0 0 760 280" role="img" aria-label="Pinhole projection: a point P projected to the image plane p through the camera center">
+                <line x1="110" y1="150" x2="700" y2="150" class="stroke-thin dash"/>
+                <line x1="215" y1="36" x2="215" y2="262" class="stroke"/>
+                <text x="215" y="26" text-anchor="middle" class="lbl-mut">IMAGE PLANE</text>
+                <line x1="120" y1="150" x2="590" y2="84" class="stroke-acc"/>
+                <circle cx="120" cy="150" r="4" class="dot"/>
+                <text x="120" y="168" text-anchor="middle" class="lbl">C</text>
+                <circle cx="215" cy="137" r="3" class="dot"/>
+                <text x="226" y="146" class="lbl">p</text>
+                <circle cx="590" cy="84" r="4.5" class="dot"/>
+                <text x="598" y="80" text-anchor="end" class="lbl">P = (X, Y, Z)</text>
+                <!-- f dimension -->
+                <line x1="120" y1="180" x2="215" y2="180" class="stroke-thin"/>
+                <path class="stroke-thin" d="M120 174v12M215 174v12"/>
+                <text x="167" y="198" text-anchor="middle" class="lbl">f</text>
+                <!-- Z dimension -->
+                <line x1="120" y1="214" x2="590" y2="214" class="stroke-thin"/>
+                <path class="stroke-thin" d="M120 208v12M590 208v12"/>
+                <text x="355" y="232" text-anchor="middle" class="lbl">Z (depth along the viewing axis)</text>
+                <!-- X height -->
+                <line x1="620" y1="84" x2="620" y2="150" class="stroke-thin"/>
+                <path class="stroke-thin" d="M614 84h12M614 150h12"/>
+                <text x="636" y="120" class="lbl">X</text>
+                <!-- x on plane -->
+                <line x1="196" y1="137" x2="196" y2="150" class="stroke-thin"/>
+                <text x="186" y="147" text-anchor="end" class="lbl">x</text>
+                <text x="400" y="262" text-anchor="middle" class="lbl-acc">x = f·X/Z</text>
+              </svg>
+            </div>
+            <div class="plate-title">
+              <span class="fig-no">FIG 03</span><span>The pinhole bargain: depth traded for geometry</span><span class="fig-note">NOT TO SCALE</span>
+            </div>
+          </div>
+          <figcaption>The camera center \(C\), a 3D point \(P\), and its projected image point \(p\). The focal length is \(f\) and the point&rsquo;s depth is \(Z\).</figcaption>
+        </figure>
+
+        <div class="prose-study">
+          <p>
+            Let a point in camera coordinates be \(P=(X,Y,Z)\). The camera looks along
+            the positive \(Z\) direction in our convention. Suppose the image plane is
+            located at distance \(f\) from the camera center. Using similar triangles,
+            \(\dfrac{x}{f}=\dfrac{X}{Z}\) — and rearranging:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            x=f\,\frac{X}{Z}
+          \]
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            y=f\,\frac{Y}{Z}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            These are the <strong>fundamental perspective projection equations</strong>.
+          </p>
+        </div>
+
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th>Symbol</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>\(X,Y,Z\)</td><td>Location of a 3D point relative to the camera</td></tr>
+              <tr><td>\(Z\)</td><td>Depth along the camera&rsquo;s viewing axis</td></tr>
+              <tr><td>\(f\)</td><td>Focal length, expressed in image-coordinate units</td></tr>
+              <tr><td>\(x,y\)</td><td>Projected 2D image-plane coordinates</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="prose-study">
+          <p>Notice something important:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            x \propto \frac{1}{Z}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            As depth increases, the apparent size or displacement in the image becomes
+            smaller. This explains why distant buildings look small even when they&rsquo;re
+            physically enormous.
+          </p>
+
+          <h3>3.2 · Moving from image-plane coordinates to pixels</h3>
+          <p>
+            Actual digital images don&rsquo;t use coordinates centered at the camera&rsquo;s
+            optical axis. They use <em>pixel</em> coordinates. A common simplified
+            formulation is:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            u = f_x\,\frac{X}{Z}+c_x
+          \]
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            v = f_y\,\frac{Y}{Z}+c_y
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Here \(u,v\) are pixel coordinates, \(f_x,f_y\) are focal lengths measured in
+            <em>pixels</em>, and \(c_x,c_y\) are the <strong>principal point</strong>
+            coordinates — where the optical axis intersects the image plane.
+          </p>
+          <p>For example, suppose \(f_x=800\), \(X=0.5\) m, \(Z=4\) m, \(c_x=640\). Then
+          \(u=800\cdot\tfrac{0.5}{4}+640 = 740\). The point appears at horizontal pixel 740.</p>
+          <p>
+            Now double the object&rsquo;s depth <em>and</em> horizontal coordinate:
+            \(X=1\) m, \(Z=8\) m. The result is still
+            \(u=800\cdot\tfrac{1}{8}+640=740\).
+          </p>
+        </div>
+        <div class="def-box">
+          <span class="box-label">Two different 3D positions · one pixel</span>
+          <p>
+            3D points \((0.5, 4)\) and \((1.0, 8)\) produced <em>exactly</em> the same image
+            coordinate. This observation leads to the central ambiguity of monocular
+            reconstruction — the subject of §4.
+          </p>
+        </div>
+      </section>
+
+      <!-- 4 ONE IMAGE -->
+      <section class="study-section" id="one-pixel">
+        <h2>4. Why can&rsquo;t a single image uniquely determine depth?</h2>
+        <div class="prose-study">
+          <p>Suppose I observe a pixel at horizontal location \(u\). From the projection equation&nbsp;(10):</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(12)</span>
+          \[
+            X=\frac{u-c_x}{f_x}\,Z
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            For every possible positive value of \(Z\), there is a corresponding value of
+            \(X\). For example, all of these are valid for the pixel \(u=740\):
+          </p>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th>Depth \(Z\)</th><th>3D coordinate \(X\)</th><th>Projected pixel \(u\)</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="num">2 m</td><td class="num">0.25 m</td><td class="num">740</td></tr>
+              <tr><td class="num">4 m</td><td class="num">0.50 m</td><td class="num">740</td></tr>
+              <tr><td class="num">8 m</td><td class="num">1.00 m</td><td class="num">740</td></tr>
+              <tr><td class="num">16 m</td><td class="num">2.00 m</td><td class="num">740</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose-study">
+          <p>
+            This means one pixel corresponds not to a unique 3D point, but to an
+            <strong>entire ray</strong> extending from the camera into the world. In
+            vector form:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(13)</span>
+          \[
+            \mathbf X(Z)=Z\,K^{-1}\,\widetilde{\mathbf u},
+            \qquad \widetilde{\mathbf u}=[u,\;v,\;1]^\top
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Here \(\widetilde{\mathbf u}\) is the pixel in homogeneous coordinates and
+            \(K\) is the camera intrinsic matrix, which we will derive in full in §6.
+          </p>
+
+          <figure class="study-figure">
+            <div class="plate">
+              <div class="plate-inner">
+                <svg viewBox="0 0 760 280" role="img" aria-label="A single ray from a camera passes through increasingly large objects, all projecting to the same pixel u">
+                  <line x1="150" y1="30" x2="150" y2="250" class="stroke"/>
+                  <text x="150" y="22" text-anchor="middle" class="lbl-mut">IMAGE PLANE</text>
+                  <line x1="80" y1="150" x2="700" y2="58" class="stroke-thin dash"/>
+                  <circle cx="80" cy="150" r="4" class="dot"/>
+                  <text x="80" y="170" text-anchor="middle" class="lbl">C</text>
+                  <circle cx="150" cy="140" r="3" class="dot"/>
+                  <text x="158" y="134" class="lbl-acc">u = 740 px</text>
+                  <!-- objects on the ray -->
+                  <rect x="230.3" y="118.4" width="16" height="16" class="stroke"/>
+                  <text x="238" y="150" text-anchor="middle" class="lbl-mut">(0.25 m, 2 m)</text>
+                  <rect x="254.7" y="109.4" width="24" height="24" class="stroke"/>
+                  <text x="266.7" y="97" text-anchor="middle" class="lbl-mut">(0.5 m, 4 m)</text>
+                  <rect x="299.3" y="87.2" width="48" height="48" class="stroke"/>
+                  <text x="323.3" y="151.2" text-anchor="middle" class="lbl-mut">(1.00 m, 8 m)</text>
+                  <rect x="396.7" y="51.0" width="80" height="80" class="stroke"/>
+                  <text x="436.7" y="40" text-anchor="middle" class="lbl-mut">(2.00 m, 16 m)</text>
+                  <text x="395" y="236" text-anchor="middle" class="lbl-acc">same u for every one of them — the squares grow exactly as fast as their depth</text>
+                </svg>
+              </div>
+              <div class="plate-title">
+                <span class="fig-no">FIG 04</span><span>All Z&rsquo;s are equal</span><span class="fig-note">NOT TO SCALE</span>
+              </div>
+            </div>
+            <figcaption>Every point on this one dashed ray projects to pixel \(u=740\). Larger objects farther away are indistinguishable from smaller objects nearer — one pixel, a one-parameter family of worlds.</figcaption>
+          </figure>
+
+          <h3>The scale ambiguity</h3>
+          <p>
+            Even for a calibrated camera, projecting a point and projecting the same point
+            scaled by any positive constant can produce the same pixel:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(14)</span>
+          \[
+            \pi(\mathbf X)=\pi(\lambda\,\mathbf X),
+            \qquad \lambda &gt; 0
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            where \(\pi\) is perspective projection. This is one form of
+            <strong>scale ambiguity</strong>. There are other ambiguities too: hidden
+            surfaces, material properties, lighting, and even object shape can be
+            uncertain.
+          </p>
+        </div>
+
+        <div class="note-box">
+          <span class="box-label">So how do single-image depth models work?</span>
+          <p>
+            Systems such as <a href="https://arxiv.org/abs/2406.06512" target="_blank" rel="noopener">Depth Anything V2</a>
+            (NeurIPS&nbsp;2024) recover depth by learning strong <em>statistical priors</em>
+            from large datasets: roads are generally approximately flat, people have
+            typical shapes, perspective patterns correlate with depth. The model uses
+            learned knowledge to select a <em>likely</em> 3D interpretation.
+          </p>
+          <p>
+            But that is not the same as <strong>physically measuring</strong> depth from a
+            photograph. This is why we must distinguish <em>relative depth</em>,
+            <em>metric depth</em>, and <em>plausible geometric completion</em> — three
+            different claims that are easy to blur in a paper&rsquo;s abstract.
+          </p>
+        </div>
+      </section>
+
+      <!-- 5 STEREO -->
+      <section class="study-section" id="stereo">
+        <h2>5. How do multiple images help us recover real 3D?</h2>
+        <div class="prose-study">
+          <p>
+            Here is where the reconstruction problem becomes much more constrained.
+            Imagine photographing the same stationary object from two different
+            positions. Because the camera moves, the object appears in different pixel
+            locations in the two images. This displacement is called
+            <strong>disparity</strong> in rectified stereo vision.
+          </p>
+          <h3>5.1 · Stereo triangulation</h3>
+          <p>
+            Suppose we have two calibrated, horizontally aligned cameras. Their distance
+            apart is the <strong>baseline</strong> \(B\), and both have focal length
+            \(f\). For a 3D point at depth \(Z\), the disparity between its two pixel
+            positions is:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(15)</span>
+          \[
+            d = u_L-u_R
+          \]
+        </div>
+        <div class="prose-study">
+          <p>For rectified stereo, we obtain:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(16)</span>
+          \[
+            d=\frac{f\,B}{Z}
+          \]
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(17)</span>
+          \[
+            Z=\frac{f\,B}{d}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>This equation is incredibly important. It tells us that <strong>two views provide geometric information about depth through parallax</strong>.</p>
+        </div>
+
+        <figure class="study-figure">
+          <div class="plate">
+            <div class="plate-inner">
+              <svg viewBox="0 0 760 250" role="img" aria-label="Top-down stereo geometry: two cameras on a baseline b triangulate a point at depth Z">
+                <path class="stroke-acc" d="M150 26 V16 H420 V26"/>
+                <text x="285" y="11" text-anchor="middle" class="lbl-acc">baseline B</text>
+                <!-- cameras -->
+                <rect x="138" y="30" width="24" height="26" class="stroke"/>
+                <circle cx="150" cy="43" r="3" class="dot"/>
+                <text x="150" y="72" text-anchor="middle" class="lbl">O_L</text>
+                <rect x="408" y="30" width="24" height="26" class="stroke"/>
+                <circle cx="420" cy="43" r="3" class="dot"/>
+                <text x="420" y="72" text-anchor="middle" class="lbl">O_R</text>
+                <!-- image planes -->
+                <line x1="126" y1="86" x2="232" y2="86" class="stroke"/>
+                <line x1="368" y1="86" x2="474" y2="86" class="stroke"/>
+                <!-- rays -->
+                <line x1="150" y1="43" x2="330" y2="196" class="stroke-acc"/>
+                <line x1="420" y1="43" x2="330" y2="196" class="stroke-acc"/>
+                <!-- projected points -->
+                <circle cx="200.6" cy="86" r="3" class="dot"/>
+                <text x="206.6" y="78" class="lbl-mut">u_L</text>
+                <circle cx="394.7" cy="86" r="3" class="dot"/>
+                <text x="400.7" y="78" class="lbl-mut">u_R</text>
+                <!-- disparity bracket -->
+                <path class="stroke-acc" d="M200.6 92 V100 H394.7 V92"/>
+                <text x="297" y="116" text-anchor="middle" class="lbl-acc">d = u_L − u_R</text>
+                <!-- depth -->
+                <line x1="330" y1="60" x2="330" y2="192" class="stroke-thin dash"/>
+                <text x="340" y="130" class="lbl-acc">Z</text>
+                <circle cx="330" cy="196" r="4.5" class="dot"/>
+                <text x="343" y="200" class="lbl">P</text>
+                <text x="297" y="222" text-anchor="middle" class="lbl-acc">Z = f · B / d</text>
+              </svg>
+            </div>
+            <div class="plate-title">
+              <span class="fig-no">FIG 05</span><span>Two eyes buy depth</span><span class="fig-note">SCHEMATIC · NOT TO SCALE</span>
+            </div>
+          </div>
+          <figcaption>Two calibrated, rectified cameras separated by baseline \(B\) observe the same point. The depth \(Z\) is recoverable from the disparity \(d\) between the two projections.</figcaption>
+        </figure>
+
+        <div class="prose-study">
+          <p>
+            <strong>Numerical example.</strong> Suppose
+            \(f=800\) px, \(B=0.2\) m, \(d=40\) px. Then
+            \(Z=\dfrac{800\cdot 0.2}{40}=4\) m. We have recovered the object&rsquo;s depth
+            using image correspondence and known camera geometry — and unlike ordinary
+            single-image estimation, this depth is <em>constrained</em> by an observed
+            displacement between two camera views.
+          </p>
+          <p>But there are still failure modes:</p>
+        </div>
+        <div class="warn-box">
+          <span class="box-label">What can still go wrong</span>
+          <ul>
+            <li>What if the same pixel <strong>can&rsquo;t be matched</strong> across images (occlusion, out-of-frame)?</li>
+            <li>What if the object is <strong>textureless</strong>, so correspondence is ambiguous?</li>
+            <li>What if the cameras <strong>barely move</strong> (small parallax)?</li>
+            <li>And what if the object itself <strong>is moving</strong> between the two photographs?</li>
+          </ul>
+          <p>
+            That final question takes us directly toward 4D reconstruction (§8).
+          </p>
+        </div>
+
+        <h3>5.2 · Why distant objects are difficult</h3>
+        <div class="prose-study">
+          <p>Consider \(Z=\dfrac{fB}{d}\). The sensitivity of depth to disparity is:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(18)</span>
+          \[
+            \frac{\partial Z}{\partial d} =-\frac{f\,B}{d^{2}}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>For a small disparity error \(\Delta d\):</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(19)</span>
+          \[
+            \Delta Z\approx-\frac{f\,B}{d^{2}}\,\Delta d
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            As disparity becomes small, depth estimation becomes increasingly sensitive
+            to correspondence errors. This is one reason distant objects, low-parallax
+            camera motion, and repetitive surfaces are challenging.
+            <strong>Even with multiple images, reconstruction is not automatically
+            reliable.</strong>
+          </p>
+        </div>
+      </section>
+
+      <!-- LAB 01 -->
+      <section class="study-section" id="lab">
+        <h2>Lab 01 · Rays, pixels &amp; parallax</h2>
+        <div class="lab" id="labBench">
+          <div class="lab-head">
+            <h3>Three benches · Lecture 01</h3>
+            <span>Interactive · optional</span>
+          </div>
+          <p class="lab-intro">
+            Every slider below evaluates an equation you already met: Bench&nbsp;A is §4
+            (one pixel, one ray of depths), Bench&nbsp;B is §5 (depth from disparity),
+            Bench&nbsp;C is a preview of §8 (who actually moved?). Nothing is hidden —
+            all readouts are computed live from (8), (10), (17) and (19).
+          </p>
+          <div class="lab-panels">
+            <!-- Bench A -->
+            <div class="lab-panel">
+              <h4><span class="bench-id">A · Bench</span> The same pixel, many points</h4>
+              <p>
+                Keep the observed pixel fixed at \(u=740\) px (\(c_x=640\)). Slide the
+                candidate depth \(Z\) and the focal length; the point that projects there
+                is always \(X=(u-c_x)\,Z/f_x\) — an entire ray of 3D points.
+              </p>
+              <div class="slider-row">
+                <label for="aF">focal length \(f_x\)</label>
+                <input type="range" id="aF" min="400" max="1600" step="25" value="800" />
+                <span class="lab-val" id="aFVal">800 px</span>
+              </div>
+              <div class="slider-row">
+                <label for="aZ">candidate depth \(Z\)</label>
+                <input type="range" id="aZ" min="1" max="24" step="0.5" value="4" />
+                <span class="lab-val" id="aZVal">4.0 m</span>
+              </div>
+              <div class="stage">
+                <svg id="stageA" viewBox="0 0 620 230" role="img" aria-label="A ray of candidate 3D points all projecting to one pixel">
+                  <text x="150" y="26" text-anchor="middle" class="lbl-mut">IMAGE PLANE</text>
+                  <line x1="150" y1="34" x2="150" y2="210" class="stroke"/>
+                  <line x1="200" y1="214" x2="580" y2="214" class="stroke-thin"/>
+                  <line x1="224" y1="210" x2="224" y2="218" class="stroke-thin"/>
+                  <line x1="238" y1="210" x2="238" y2="218" class="stroke-thin"/>
+                  <line x1="267" y1="210" x2="267" y2="218" class="stroke-thin"/>
+                  <line x1="323" y1="210" x2="323" y2="218" class="stroke-thin"/>
+                  <line x1="437" y1="210" x2="437" y2="218" class="stroke-thin"/>
+                  <line x1="550" y1="210" x2="550" y2="218" class="stroke-thin"/>
+                  <text x="224" y="227" text-anchor="middle" class="lbl-mut" style="font-size:9px">1 m</text>
+                  <text x="238" y="227" text-anchor="middle" class="lbl-mut" style="font-size:9px">2 m</text>
+                  <text x="267" y="227" text-anchor="middle" class="lbl-mut" style="font-size:9px">4 m</text>
+                  <text x="323" y="227" text-anchor="middle" class="lbl-mut" style="font-size:9px">8 m</text>
+                  <text x="437" y="227" text-anchor="middle" class="lbl-mut" style="font-size:9px">16 m</text>
+                  <text x="550" y="227" text-anchor="middle" class="lbl-mut" style="font-size:9px">24 m</text>
+                  <circle cx="95" cy="152" r="4" class="dot"/>
+                  <text x="95" y="172" text-anchor="middle" class="lbl">C (camera)</text>
+                  <text id="aSlopeTxt" x="95" y="196" class="lbl-mut">X(Z) = 0.125·Z</text>
+                  <line x1="95" y1="152" x2="610" y2="60" class="stroke-acc dash"/>
+                  <circle cx="150" cy="142" r="3" class="dot"/>
+                  <text x="158" y="136" class="lbl-acc">u = 740 px</text>
+                  <g data-z="2">
+                    <rect x="230" y="118" width="18" height="18" class="stroke"/><text x="239" y="152" text-anchor="middle" class="lbl-mut"></text>
+                  </g>
+                  <g data-z="4" data-label-dir="above">
+                    <rect x="255" y="109" width="24" height="24" class="stroke"/><text x="267" y="97" text-anchor="middle" class="lbl-mut"></text>
+                  </g>
+                  <g data-z="8">
+                    <rect x="299" y="87" width="48" height="48" class="stroke"/><text x="323" y="151" text-anchor="middle" class="lbl-mut"></text>
+                  </g>
+                  <g data-z="16" data-label-dir="above">
+                    <rect x="397" y="51" width="80" height="80" class="stroke"/><text x="437" y="40" text-anchor="middle" class="lbl-mut"></text>
+                  </g>
+                  <circle id="aRayHi" r="7" class="stroke-acc"/>
+                  <text id="aRayHiLbl" class="lbl-acc"></text>
+                </svg>
+              </div>
+              <div class="readout">
+                <dl><dt>matched X</dt><dd id="aXOut">0.500 m</dd></dl>
+                <dl><dt>projected u</dt><dd id="aUOut">740 px</dd></dl>
+                <dl><dt>verdict</dt><dd><small>same pixel — any Z on the ray explains it</small></dd></dl>
+              </div>
+            </div>
+            <!-- Bench B -->
+            <div class="lab-panel">
+              <h4><span class="bench-id">B · Bench</span> Triangulation under error</h4>
+              <p>
+                Depth from two views: \(Z=fB/d\), with sensitivity
+                \(\partial Z/\partial d=fB/d^{2}\). Watch the error budget explode as the
+                disparity shrinks.
+              </p>
+              <div class="slider-row">
+                <label for="bF">focal length \(f\)</label>
+                <input type="range" id="bF" min="400" max="3200" step="50" value="800" />
+                <span class="lab-val" id="bFVal">800 px</span>
+              </div>
+              <div class="slider-row">
+                <label for="bB">baseline \(B\)</label>
+                <input type="range" id="bB" min="0.05" max="1" step="0.01" value="0.2" />
+                <span class="lab-val" id="bBVal">0.20 m</span>
+              </div>
+              <div class="slider-row">
+                <label for="bD">observed disparity \(d\)</label>
+                <input type="range" id="bD" min="5" max="120" step="1" value="40" />
+                <span class="lab-val" id="bDVal">40 px</span>
+              </div>
+              <div class="stage">
+                <svg id="stageB" viewBox="0 0 620 240" role="img" aria-label="Top-down schematic: rays from two cameras converge at depth Z">
+                  <path class="stroke-acc" d="M185 24 V14 H435 V24"/>
+                  <text x="310" y="8" text-anchor="middle" class="lbl-acc" style="font-size:9px">baseline B</text>
+                  <rect x="172" y="26" width="26" height="28" class="stroke"/>
+                  <circle cx="185" cy="40" r="3" class="dot"/>
+                  <text x="185" y="72" text-anchor="middle" class="lbl">O_L</text>
+                  <rect x="422" y="26" width="26" height="28" class="stroke"/>
+                  <circle cx="435" cy="40" r="3" class="dot"/>
+                  <text x="435" y="72" text-anchor="middle" class="lbl">O_R</text>
+                  <line id="bRayL" x1="185" y1="42" x2="310" y2="202" class="stroke-acc"/>
+                  <line id="bRayR" x1="435" y1="42" x2="310" y2="202" class="stroke-acc"/>
+                  <text x="310" y="84" text-anchor="middle" class="lbl-mut">disparity d = u_L − u_R</text>
+                  <!-- depth ruler -->
+                  <line x1="536" y1="48.7" x2="548" y2="48.7" class="stroke-thin"/><text x="552" y="51.7" class="lbl-mut" style="font-size:9px">1 m</text>
+                  <line x1="536" y1="55.3" x2="548" y2="55.3" class="stroke-thin"/><text x="552" y="58.3" class="lbl-mut" style="font-size:9px">2 m</text>
+                  <line x1="536" y1="68.7" x2="548" y2="68.7" class="stroke-thin"/><text x="552" y="71.7" class="lbl-mut" style="font-size:9px">4 m</text>
+                  <line x1="536" y1="95.3" x2="548" y2="95.3" class="stroke-thin"/><text x="552" y="98.3" class="lbl-mut" style="font-size:9px">8 m</text>
+                  <line x1="536" y1="148.7" x2="548" y2="148.7" class="stroke-thin"/><text x="552" y="151.7" class="lbl-mut" style="font-size:9px">16 m</text>
+                  <line x1="536" y1="202" x2="548" y2="202" class="stroke-thin"/><text x="552" y="205" class="lbl-mut" style="font-size:9px">24 m +</text>
+                  <circle id="bPoint" cx="310" cy="202" r="4.5" class="dot"/>
+                  <text id="bZLbl" x="310" y="220" text-anchor="middle" class="lbl-acc"></text>
+                </svg>
+              </div>
+              <div class="readout">
+                <dl><dt>depth Z</dt><dd id="bZOut">4.00 m</dd></dl>
+                <dl><dt>sensitivity ∂Z/∂d</dt><dd id="bSensOut">0.100 m/px</dd></dl>
+                <dl><dt>±2 px matching error</dt><dd id="bErrOut">± 0.20 m</dd></dl>
+              </div>
+              <p class="verdict">
+                The ruler on the right shows why distant scenes hurt: push \(d\) down and
+                the rays flatten toward parallel — the near/far distinction lives in a
+                handful of pixels.
+              </p>
+            </div>
+            <!-- Bench C -->
+            <div class="lab-panel">
+              <h4><span class="bench-id">C · Bench</span> Who moved? The ambiguity machine</h4>
+              <p>
+                Fixed scene: \(f_x=800\) px, \(c_x=640\), point \(X=1\) m, \(Z=10\) m, so
+                \(u=720\) px. Slide the observed image shift \(\Delta u\); then split the
+                cause between camera and world. Every split reproduces the <em>same</em>
+                image.
+              </p>
+              <div class="slider-row">
+                <label for="cD">observed shift \(\Delta u\)</label>
+                <input type="range" id="cD" min="2" max="40" step="1" value="12" />
+                <span class="lab-val" id="cDVal">12 px</span>
+              </div>
+              <div class="slider-row">
+                <label for="cS">split · camera ↔ world</label>
+                <input type="range" id="cS" min="0" max="100" step="5" value="0" />
+                <span class="lab-val" id="cSVal">0 % world</span>
+              </div>
+              <div class="readout">
+                <dl><dt>world motion</dt><dd id="cWorld">still</dd></dl>
+                <dl><dt>camera motion</dt><dd id="cCam">0.150 m left</dd></dl>
+                <dl><dt>split s</dt><dd><small>0 = camera · 1 = world</small></dd></dl>
+              </div>
+              <div class="sc-row" data-split="0">
+                <span class="sc-name">Camera only</span>
+                <div class="sc-bars">
+                  <div class="sc-bar"><span data-barw></span></div>
+                  <div class="sc-bar"><span data-barc></span></div>
+                  <p class="sc-cause">world: <b data-world>still</b> · camera: <b data-cam>0.150 m ←</b></p>
+                </div>
+                <span class="sc-fig" data-same></span>
+              </div>
+              <div class="sc-row" data-split="0.5">
+                <span class="sc-name">Shared</span>
+                <div class="sc-bars">
+                  <div class="sc-bar"><span data-barw></span></div>
+                  <div class="sc-bar"><span data-barc></span></div>
+                  <p class="sc-cause">world: <b data-world></b> · camera: <b data-cam></b></p>
+                </div>
+                <span class="sc-fig" data-same></span>
+              </div>
+              <div class="sc-row" data-split="1">
+                <span class="sc-name">World only</span>
+                <div class="sc-bars">
+                  <div class="sc-bar"><span data-barw></span></div>
+                  <div class="sc-bar"><span data-barc></span></div>
+                  <p class="sc-cause">world: <b data-world></b> · camera: <b data-cam>still</b></p>
+                </div>
+                <span class="sc-fig" data-same></span>
+              </div>
+              <p class="verdict">
+                Δu constrains only the <strong>difference</strong>
+                \(\delta_{\text{world}}-\delta_{\text{camera}}\). Any split — and the
+                checkpoint question at the end of this lecture — has no unique answer
+                from pixels alone.
+              </p>
+            </div>
+          </div>
+          <p class="verdict" id="cCheck" style="margin-top:1rem"></p>
+        </div>
+      </section>
+
+      <!-- WORKED -->
+      <section class="study-section" id="worked">
+        <h2>Worked example · depth from two pixels</h2>
+        <div class="worked-board">
+          <span class="box-label">Worked · stereo depth and its error budget</span>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li>
+              A calibrated, rectified stereo pair observes the same physical corner of a
+              lamppost at \(u_L=940\) px in the left image and \(u_R=900\) px in the
+              right image. <em>What is the lamppost&rsquo;s depth?</em>
+            </li>
+            <li>
+              Disparity comes first — equation (15):
+              \(d = u_L - u_R = 940 - 900 = 40\) px.
+            </li>
+            <li>
+              The pair is calibrated: \(f=800\) px, \(B=0.20\) m. Apply (17):
+              \(Z = fB/d = \dfrac{800\times 0.20}{40}\).
+            </li>
+            <li>
+              \(Z = \dfrac{160}{40} = 4.0\) m. A constrained geometric measurement — every
+              factor is either calibrated or observed.
+            </li>
+            <li>
+              Now the error budget — equation (18): \(\dfrac{\partial Z}{\partial d}
+              = -\dfrac{fB}{d^2} = -\dfrac{160}{1600} = -0.1\) m per pixel of disparity.
+            </li>
+            <li>
+              A 2-pixel matching error swings depth by \(\pm 0.2\) m — 5% of \(Z\), for
+              free. At \(d=8\) px, the same 2-px error would cost
+              \(\pm\tfrac{160}{64}\times 2 = \pm 5\) m. Distant structure is fragile.
+            </li>
+          </ol>
+          <div class="reveal-btns">
+            <button class="btn-ink btn-ink--fill" type="button" id="revealNext" data-keys>Reveal next step</button>
+            <button class="btn-ink" type="button" id="revealAll" data-keys>Reveal all</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 FULL CAMERA EQUATION -->
+      <section class="study-section" id="complete-eq">
+        <h2>6. The complete 3D camera equation</h2>
+        <div class="prose-study">
+          <p>Now let&rsquo;s introduce the equation that appears throughout research in 3D computer vision:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(20)</span>
+          \[
+            \lambda
+            \begin{bmatrix} u\\ v\\ 1 \end{bmatrix}
+            =
+            K \begin{bmatrix} R &amp; t \end{bmatrix}
+            \begin{bmatrix} X_w\\ Y_w\\ Z_w\\ 1 \end{bmatrix}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This equation combines the camera&rsquo;s internal geometry, position,
+            orientation, and perspective projection. Let&rsquo;s unpack it.
+          </p>
+          <h3>6.1 · Camera intrinsics</h3>
+          <p>The camera intrinsic matrix is usually written:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(21)</span>
+          \[
+            K=
+            \begin{bmatrix}
+              f_x &amp; 0 &amp; c_x\\
+              0 &amp; f_y &amp; c_y\\
+              0 &amp; 0 &amp; 1
+            \end{bmatrix}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This common form assumes zero pixel skew; more general formulations can
+            include skew. The intrinsic parameters tell us how the camera maps points
+            expressed in <em>camera coordinates</em> onto <em>pixel coordinates</em> —
+            exactly equations (10)&ndash;(11) in matrix clothing.
+          </p>
+          <h3>6.2 · Camera extrinsics</h3>
+          <p>The extrinsic parameters are the rotation \(R\) and translation \(t\). A 3D point in the world coordinate system is transformed into camera coordinates using:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(22)</span>
+          \[
+            \mathbf X_c=R\,\mathbf X_w+t
+          \]
+        </div>
+        <div class="prose-study">
+          <ul>
+            <li>\(\mathbf X_w\) is the point in world coordinates.</li>
+            <li>\(\mathbf X_c\) is the same point relative to the camera.</li>
+            <li>\(R\in SO(3)\) is a \(3\times 3\) rotation matrix.</li>
+            <li>\(t\in\mathbb R^3\) is a translation vector.</li>
+          </ul>
+          <p>
+            We&rsquo;re using the <strong>world-to-camera</strong> convention. Under this
+            convention, the camera center in world coordinates is \(-R^\top t\).
+          </p>
+        </div>
+        <div class="warn-box">
+          <span class="box-label">Convention warning</span>
+          <p>
+            Some papers and codebases use <em>camera-to-world</em>
+            transformations instead. The same symbol t can sit on the other side of the
+            equation four pages later. When reading a paper&rsquo;s geometry section,
+            locate the convention <em>first</em>.
+          </p>
+        </div>
+        <div class="prose-study">
+          <h3>6.3 · Perspective division</h3>
+          <p>
+            Once we transform a point into camera coordinates
+            \(\mathbf X_c=(X_c,Y_c,Z_c)\), we project it with equations (10)&ndash;(11).
+            The unknown scalar \(\lambda\) in the homogeneous camera equation (20)
+            accounts for the fact that homogeneous vectors represent image coordinates
+            only up to scale; in this simple projection model it is related to
+            camera-space depth.
+          </p>
+        </div>
+        <div class="note-box">
+          <span class="box-label">Why is this important for current research?</span>
+          <p>
+            Consider an architecture like
+            <a href="https://github.com/facebookresearch/vggt" target="_blank" rel="noopener">VGGT</a>.
+            It estimates camera parameters and scene geometry in a feed-forward pass —
+            but its predictions ultimately have to be compatible with this geometric
+            relationship:
+          </p>
+          <div class="evo-flow">
+            <span class="evo-chip">3D point X_w</span><span class="evo-arrow">→</span>
+            <span class="evo-chip">X_c = RX_w + t</span><span class="evo-arrow">→</span>
+            <span class="evo-chip">u, v pixels</span>
+          </div>
+          <p style="margin-bottom:0">
+            Even if a large transformer predicts geometry directly, perspective geometry
+            is still essential for understanding whether those predictions are
+            <em>physically consistent</em>.
+          </p>
+        </div>
+      </section>
+
+      <!-- 7 CLASSICAL -->
+      <section class="study-section" id="classical">
+        <h2>7. How classical 3D reconstruction actually works</h2>
+        <div class="prose-study">
+          <p>
+            Before neural networks became dominant, methods such as
+            <strong>Structure-from-Motion (SfM)</strong> and <strong>Multi-View Stereo
+            (MVS)</strong> were already capable of reconstructing large real-world
+            scenes. A foundational reference is
+            <a href="https://openaccess.thecvf.com/content_cvpr_2016/html/Schonberger_Structure-From-Motion_Revisited_CVPR_2016_paper.html" target="_blank" rel="noopener">Structure-from-Motion Revisited</a>
+            (Schönberger &amp; Frahm, CVPR 2016); its implementation is the well-known
+            <a href="https://github.com/colmap/colmap" target="_blank" rel="noopener">COLMAP</a> system.
+          </p>
+          <p>The classical pipeline can be summarized as:</p>
+        </div>
+        <div class="evo-flow">
+          <span class="evo-chip">Multiple photographs</span><span class="evo-arrow">→</span>
+          <span class="evo-chip">Feature detection &amp; matching</span><span class="evo-arrow">→</span>
+          <span class="evo-chip">Camera pose + triangulation</span><span class="evo-arrow">→</span>
+          <span class="evo-chip">Bundle adjustment</span><span class="evo-arrow">→</span>
+          <span class="evo-chip">Dense reconstruction</span>
+        </div>
+        <div class="prose-study">
+          <p>
+            The especially interesting step is <strong>bundle adjustment</strong>.
+          </p>
+          <h3>7.1 · Bundle adjustment: reconstruction as optimization</h3>
+          <p>
+            Suppose we have several cameras observing the same 3D points. Each observed
+            pixel is associated with an unknown 3D point. We want to find camera poses
+            and 3D positions such that projecting the reconstructed points into each
+            camera reproduces the observed pixels. One standard objective is:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(23)</span>
+          \[
+            \min_{\{R_i,\;t_i,\;\mathbf X_j\}}\;
+            \sum_{(i,j)\in\mathcal O}
+            \rho\Big(
+              \big\|
+              \mathbf u_{ij} -
+              \pi\big(K_i(R_i\mathbf X_j+t_i)\big)
+              \big\|_2^2
+            \Big)
+          \]
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th>Symbol</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>\(i\)</td><td>Camera or image index</td></tr>
+              <tr><td>\(j\)</td><td>3D scene-point index</td></tr>
+              <tr><td>\(\mathbf X_j\)</td><td>Unknown position of 3D point \(j\)</td></tr>
+              <tr><td>\(R_i,\;t_i\)</td><td>Rotation and translation for camera \(i\)</td></tr>
+              <tr><td>\(K_i\)</td><td>Camera intrinsics</td></tr>
+              <tr><td>\(\mathbf u_{ij}\)</td><td>Observed pixel position of point \(j\) in image \(i\)</td></tr>
+              <tr><td>\(\pi\)</td><td>Perspective projection</td></tr>
+              <tr><td>\(\mathcal O\)</td><td>Set of valid camera–point observations</td></tr>
+              <tr><td>\(\rho\)</td><td>Robust penalty to reduce the effect of erroneous observations</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose-study">
+          <p>Inside the objective, the expression</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(24)</span>
+          \[
+            \mathbf u_{ij}-\pi\big(K_i(R_i\mathbf X_j+t_i)\big)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            is the <strong>reprojection error</strong>: how far our predicted pixel
+            location is from the observed one. Bundle adjustment tries to minimize these
+            errors <em>jointly</em> across all cameras and all reconstructed points.
+          </p>
+        </div>
+        <p class="punch">
+          In classical reconstruction, optimization is performed on the scene and camera
+          parameters for a particular collection of images. In feed-forward neural
+          reconstruction, a trained network attempts to predict those parameters in one
+          or a small number of forward passes.
+        </p>
+        <div class="prose-study">
+          <p>
+            This distinction is central to the evolution from COLMAP toward DUSt3R and
+            VGGT — we&rsquo;ll chart it in §10.
+          </p>
+        </div>
+      </section>
+
+      <!-- 8 MOTION -->
+      <section class="study-section" id="motion">
+        <h2>8. How does 4D reconstruction extend these ideas?</h2>
+        <div class="prose-study">
+          <p>Now return to our moving ball. Suppose it appears to move to the right between two video frames. There are at least three possibilities:</p>
+        </div>
+
+        <figure class="study-figure">
+          <div class="plate">
+            <div class="plate-inner">
+              <svg viewBox="0 0 760 300" role="img" aria-label="Three scenarios — ball moves, camera moves, both move — that produce identical pixel displacement">
+                <!-- columns -->
+                <text x="140" y="24" text-anchor="middle" class="lbl">A · WORLD MOVED</text>
+                <text x="390" y="24" text-anchor="middle" class="lbl">B · CAMERA MOVED</text>
+                <text x="640" y="24" text-anchor="middle" class="lbl">C · BOTH MOVED</text>
+                <!-- A -->
+                <rect x="55" y="36" width="170" height="74" class="field"/>
+                <line x1="65" y1="92" x2="215" y2="92" class="stroke-thin"/>
+                <circle cx="125" cy="74" r="8" class="dot"/>
+                <rect x="55" y="150" width="170" height="74" class="field"/>
+                <line x1="65" y1="206" x2="215" y2="206" class="stroke-thin"/>
+                <circle cx="145" cy="188" r="8" class="dot"/>
+                <line x1="125" y1="88" x2="125" y2="176" class="stroke-acc dash"/>
+                <polygon points="125,182 120,172 130,172" class="dot"/>
+                <text x="137" y="138" class="lbl-acc">Δu = +20 px</text>
+                <!-- A cause -->
+                <line x1="70" y1="236" x2="210" y2="236" class="stroke-thin"/>
+                <circle cx="112" cy="232" r="4" class="dot"/>
+                <circle cx="142" cy="232" r="4" class="stroke" style="fill:var(--surface)"/>
+                <line x1="118" y1="232" x2="134" y2="232" class="stroke-acc"/>
+                <polygon points="140,232 132,228 132,236" class="dot"/>
+                <text x="140" y="258" text-anchor="middle" class="lbl-mut">ball moved →</text>
+                <!-- B -->
+                <rect x="305" y="36" width="170" height="74" class="field"/>
+                <line x1="315" y1="92" x2="465" y2="92" class="stroke-thin"/>
+                <circle cx="375" cy="74" r="8" class="dot"/>
+                <rect x="305" y="150" width="170" height="74" class="field"/>
+                <line x1="315" y1="206" x2="465" y2="206" class="stroke-thin"/>
+                <circle cx="395" cy="188" r="8" class="dot"/>
+                <line x1="375" y1="88" x2="375" y2="176" class="stroke-acc dash"/>
+                <polygon points="375,182 370,172 380,172" class="dot"/>
+                <text x="387" y="138" class="lbl-acc">Δu = +20 px</text>
+                <!-- B cause -->
+                <line x1="320" y1="238" x2="460" y2="238" class="stroke-thin"/>
+                <rect x="336" y="222" width="22" height="18" class="stroke"/>
+                <line x1="332" y1="231" x2="318" y2="231" class="stroke-acc"/>
+                <polygon points="314,231 322,227 322,235" class="dot"/>
+                <circle cx="412" cy="234" r="4" class="dot"/>
+                <text x="390" y="258" text-anchor="middle" class="lbl-mut">camera ← (world still)</text>
+                <!-- C -->
+                <rect x="555" y="36" width="170" height="74" class="field"/>
+                <line x1="565" y1="92" x2="715" y2="92" class="stroke-thin"/>
+                <circle cx="625" cy="74" r="8" class="dot"/>
+                <rect x="555" y="150" width="170" height="74" class="field"/>
+                <line x1="565" y1="206" x2="715" y2="206" class="stroke-thin"/>
+                <circle cx="645" cy="188" r="8" class="dot"/>
+                <line x1="625" y1="88" x2="625" y2="176" class="stroke-acc dash"/>
+                <polygon points="625,182 620,172 630,172" class="dot"/>
+                <text x="637" y="138" class="lbl-acc">Δu = +20 px</text>
+                <!-- C cause -->
+                <line x1="570" y1="238" x2="710" y2="238" class="stroke-thin"/>
+                <rect x="582" y="222" width="22" height="18" class="stroke"/>
+                <line x1="578" y1="231" x2="566" y2="231" class="stroke-acc"/>
+                <polygon points="562,231 570,227 570,235" class="dot"/>
+                <circle cx="652" cy="234" r="4" class="dot"/>
+                <circle cx="622" cy="234" r="4" class="stroke" style="fill:var(--surface)"/>
+                <line x1="626" y1="234" x2="646" y2="234" class="stroke-acc"/>
+                <polygon points="652,234 644,230 644,238" class="dot"/>
+                <text x="640" y="258" text-anchor="middle" class="lbl-mut">ball → and camera ←</text>
+              </svg>
+            </div>
+            <div class="plate-title">
+              <span class="fig-no">FIG 06</span><span>Who moved?</span><span class="fig-note">SAME PIXELS ×3 · NOT TO SCALE</span>
+            </div>
+          </div>
+          <figcaption>The observed displacement of an image feature can result from different combinations of camera and scene motion. All three columns produce identical image displacement — the diagrams illustrate apparent image displacement, not the actual camera trajectories.</figcaption>
+        </figure>
+
+        <div class="prose-study">
+          <p>
+            A single observed displacement doesn&rsquo;t tell us which explanation is
+            correct. This is why dynamic reconstruction is substantially harder than
+            static reconstruction: the ambiguity becomes a <em>counterfactual
+            ambiguity</em> — every frame pair supports multiple physical stories.
+          </p>
+          <h3>8.1 · Optical flow: motion in image coordinates</h3>
+          <p>Suppose a point appears at pixel \(\mathbf u_t=(u_t,v_t)\) at time \(t\), and at \(\mathbf u_{t+1}\) in the next frame. Its optical flow is:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(25)</span>
+          \[
+            \mathbf w_t(\mathbf u) = \mathbf u_{t+1}-\mathbf u_t
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            For example, if a point moves from pixel \((100,120)\) to \((110,125)\), then
+            \(\mathbf w_t=(10,5)\): ten pixels horizontally, five vertically. But optical
+            flow is <strong>2D motion, not necessarily actual 3D motion</strong>. If the
+            camera moves while the world remains stationary, the observed optical flow
+            can still be nonzero — Bench&nbsp;C of the lab let you reproduce this.
+          </p>
+          <h3>8.2 · Scene flow: motion in 3D</h3>
+          <p>
+            Scene flow describes the movement of scene points in three-dimensional
+            space. For a point \(\mathbf X\), its displacement during one time interval
+            is:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(26)</span>
+          \[
+            \mathbf F_t(\mathbf X) = \mathbf X(t+\Delta t)-\mathbf X(t)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Here \(\Delta t\) is the interval between observations. If we divide
+            displacement by elapsed time, we obtain an average velocity:
+            \(\mathbf v_t(\mathbf X)=\mathbf F_t(\mathbf X)/\Delta t\).
+          </p>
+        </div>
+        <div class="warn-box">
+          <span class="box-label">Convention warning</span>
+          <p>
+            Some papers parameterize scene flow as <em>displacement</em> (26), others as
+            <em>velocity</em>, and others as mappings to arbitrary target timestamps.
+            Always check which convention an architecture uses before comparing
+            predictions.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>The observed pixel displacement is related to 3D motion by:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(27)</span>
+          \[
+            \mathbf w_t=
+            \pi\Big(K_{t+1}\big[R_{t+1}(\mathbf X+\mathbf F_t)+t_{t+1}\big]\Big)
+            -
+            \pi\Big(K_t[R_t\mathbf X+t_t]\Big)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>The logic, step by step:</p>
+          <ol>
+            <li>Start with the original point \(\mathbf X\).</li>
+            <li>Add its 3D displacement \(\mathbf F_t\).</li>
+            <li>Transform that new point into the <em>next</em> camera&rsquo;s coordinates (\(R_{t+1}, t_{t+1}\)).</li>
+            <li>Project it onto the next image with the next intrinsics.</li>
+            <li>Subtract the originally projected pixel position.</li>
+          </ol>
+          <p>
+            The result is the observed 2D displacement — for readability, the equation
+            suppresses explicit dependence on \(\mathbf X\), and both projection terms
+            use the appropriate timestamped camera.
+          </p>
+          <p>
+            Equation (27) reveals <strong>why 4D reconstruction is difficult</strong>:
+            the observed displacement is influenced simultaneously by depth, camera
+            pose, and object motion. If any of these are incorrect, the others may
+            compensate. For example, a system might estimate that the camera has moved
+            too far and compensate by assigning artificial motion to static scene
+            points.
+          </p>
+          <p>
+            That gives you the intuition behind the problem tackled by
+            <strong>MoRe</strong> (Motion-aware Feed-forward 4D Reconstruction
+            Transformer): explicitly disentangling dynamic motion from static geometry
+            with an attention-forcing strategy — an approach we will read closely in
+            Module&nbsp;09.
+          </p>
+        </div>
+      </section>
+
+      <!-- 9 REPRESENTATIONS -->
+      <section class="study-section" id="representations">
+        <h2>9. How do modern neural networks represent 3D and 4D scenes?</h2>
+        <div class="prose-study">
+          <p>
+            So far we&rsquo;ve talked about reconstructing <em>points</em>. But how do we
+            represent an entire scene inside a computer? Several representations define
+            the field&rsquo;s vocabulary:
+          </p>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th>Representation</th><th>Main idea</th><th>Typical strength</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Point cloud</td><td>Store 3D points</td><td>Simple, direct geometry</td></tr>
+              <tr><td>Mesh</td><td>Vertices connected into surfaces</td><td>Explicit surface structure</td></tr>
+              <tr><td>Voxel grid</td><td>Divide space into 3D cells</td><td>Structured spatial data</td></tr>
+              <tr><td>SDF</td><td>Represent signed distance to a surface</td><td>Smooth, extractable surfaces</td></tr>
+              <tr><td>NeRF</td><td>Learn density and radiance functions</td><td>High-quality novel-view synthesis</td></tr>
+              <tr><td>3D Gaussian splats</td><td>Optimize spatial Gaussian primitives</td><td>Fast differentiable rendering</td></tr>
+              <tr><td>4D deformation fields</td><td>Represent geometry or movement over time</td><td>Dynamic scenes</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose-study">
+          <p>
+            The distinction between <strong>explicit</strong> and
+            <strong>implicit</strong> representations is useful. A mesh explicitly stores
+            surface geometry as vertices and faces. A neural signed-distance field,
+            by contrast, represents a surface as the zero level set of a function:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(28)</span>
+          \[
+            \mathcal M=\{\,\mathbf X \mid s(\mathbf X)=0\,\}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Here \(s(\mathbf X)\) is signed distance and \(\mathcal M\) is the recovered
+            surface. A NeRF doesn&rsquo;t directly store mesh triangles either — instead,
+            it learns a <em>continuous function</em> that can be queried at spatial
+            locations.
+          </p>
+
+          <h3>9.1 · Neural Radiance Fields (NeRF)</h3>
+          <p>
+            NeRF (<a href="https://arxiv.org/abs/2003.08934" target="_blank" rel="noopener">Mildenhall et&nbsp;al., ECCV&nbsp;2020</a>)
+            is one of the foundational developments behind modern neural scene
+            reconstruction. Its scene function can be written as:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(29)</span>
+          \[
+            F_\theta(\mathbf X,\mathbf d)\longrightarrow(\sigma,\;\mathbf c)
+          \]
+        </div>
+        <div class="prose-study">
+          <ul>
+            <li>\(F_\theta\) is a neural network with learned parameters \(\theta\).</li>
+            <li>\(\mathbf X\) is a 3D spatial location.</li>
+            <li>\(\mathbf d\) is a viewing direction.</li>
+            <li>\(\sigma\) is volume density.</li>
+            <li>\(\mathbf c\) is RGB radiance.</li>
+          </ul>
+          <p>
+            We can render an image by tracing camera rays and accumulating predicted
+            colors according to the density along each ray. In continuous form, the
+            rendered color along a ray \(\mathbf r(s)\) is:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(30)</span>
+          \[
+            C(\mathbf r)=
+            \int_{s_n}^{s_f}
+            T(s)\,\sigma(\mathbf r(s))\,
+            \mathbf c(\mathbf r(s),\mathbf d)\,ds
+          \]
+        </div>
+        <div class="prose-study">
+          <p>where:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(31)</span>
+          \[
+            T(s)=
+            \exp\Big(
+              -\int_{s_n}^{s}\sigma(\mathbf r(q))\,dq
+            \Big)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The quantity \(T(s)\) is <strong>transmittance</strong>: approximately, how
+            much light travels along the ray without being absorbed or occluded under
+            this emission–absorption model. This formula is at the heart of volume
+            rendering. It makes the rendering operation <em>differentiable</em>,
+            enabling the scene network to be optimized directly against photographs —
+            NeRF demonstrated that optimizing such a representation from posed images
+            produces impressive novel-view synthesis.
+          </p>
+        </div>
+        <p class="punch">
+          Remember: rendering an image accurately is not necessarily equivalent to
+          recovering physically accurate geometry. This distinction will be central to
+          our research discussions.
+        </p>
+
+        <div class="prose-study">
+          <h3>9.2 · From NeRF to dynamic NeRF</h3>
+          <p>The original NeRF assumes a static scene. What if the world changes over time? A natural extension is:</p>
+        </div>
+        <div class="eq-block">
+          \[
+            F_\theta(\mathbf X,\mathbf d,t)\longrightarrow(\sigma,\;\mathbf c)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            However, directly learning a time-varying scene is difficult, because the
+            same physical point occupies different spatial positions over time. A useful
+            approach is to introduce a <strong>canonical representation</strong>: the
+            model learns a reference configuration plus a deformation field that maps
+            coordinates at different timestamps into that reference:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(32)</span>
+          \[
+            \mathbf X_{\text{canonical}} = W_\phi(\mathbf X,t),
+            \qquad
+            (\sigma,\mathbf c) = F_\theta(\mathbf X_{\text{canonical}},\,\mathbf d)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This idea appears in
+            <a href="https://arxiv.org/abs/2011.13948" target="_blank" rel="noopener">D-NeRF: Neural Radiance Fields for Dynamic Scenes</a>
+            (CVPR&nbsp;2021), which learns a canonical scene together with
+            time-dependent deformation. The key advantage: geometry and appearance are
+            <em>shared across timestamps</em> rather than independently learned for each
+            frame.
+          </p>
+
+          <h3>9.3 · From NeRF to Gaussian splatting</h3>
+          <p>
+            The 2023 paper
+            <a href="https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/" target="_blank" rel="noopener">3D Gaussian Splatting for Real-Time Radiance Field Rendering</a>
+            (Kerbl et&nbsp;al., ACM TOG) introduces a different scene representation.
+            Instead of repeatedly evaluating a neural network along camera rays, we
+            represent the scene as many 3D Gaussian primitives. A Gaussian has a center
+            \(\boldsymbol\mu\) and a covariance matrix \(\Sigma\) describing its shape
+            and orientation:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(33)</span>
+          \[
+            G(\mathbf X)=
+            \exp\Big[
+              -\tfrac12(\mathbf X-\boldsymbol\mu)^\top
+              \Sigma^{-1}
+              (\mathbf X-\boldsymbol\mu)
+            \Big]
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            In 3DGS, Gaussians are optimized and efficiently <em>projected</em> onto the
+            image plane for rasterization-style rendering — achieving high-quality,
+            real-time novel-view synthesis. For dynamic scenes, Gaussian positions (and
+            sometimes their rotations, scales, and appearances) evolve over time. For
+            example:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(34)</span>
+          \[
+            \boldsymbol\mu_i(t)=\boldsymbol\mu_i^{0}+\Delta\boldsymbol\mu_i(t)
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Here \(\boldsymbol\mu_i^0\) is the reference center of Gaussian \(i\) and
+            \(\Delta\boldsymbol\mu_i(t)\) is its predicted displacement. This is the
+            intuition behind several dynamic Gaussian approaches, including
+            <a href="https://arxiv.org/abs/2310.08528" target="_blank" rel="noopener">4D Gaussian Splatting for Real-Time Dynamic Scene Rendering</a>
+            (CVPR&nbsp;2024), which combines 3D Gaussians, learned spatiotemporal
+            features, and predicted deformations rather than independently optimizing a
+            complete set of Gaussians for every timestamp.
+          </p>
+        </div>
+      </section>
+
+      <!-- 10 TIMELINE -->
+      <section class="study-section" id="timeline">
+        <h2>10. How did we reach the modern 3D and 4D foundation models?</h2>
+        <div class="prose-study">
+          <p>
+            Here is a research-oriented timeline of papers worth understanding. We will
+            eventually read the <em>methodological sections</em> of these papers, not
+            just their abstracts.
+          </p>
+        </div>
+        <div class="era-grid">
+          <div class="era">
+            <span class="era-year">2016</span>
+            <span class="era-title">Structure-from-Motion Revisited</span>
+            <p class="era-blurb">Classical multi-view reconstruction using geometric correspondences, pose estimation, and optimization.</p>
+            <div class="era-links">
+              <a href="https://github.com/colmap/colmap" target="_blank" rel="noopener">Code · COLMAP</a>
+              <a href="https://openaccess.thecvf.com/content_cvpr_2016/html/Schonberger_Structure-From-Motion_Revisited_CVPR_2016_paper.html" target="_blank" rel="noopener">Paper</a>
+            </div>
+          </div>
+          <div class="era">
+            <span class="era-year">2020</span>
+            <span class="era-title">NeRF</span>
+            <p class="era-blurb">Continuous neural scene representation and differentiable volume rendering.</p>
+            <div class="era-links">
+              <a href="https://arxiv.org/abs/2003.08934" target="_blank" rel="noopener">Paper</a>
+            </div>
+          </div>
+          <div class="era">
+            <span class="era-year">2023</span>
+            <span class="era-title">3D Gaussian Splatting</span>
+            <p class="era-blurb">Fast image synthesis by optimizing spatial Gaussian primitives.</p>
+            <div class="era-links">
+              <a href="https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/" target="_blank" rel="noopener">Project</a>
+            </div>
+          </div>
+          <div class="era">
+            <span class="era-year">2024</span>
+            <span class="era-title">DUSt3R</span>
+            <p class="era-blurb">Directly predicts 3D point maps without requiring known camera calibration or poses as inputs.</p>
+            <div class="era-links">
+              <a href="https://github.com/naver/dust3r" target="_blank" rel="noopener">Code &amp; weights</a>
+            </div>
+          </div>
+          <div class="era">
+            <span class="era-year">2025</span>
+            <span class="era-title">VGGT</span>
+            <p class="era-blurb">Predicts camera parameters, point maps, depth, and point tracks with a single feed-forward architecture.</p>
+            <div class="era-links">
+              <a href="https://github.com/facebookresearch/vggt" target="_blank" rel="noopener">Code &amp; weights</a>
+            </div>
+          </div>
+          <div class="era">
+            <span class="era-year">2026</span>
+            <span class="era-title">Any4D</span>
+            <p class="era-blurb">Dense metric 4D reconstruction combining geometry and motion, with support for optional additional sensor inputs.</p>
+            <div class="era-links">
+              <a href="https://any-4d.github.io/" target="_blank" rel="noopener">Project</a>
+            </div>
+          </div>
+          <div class="era">
+            <span class="era-year">2026</span>
+            <span class="era-title">4RC</span>
+            <p class="era-blurb">Encodes video once and queries geometry and motion at selected frames and timestamps.</p>
+            <div class="era-links">
+              <a href="https://github.com/Luo-Yihang/4RC" target="_blank" rel="noopener">Code</a>
+            </div>
+          </div>
+        </div>
+        <div class="note-box">
+          <span class="box-label">The connective tissue</span>
+          <p>
+            These are not the only significant contributions. Other papers such as
+            <a href="https://arxiv.org/abs/2407.19833" target="_blank" rel="noopener">MASt3R</a>,
+            <a href="https://arxiv.org/abs/2308.09713" target="_blank" rel="noopener">Dynamic 3D Gaussians</a>,
+            <a href="https://arxiv.org/abs/2211.10411" target="_blank" rel="noopener">K-Planes</a>,
+            <strong>MoRe</strong>, and <strong>VGGT-Ω</strong> fill important gaps
+            between these developments.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>The broader evolution is especially interesting:</p>
+        </div>
+        <div class="evo-flow">
+          <span class="evo-chip">Classical geometry &amp; optimization</span><span class="evo-arrow">→</span>
+          <span class="evo-chip">Neural representations &amp; differentiable rendering</span><span class="evo-arrow">→</span>
+          <span class="evo-chip">Fast explicit representations</span><span class="evo-arrow">→</span>
+          <span class="evo-chip">Feed-forward geometric foundation models</span><span class="evo-arrow">→</span>
+          <span class="evo-chip">Unified geometry · motion · time</span>
+        </div>
+        <div class="prose-study">
+          <p>
+            This is a conceptual history, not a claim that one family has completely
+            replaced the others. Optimization-based reconstruction and feed-forward
+            models remain <em>complementary</em>.
+          </p>
+        </div>
+      </section>
+
+      <!-- 11 RESEARCH -->
+      <section class="study-section" id="research">
+        <h2>11. What does all this tell us about future research?</h2>
+        <div class="prose-study">
+          <p>
+            At this stage I want you to notice three scientific problems — rather than
+            immediately choosing a new architecture.
+          </p>
+          <h3>First · reconstruction is an underdetermined inverse problem</h3>
+          <p>
+            We observe images, but many 3D worlds may explain those images (§4 was a
+            proof of concept). When there is insufficient evidence, reconstruction
+            systems must use geometric assumptions or learned priors — creating a tension
+            between what the observations support and what a model believes is plausible.
+            The recent <em>Building Rome from a Single Image</em> line of work generates
+            complete meshes containing both visible surfaces and unobserved regions using
+            learned 3D priors and scene-scale generation — squarely inside this tension.
+          </p>
+          <h3>Second · motion and camera geometry are coupled</h3>
+          <p>
+            In a dynamic video, we often don&rsquo;t know the true geometry, motion, or
+            camera trajectory. An error in one can affect the others (equation (27) made
+            this precise). MoRe and Any4D address important aspects of this problem — but
+            their existence doesn&rsquo;t mean dynamic-scene reconstruction has become
+            perfectly identifiable or error-free.
+          </p>
+          <h3>Third · visual realism and geometric accuracy are different objectives</h3>
+          <p>
+            Suppose a model reconstructs a moving person&rsquo;s hand. The generated video
+            may appear smooth and photorealistic, yet the recovered hand trajectory could
+            be physically inaccurate. For entertainment or view synthesis that might be
+            acceptable; for robot planning, manipulation, or physical interaction it
+            could be a serious problem.
+          </p>
+        </div>
+        <div class="note-box">
+          <span class="box-label">Four evaluation targets — related, not interchangeable</span>
+          <p>
+            Accurate rendering · correct geometry · correct motion · consistent tracking
+            of physical points over time. A system can dominate one axis while failing
+            another, and most published evaluation covers only the first.
+          </p>
+        </div>
+      </section>
+
+      <!-- CHECKPOINT -->
+      <section class="study-section" id="checkpoint">
+        <h2>Lecture 1 checkpoint</h2>
+        <div class="quiz">
+          <span class="box-label">Checkpoint · one question before Lecture 2</span>
+          <p class="quiz-q">
+            A stationary ball appears to move 20 pixels to the right between two video
+            frames. Which conclusion is justified?
+          </p>
+          <div class="quiz-opts" id="quizOpts">
+            <button class="quiz-opt" type="button" data-correct="false">The ball definitely moved to the right in the physical world.</button>
+            <button class="quiz-opt" type="button" data-correct="false">The camera definitely moved to the left.</button>
+            <button class="quiz-opt" type="button" data-correct="true">The image displacement alone cannot determine the physical motion.</button>
+            <button class="quiz-opt" type="button" data-correct="false">The ball&rsquo;s 3D velocity is 20 units per frame.</button>
+          </div>
+          <div class="quiz-verdict" hidden>
+            <span class="verdict-flag"></span>
+            <p>
+              A single 2D displacement constrains only the combination
+              \(\delta_{\text{world}}-\delta_{\text{camera}}\) (Bench&nbsp;C of the lab
+              reproduced this). The shift is equally consistent with the ball
+              translating, the camera translating the other way, or any mixture — and 20
+              <em>pixels</em> is a displacement, not a velocity. Without additional
+              views, frames, or priors, no conclusion about physical motion is justified.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- NEXT -->
+      <section class="study-section" id="next">
+        <div class="lesson-next">
+          <h2>What we&rsquo;ll cover in Lecture 2</h2>
+          <p>
+            Our next lecture is devoted entirely to classical 3D reconstruction and
+            geometry, with deeper derivations:
+          </p>
+          <div class="evo-flow">
+            <span class="evo-chip">Epipolar geometry</span><span class="evo-arrow">→</span>
+            <span class="evo-chip">Essential &amp; fundamental matrices</span><span class="evo-arrow">→</span>
+            <span class="evo-chip">Triangulation</span><span class="evo-arrow">→</span>
+            <span class="evo-chip">SfM</span><span class="evo-arrow">→</span>
+            <span class="evo-chip">Bundle adjustment</span>
+          </div>
+          <p>We&rsquo;ll explain why the essential matrix has the form</p>
+          <div class="eq-block">
+            <span class="eq-tag">(35)</span>
+            \[
+              E=[t]_\times R
+            \]
+          </div>
+          <p>how this leads to the epipolar constraint</p>
+          <div class="eq-block">
+            <span class="eq-tag">(36)</span>
+            \[
+              \widetilde{\mathbf x}_2^\top E\,\widetilde{\mathbf x}_1=0
+            \]
+          </div>
+          <p>
+            and how the entire reconstruction system can be built from these
+            relationships. That mathematical foundation will make the modern
+            architectures much easier to understand.
+          </p>
+          <p style="margin-bottom:0">
+            Our eventual goal is not just to reproduce a 4D reconstruction model — it is
+            to understand exactly what information a model recovers, what it assumes,
+            where its predictions can be wrong, and which of those limitations can
+            support a genuinely new CVPR contribution.
+          </p>
+        </div>
+        <p class="source-note">
+          Lecture 01 · drafted October 2026 · next lecture: classical 3D reconstruction
+          (epipolar geometry, triangulation, SfM, bundle adjustment).
+        </p>
+      </section>
+    </article>
+  </div>
+
+  <script src="nav.js"></script>
+  <script src="lab.js"></script>
+</body>
+</html>
