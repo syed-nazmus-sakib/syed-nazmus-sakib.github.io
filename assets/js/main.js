@@ -21,7 +21,9 @@
   /* ------------------------------------------- on-this-page rail (home) */
   var tocHost = document.querySelector("[data-toc]");
   if (tocHost) {
-    var heads = Array.prototype.slice.call(tocHost.querySelectorAll("h2[id]"));
+    var heads = Array.prototype.slice.call(tocHost.querySelectorAll("h2[id]")).filter(function (h) {
+      return !h.closest("[hidden]");
+    });
     if (heads.length > 1) {
       var rail = document.createElement("nav");
       rail.className = "toc";
