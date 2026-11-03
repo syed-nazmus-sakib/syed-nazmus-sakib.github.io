@@ -660,7 +660,7 @@ blockquote {
 
 .intro__text p {
   margin: 0 0 1rem;
-  text-align: justify;
+  text-align: left;
 }
 
 .intro__lede {
