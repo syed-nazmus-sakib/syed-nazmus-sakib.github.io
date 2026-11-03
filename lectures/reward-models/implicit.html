@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>11 · Implicit Reward Model — Reward Models</title>
+  <link rel="stylesheet" href="../notes.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+
+  <div class="layout-book" id="top">
+    <nav class="sidebar" aria-label="Notes">
+      <div class="menu-category">Syed Nazmus Sakib</div>
+      <div class="menu-item"><a href="/index.html">Home</a></div>
+      <div class="menu-item"><a href="/publications.html">Publications</a></div>
+      <div class="menu-item"><a href="/lectures/">Lecture Notes</a></div>
+      <div class="menu-category">Reward Models</div>
+      <div class="menu-item"><a href="index.html">Overview</a></div>
+      <div class="menu-item"><a href="scalar.html">Scalar Reward Model</a></div>
+      <div class="menu-item"><a href="pointwise.html">Pointwise Verifier</a></div>
+      <div class="menu-item"><a href="pairwise.html">Pairwise Comparator</a></div>
+      <div class="menu-item"><a href="listwise.html">Listwise Ranking</a></div>
+      <div class="menu-item"><a href="orm.html">Outcome Reward Model</a></div>
+      <div class="menu-item"><a href="prm.html">Process Reward Model</a></div>
+      <div class="menu-item"><a href="value.html">Value Model</a></div>
+      <div class="menu-item"><a href="multi-objective.html">Multi-Objective RM</a></div>
+      <div class="menu-item"><a href="generative.html">Generative RM</a></div>
+      <div class="menu-item"><a href="critique.html">Critique-then-Score</a></div>
+      <div class="menu-item"><a class="current" aria-current="page" href="implicit.html">Implicit RM (DPO)</a></div>
+      <ol class="toc">
+        <li><a href="#idea">1. A reward inside the policy</a></li>
+        <li><a href="#definition">2. Definition</a></li>
+        <li><a href="#objective">3. The KL-regularised objective</a></li>
+        <li><a href="#optimum">4. The optimal policy</a></li>
+        <li><a href="#invert">5. Reward from policy</a></li>
+        <li><a href="#cancel">6. Why Z(x) cancels</a></li>
+        <li><a href="#loss">7. The DPO loss</a></li>
+        <li><a href="#gradient">8. The gradient</a></li>
+        <li><a href="#asrm">9. The policy as a reward model</a></li>
+        <li><a href="#token">10. Token rewards, implicit PRMs</a></li>
+        <li><a href="#weak">11. Weaknesses</a></li>
+        <li><a href="#lab">12. Laboratory</a></li>
+        <li><a href="#worked">13. Worked example</a></li>
+        <li><a href="#next">14. What comes next</a></li>
+      </ol>
+      <div class="menu-item"><a href="conditional.html">Conditional RM</a></div>
+      <div class="menu-item"><a href="ensemble.html">Uncertainty &amp; Ensembles</a></div>
+      <div class="menu-item"><a href="hybrid.html">Hybrid Rule + Learned</a></div>
+      <div class="menu-item"><a href="prm-variants.html">PRM Variants in Depth</a></div>
+    </nav>
+
+    <article class="study-main" id="content" tabindex="-1">
+      <p class="chapter-kicker">Reward Models · Chapter 11</p>
+      <h1 class="study-title">The implicit reward model: <em>a reward hidden in the policy</em></h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Every earlier chapter trained a separate network to output rewards. Direct Preference
+        Optimization (DPO) trains no such network, yet a reward is still there: the scaled
+        log-ratio between the trained policy and a reference model. This chapter derives that
+        implicit reward from the KL-regularised RL objective, shows why the intractable
+        normaliser cancels inside the Bradley-Terry model, reads off the DPO loss and its
+        gradient, uses a DPO policy as a reward model, splits the reward into per-token and
+        per-step pieces to obtain an implicit PRM, and lists where the idea breaks.
+      </div>
+
+      <section class="study-section" id="idea">
+        <h2>1. A reward inside the policy</h2>
+        <div class="prose-study">
+          <p class="lead">
+            Classical RLHF learns a reward, then optimises a policy against it. DPO skips the
+            first stage.
+          </p>
+        </div>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Explicit reward model</h4>
+            <p>
+              Train \(r_\phi(x,y)\) on preference pairs with the Bradley-Terry loss. Then run
+              PPO on the policy, using \(r_\phi\) as the reward.
+            </p>
+            <p class="mono-line">pairs → r_φ → PPO → π</p>
+          </div>
+          <div class="compare-card">
+            <h4>Implicit reward model</h4>
+            <p>
+              Train the policy directly on the same pairs. The reward is never a separate
+              network; it is a function of the policy's own probabilities.
+            </p>
+            <p class="mono-line">pairs → π</p>
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            This is not a heuristic shortcut. Under the same assumptions as classical RLHF, the
+            two routes target the same optimal policy. Sections 3 to 6 show why.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="definition">
+        <h2>2. Definition</h2>
+        <div class="prose-study">
+          <p>
+            Let \(\pi_\theta\) be the policy being trained and \(\pi_{\text{ref}}\) a frozen
+            reference model, usually the supervised fine-tuned model that training starts from.
+            Fix a scale \(\beta&gt;0\).
+          </p>
+        </div>
+        <div class="def-box">
+          <span class="box-label">Definition 11.1 · Implicit reward</span>
+          <p>The implicit reward of a response \(y\) to a prompt \(x\) is</p>
+          <div class="eq-block tight" style="margin:0.4rem 0 0">
+            \[
+              \hat r_\theta(x,y)=\beta\log\frac{\pi_\theta(y\mid x)}{\pi_{\text{ref}}(y\mid x)}.
+            \]
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            The reward is positive when the trained policy has made \(y\) more likely than the
+            reference did, negative when it has made \(y\) less likely, and zero before training
+            starts, when \(\pi_\theta=\pi_{\text{ref}}\). It measures how far training moved the
+            probability of \(y\), not how probable \(y\) is.
+          </p>
+          <p>
+            For example, with \(\beta=0.1\), a response whose log-ratio is \(2\) gets
+            \(\hat r=0.2\), and one whose log-ratio is \(0.5\) gets \(\hat r=0.05\). The
+            first is preferred.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="objective">
+        <h2>3. The KL-regularised objective</h2>
+        <div class="prose-study">
+          <p>
+            Start from the objective that PPO-based RLHF optimises. Given a reward \(r(x,y)\),
+            maximise expected reward while staying close to the reference model:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            \max_{\pi}\;\mathbb E_{x\sim\mathcal D}\Big[\mathbb E_{y\sim\pi(\cdot\mid x)}\big[r(x,y)\big]
+            -\beta\,\mathrm{KL}\big(\pi(\cdot\mid x)\,\big\|\,\pi_{\text{ref}}(\cdot\mid x)\big)\Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The KL term stops the policy from drifting into text the reward model has never seen
+            and can be fooled by. Larger \(\beta\) means a tighter leash. The objective splits
+            over prompts, so from here on we fix one prompt \(x\).
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="optimum">
+        <h2>4. The optimal policy has a closed form</h2>
+        <div class="prose-study">
+          <p>
+            Define the normaliser and a candidate policy:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            Z(x)=\sum_{y}\pi_{\text{ref}}(y\mid x)\,e^{r(x,y)/\beta},
+            \qquad
+            \pi^{*}(y\mid x)=\frac{\pi_{\text{ref}}(y\mid x)\,e^{r(x,y)/\beta}}{Z(x)}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Write the KL as an expectation and collect terms. Since
+            \(r=\beta\log\big(\pi^*Z/\pi_{\text{ref}}\big)\) by Equation (2),
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            \mathbb E_{\pi}[r]-\beta\,\mathrm{KL}(\pi\,\|\,\pi_{\text{ref}})
+            =\mathbb E_{\pi}\Big[\beta\log\frac{\pi^{*}Z}{\pi_{\text{ref}}}-\beta\log\frac{\pi}{\pi_{\text{ref}}}\Big]
+            =-\beta\,\mathrm{KL}(\pi\,\|\,\pi^{*})+\beta\log Z(x).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The last term does not depend on \(\pi\). The KL term is never negative and is zero
+            only when \(\pi=\pi^*\).
+          </p>
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Proposition 11.1 · Optimal KL-regularised policy</span>
+          <p>
+            For a fixed reward \(r\) and \(\beta&gt;0\), the unique maximiser of Equation (1) is
+            \(\pi^*(y\mid x)\propto\pi_{\text{ref}}(y\mid x)\,e^{r(x,y)/\beta}\). The optimal
+            policy reweights the reference model, raising each response by a factor that grows
+            exponentially with its reward.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            This closed form is of no direct use for sampling: \(Z(x)\) sums over every possible
+            response, which is astronomically many sequences. Its value is what it says about
+            the relation between \(r\) and \(\pi^*\).
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="invert">
+        <h2>5. Inverting: the reward in terms of the policy</h2>
+        <div class="prose-study">
+          <p>Take logs in Equation (2) and solve for \(r\):</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            r(x,y)=\beta\log\frac{\pi^{*}(y\mid x)}{\pi_{\text{ref}}(y\mid x)}+\beta\log Z(x).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Read in this direction, the equation says that a policy determines a reward. Any
+            policy \(\pi_\theta\) is the optimal policy of Equation (1) for the reward
+            \(\beta\log(\pi_\theta/\pi_{\text{ref}})+\beta\log Z(x)\). The first term is the
+            implicit reward of Definition 11.1. The second is a problem: it is intractable.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="cancel">
+        <h2>6. Why \(Z(x)\) cancels</h2>
+        <div class="prose-study">
+          <p>
+            Preference data only ever compares two responses to the <em>same</em> prompt. Under
+            the Bradley-Terry model of the <a href="scalar.html#training">scalar chapter</a>,
+            the probability of a preference depends only on the reward difference. Substitute
+            Equation (4) for both rewards:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            P(y_w\succ y_l\mid x)=\sigma\big(r(x,y_w)-r(x,y_l)\big)
+            =\sigma\Big(\beta\log\frac{\pi^{*}(y_w\mid x)}{\pi_{\text{ref}}(y_w\mid x)}
+            -\beta\log\frac{\pi^{*}(y_l\mid x)}{\pi_{\text{ref}}(y_l\mid x)}\Big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The two copies of \(\beta\log Z(x)\) are equal, because both responses share the
+            prompt \(x\), and they subtract to zero. What remains involves only the policy and
+            the reference, both of which we can evaluate.
+          </p>
+        </div>
+        <div class="remark-box">
+          <span class="box-label">Remark · The same cancellation as in Chapter 01</span>
+          <p>
+            In the <a href="scalar.html#relative">scalar chapter</a> we saw that adding a
+            constant to both rewards leaves the Bradley-Terry probability unchanged. Here the
+            constant is \(\beta\log Z(x)\), different for each prompt but shared by the two
+            responses in a pair. The shift invariance that made scalar rewards "relative, not
+            absolute" is exactly what makes DPO possible.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="loss">
+        <h2>7. The DPO loss</h2>
+        <div class="prose-study">
+          <p>
+            Replace the unknown \(\pi^*\) in Equation (5) by the trainable \(\pi_\theta\) and
+            take the negative log-likelihood of the observed preferences. Writing
+            \(\hat r_w=\hat r_\theta(x,y_w)\) and \(\hat r_l=\hat r_\theta(x,y_l)\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            \mathcal L_{\text{DPO}}(\theta)
+            =-\log\sigma\Big(\beta\log\frac{\pi_\theta(y_w\mid x)}{\pi_{\text{ref}}(y_w\mid x)}
+            -\beta\log\frac{\pi_\theta(y_l\mid x)}{\pi_{\text{ref}}(y_l\mid x)}\Big)
+            =-\log\sigma\big(\hat r_w-\hat r_l\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This is the Bradley-Terry loss of the scalar chapter, with the reward network
+            replaced by the implicit reward. Fitting a reward model and fitting the policy have
+            become the same act.
+          </p>
+          <p>
+            With the numbers from Section 2, \(\hat r_w=0.2\) and \(\hat r_l=0.05\): the margin
+            is \(0.15\), \(\sigma(0.15)\approx0.537\), and the loss is about \(0.621\), only a
+            little below the starting value \(\log 2\approx0.693\).
+          </p>
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">1 · Take a preference triple \((x,y_w,y_l)\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">2 · Compute \(\log\pi_\theta(y\mid x)\) for both responses with the policy.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">3 · Compute \(\log\pi_{\text{ref}}(y\mid x)\) for both with the frozen reference (often cached once).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">4 · Form the implicit rewards \(\hat r_w,\hat r_l\) and the loss of Equation (6).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">5 · Backpropagate through \(\pi_\theta\) only: raise \(\hat r_w\), lower \(\hat r_l\).</div>
+        </div>
+      </section>
+
+      <section class="study-section" id="gradient">
+        <h2>8. The gradient and its weight</h2>
+        <div class="prose-study">
+          <p>
+            Use \(\frac{d}{dz}\big[-\log\sigma(z)\big]=-\sigma(-z)\), and note that
+            \(\pi_{\text{ref}}\) is frozen, so \(\nabla_\theta\hat r=\beta\nabla_\theta\log\pi_\theta\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            \nabla_\theta\mathcal L_{\text{DPO}}
+            =-\beta\,\underbrace{\sigma\big(\hat r_l-\hat r_w\big)}_{\text{weight}}
+            \Big[\nabla_\theta\log\pi_\theta(y_w\mid x)-\nabla_\theta\log\pi_\theta(y_l\mid x)\Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The bracket is the direction: make the winner more likely and the loser less
+            likely. The weight sets the step size. It is the probability the implicit reward
+            model currently assigns to the <em>wrong</em> ordering.
+          </p>
+        </div>
+        <table class="practice-table">
+          <thead>
+            <tr><th>Margin \(\hat r_w-\hat r_l\)</th><th>Weight \(\sigma(\hat r_l-\hat r_w)\)</th><th>Loss</th><th>Reading</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>\(-2\)</td><td>0.881</td><td>2.127</td><td>Wrong and confident: large update</td></tr>
+            <tr><td>\(0\)</td><td>0.500</td><td>0.693</td><td>Undecided</td></tr>
+            <tr><td>\(0.15\)</td><td>0.463</td><td>0.621</td><td>Barely right</td></tr>
+            <tr><td>\(3\)</td><td>0.047</td><td>0.049</td><td>Already right: almost ignored</td></tr>
+          </tbody>
+        </table>
+        <div class="prose-study">
+          <p>
+            Without the weight, every pair would push equally hard, and pairs that are already
+            separated would keep being pushed apart. The weight concentrates learning on the
+            pairs the model still gets wrong.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="asrm">
+        <h2>9. Using a DPO policy as a reward model</h2>
+        <div class="prose-study">
+          <p>
+            Once trained, \(\pi_\theta\) and \(\pi_{\text{ref}}\) together form a reward model.
+            To pick the best of \(n\) candidate responses, score each by its implicit reward:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            \hat y=\arg\max_{i\in\{1,\ldots,n\}}\;\beta\log\frac{\pi_\theta(y_i\mid x)}{\pi_{\text{ref}}(y_i\mid x)}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Scoring costs two forward passes per response, one through each model, and no
+            generation. Benchmarks of reward models such as RewardBench evaluate DPO-trained
+            models in exactly this way, next to explicit classifiers.
+          </p>
+          <p>
+            Two cautions carry over from Section 6. The score is defined only up to the
+            per-prompt constant \(\beta\log Z(x)\), so comparing implicit rewards across
+            different prompts is not meaningful. And the score is a sum over tokens, so
+            responses of very different lengths can differ in score partly because of length.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="token">
+        <h2>10. Token-level rewards and implicit PRMs</h2>
+        <div class="prose-study">
+          <p>
+            A language model factorises over tokens, so the log-ratio does too. For a response
+            \(y=(y_1,\ldots,y_T)\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            \hat r_\theta(x,y)=\sum_{t=1}^{T}\beta\log
+            \frac{\pi_\theta(y_t\mid x,y_{&lt;t})}{\pi_{\text{ref}}(y_t\mid x,y_{&lt;t})}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Each term is a per-token credit: how much training raised or lowered the
+            probability of that token in its context. Summing up to position \(t\) gives a
+            running total for the prefix,
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            q_t=\sum_{i=1}^{t}\beta\log\frac{\pi_\theta(y_i\mid x,y_{&lt;i})}{\pi_{\text{ref}}(y_i\mid x,y_{&lt;i})},
+            \qquad
+            \rho_k=q_{t_k}-q_{t_{k-1}},
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            where \(t_k\) is the last token of reasoning step \(k\) and \(\rho_k\) is the reward
+            of that step. This is an <strong>implicit PRM</strong>: step-level rewards with no
+            step-level labels. The model is trained only on whole-response signals, either
+            preference pairs with Equation (6) or outcome labels \(o\in\{0,1\}\) with a
+            cross-entropy loss on the implicit reward:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            \mathcal L_{\text{CE}}=-\Big[o\log\sigma\big(\hat r_\theta(x,y)\big)+(1-o)\log\big(1-\sigma(\hat r_\theta(x,y))\big)\Big].
+          \]
+        </div>
+        <div class="note-box">
+          <span class="box-label">Note · Compare with Chapter 07</span>
+          <p>
+            The step reward \(\rho_k=q_{t_k}-q_{t_{k-1}}\) has the same shape as the progress
+            reward \(V(z_t)-V(z_{t-1})\) of the <a href="value.html#progress">value model
+            chapter</a>, and it telescopes in the same way: the step rewards add up to the
+            whole-response reward \(q_T\). The value model needed rollouts to get its targets;
+            the implicit PRM gets its per-step signal from the parameterisation alone.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="weak">
+        <h2>11. Weaknesses</h2>
+        <div class="prose-study">
+          <ul>
+            <li><strong>Needs the reference model.</strong> Every score needs \(\pi_{\text{ref}}\) as well as \(\pi_\theta\): two models in memory, or cached reference log-probabilities for fixed data.</li>
+            <li><strong>Offline data only.</strong> The pairs were usually sampled from another model. The policy never sees its own outputs judged, unlike PPO. Iterative or online DPO samples fresh pairs from the current policy and labels them with a judge to close this gap.</li>
+            <li><strong>Poor calibration off-distribution.</strong> The implicit reward is shaped only on the training pairs. On responses unlike them, the log-ratio reflects whatever incidental drift fine-tuning caused, and can rank such responses badly.</li>
+            <li><strong>Overfitting to confident labels.</strong> If a pair is always preferred, the Bradley-Terry optimum wants an infinite margin. The loss keeps pushing the log-ratios apart, and the KL leash of Equation (1) is never enforced directly.</li>
+            <li><strong>Both likelihoods can fall.</strong> The loss depends only on the margin, so it can be lowered by making both responses less likely, as long as the loser falls faster (see the note below).</li>
+          </ul>
+        </div>
+        <div class="note-box">
+          <span class="box-label">Note · A falling winner</span>
+          <p>
+            Start with both log-ratios at 0, so the loss is \(\log2\approx0.693\). After some
+            training, the winner's log-ratio is \(-1\) and the loser's is \(-3\). With
+            \(\beta=0.1\), \(\hat r_w=-0.1\), \(\hat r_l=-0.3\), the margin is \(0.2\), and the
+            loss is \(-\log\sigma(0.2)\approx0.598\). The loss went down, yet the preferred
+            response is now \(e^{-1}\approx0.37\) times as likely as under the reference. The
+            probability mass went to responses that appear in neither column of the data.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section lab-wide" id="lab">
+        <h2>12. Laboratory: implicit rewards and the DPO weight</h2>
+        <div class="prose-study">
+          <p>
+            Set the log-ratios \(\log(\pi_\theta/\pi_{\text{ref}})\) of the winner and the loser,
+            and the scale \(\beta\). The lab computes the implicit rewards, the margin, the
+            Bradley-Terry probability, the DPO loss, and the gradient weight
+            \(\sigma(\hat r_l-\hat r_w)\).
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>DPO on one pair</h3>
+            <span>\(\mathcal L=-\log\sigma(\hat r_w-\hat r_l)\)</span>
+          </div>
+
+          <div class="demo-controls" style="margin-bottom:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem">
+            <div class="control-block">
+              <span class="control-label">Winner log-ratio</span>
+              <label class="slider-label">
+                y_w
+                <input type="range" id="impW" min="-5" max="5" step="0.1" value="2" />
+                <strong id="impWL">2.0</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Loser log-ratio</span>
+              <label class="slider-label">
+                y_l
+                <input type="range" id="impL" min="-5" max="5" step="0.1" value="0.5" />
+                <strong id="impLL">0.5</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">KL scale</span>
+              <label class="slider-label">
+                β
+                <input type="range" id="impBeta" min="0.01" max="1" step="0.01" value="0.1" />
+                <strong id="impBetaL">0.10</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Presets</span>
+              <div class="btn-row">
+                <button type="button" class="btn small" id="impPresetDraft">Section 2</button>
+                <button type="button" class="btn small ghost" id="impPresetFall">Both fall</button>
+                <button type="button" class="btn small ghost" id="impPresetWrong">Wrong order</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="stat-strip" style="grid-template-columns:repeat(3,1fr)">
+            <div><span>Rewards r̂_w, r̂_l</span><strong id="impRewards">-</strong></div>
+            <div><span>Margin r̂_w − r̂_l</span><strong id="impMargin">-</strong></div>
+            <div><span>P(y_w ≻ y_l)</span><strong id="impProb">-</strong></div>
+            <div><span>DPO loss</span><strong id="impLoss">-</strong></div>
+            <div><span>Weight σ(r̂_l − r̂_w)</span><strong id="impWeight">-</strong></div>
+            <div><span>Likelihood vs reference</span><strong id="impLik">-</strong></div>
+          </div>
+
+          <h4 style="margin:1rem 0 0.5rem">Computation</h4>
+          <div class="bellman-trace" id="impTrace">Move a slider.</div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Start from "Section 2" and slide the loser's log-ratio above the winner's: the
+            weight climbs toward 1. Then try "Both fall": the loss is below \(\log 2\) even
+            though the winner is less likely than under the reference. Changing \(\beta\)
+            rescales every reward and so changes how quickly the weight saturates.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>13. Worked example, step by step</h2>
+        <div class="prose-study">
+          <p>
+            For one prompt, the policy and the reference give these sequence log-probabilities:
+            \(\log\pi_\theta(y_w)=-42.0\), \(\log\pi_{\text{ref}}(y_w)=-45.0\),
+            \(\log\pi_\theta(y_l)=-40.0\), \(\log\pi_{\text{ref}}(y_l)=-38.0\). Take
+            \(\beta=0.1\). Compute the implicit rewards, the loss and the gradient weight.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Log-ratios: winner \(-42.0-(-45.0)=+3.0\); loser \(-40.0-(-38.0)=-2.0\).</li>
+            <li class="hidden-step">Implicit rewards: \(\hat r_w=0.1\times3.0=0.30\), \(\hat r_l=0.1\times(-2.0)=-0.20\).</li>
+            <li class="hidden-step">Margin: \(0.30-(-0.20)=0.50\). Probability: \(\sigma(0.5)\approx0.622\).</li>
+            <li class="hidden-step">Loss: \(-\log 0.622\approx0.474\).</li>
+            <li class="hidden-step">Gradient weight: \(\sigma(-0.5)\approx0.378\). The update is \(\beta\times0.378\approx0.038\) times \(\nabla\log\pi_\theta(y_w)-\nabla\log\pi_\theta(y_l)\).</li>
+            <li class="hidden-step">Note: the policy gives the loser the higher raw likelihood (\(-40\) vs \(-42\)), yet the loser has the lower reward. The implicit reward measures the change from the reference, not the likelihood itself.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>14. What comes next</h2>
+        <div class="prose-study">
+          <p>
+            So far every reward model, explicit or implicit, has scored responses for an
+            average user. The next chapter conditions the reward on who is asking, or on a
+            stated preference, so that the same response can earn different rewards in
+            different contexts.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Key idea to remember</span>
+          <div class="eq-block tight" style="margin:0.5rem 0 0">
+            \[
+              \hat r_\theta(x,y)=\beta\log\frac{\pi_\theta(y\mid x)}{\pi_{\text{ref}}(y\mid x)}
+            \]
+          </div>
+          <p style="margin-top:0.75rem">
+            The optimal KL-regularised policy determines its reward up to a per-prompt constant.
+            Bradley-Terry only sees reward differences within a prompt, so the constant cancels,
+            and training the policy on preferences is training a reward model.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Rafailov et al., 2023, Direct Preference Optimization: your language model is secretly a reward model.</li>
+            <li>Rafailov et al., 2024, from \(r\) to \(Q^*\): your language model is secretly a Q-function (token-level view of DPO).</li>
+            <li>Azar et al., 2023, a general theoretical paradigm to understand learning from human preferences (IPO, overfitting with deterministic preferences).</li>
+            <li>Lambert et al., 2024, RewardBench: evaluating reward models, including DPO models scored by implicit reward.</li>
+            <li>Yuan et al., 2024, free process rewards without process labels (implicit PRM).</li>
+            <li>Cui et al., 2025, process reinforcement through implicit rewards (PRIME).</li>
+            <li>The <a href="scalar.html">scalar chapter</a> for Bradley-Terry, and the RL notes on <a href="../rl/ppo.html">PPO</a>.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="critique.html" style="color:inherit;text-decoration:none">&larr; Critique-then-Score</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next chapter</p>
+            <h3>Conditional reward model</h3>
+            <p>One reward model, different preferences for different users.</p>
+          </div>
+          <a class="btn primary" href="conditional.html">Continue &rarr;</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Reward Models · Chapter 11, Implicit reward model</p>
+    <p class="muted">No reward network, yet a reward: how far training moved each response from the reference.</p>
+  </footer>
+
+  <script src="implicit.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

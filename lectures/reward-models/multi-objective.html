@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>08 · Multi-Objective Reward Model — Reward Models</title>
+  <link rel="stylesheet" href="../notes.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+
+  <div class="layout-book" id="top">
+    <nav class="sidebar" aria-label="Notes">
+      <div class="menu-category">Syed Nazmus Sakib</div>
+      <div class="menu-item"><a href="/index.html">Home</a></div>
+      <div class="menu-item"><a href="/publications.html">Publications</a></div>
+      <div class="menu-item"><a href="/lectures/">Lecture Notes</a></div>
+      <div class="menu-category">Reward Models</div>
+      <div class="menu-item"><a href="index.html">Overview</a></div>
+      <div class="menu-item"><a href="scalar.html">Scalar Reward Model</a></div>
+      <div class="menu-item"><a href="pointwise.html">Pointwise Verifier</a></div>
+      <div class="menu-item"><a href="pairwise.html">Pairwise Comparator</a></div>
+      <div class="menu-item"><a href="listwise.html">Listwise Ranking</a></div>
+      <div class="menu-item"><a href="orm.html">Outcome Reward Model</a></div>
+      <div class="menu-item"><a href="prm.html">Process Reward Model</a></div>
+      <div class="menu-item"><a href="value.html">Value Model</a></div>
+      <div class="menu-item"><a class="current" aria-current="page" href="multi-objective.html">Multi-Objective RM</a></div>
+      <ol class="toc">
+        <li><a href="#hidden">1. One number hides trade-offs</a></li>
+        <li><a href="#definition">2. Definition</a></li>
+        <li><a href="#arch">3. Shared backbone, many heads</a></li>
+        <li><a href="#train">4. Data and losses</a></li>
+        <li><a href="#combine">5. Weighted scalarisation</a></li>
+        <li><a href="#tradeoff">6. The trade-off made visible</a></li>
+        <li><a href="#scale">7. Normalise before combining</a></li>
+        <li><a href="#pareto">8. Pareto fronts</a></li>
+        <li><a href="#constraint">9. Safety as a constraint</a></li>
+        <li><a href="#gating">10. Weights per prompt</a></li>
+        <li><a href="#weak">11. Weaknesses</a></li>
+        <li><a href="#lab">12. Laboratory</a></li>
+        <li><a href="#worked">13. Worked example</a></li>
+        <li><a href="#next">14. What comes next</a></li>
+      </ol>
+      <div class="menu-item"><a href="generative.html">Generative RM</a></div>
+      <div class="menu-item"><a href="critique.html">Critique-then-Score</a></div>
+      <div class="menu-item"><a href="implicit.html">Implicit RM (DPO)</a></div>
+      <div class="menu-item"><a href="conditional.html">Conditional RM</a></div>
+      <div class="menu-item"><a href="ensemble.html">Uncertainty &amp; Ensembles</a></div>
+      <div class="menu-item"><a href="hybrid.html">Hybrid Rule + Learned</a></div>
+      <div class="menu-item"><a href="prm-variants.html">PRM Variants in Depth</a></div>
+    </nav>
+
+    <article class="study-main" id="content" tabindex="-1">
+      <p class="chapter-kicker">Reward Models · Chapter 08</p>
+      <h1 class="study-title">The multi-objective reward model: <em>one score per quality</em></h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Every reward model so far returns a single number. A good answer, however, must be
+        correct, helpful and safe at once, and these qualities can pull in different
+        directions. A multi-objective reward model predicts one score per quality from a
+        shared backbone. This chapter defines the model, trains its heads on
+        attribute-rated data, combines the heads by weighted scalarisation, shows why head
+        scales must be normalised first, explains Pareto fronts, treats safety as a
+        constraint rather than a weight, and lets a gating network choose the weights
+        prompt by prompt.
+      </div>
+
+      <section class="study-section" id="hidden">
+        <h2>1. One number hides trade-offs</h2>
+        <div class="prose-study">
+          <p class="lead">
+            A scalar reward says how good an answer is. It cannot say <em>in which way</em>.
+          </p>
+          <p>
+            The scalar reward model of Chapter 01 is trained on preferences that mix many
+            concerns. A labeller who prefers answer A over answer B may have been thinking
+            about accuracy, tone, length or risk. The model learns one number that blends
+            all of these with whatever weights the labellers happened to use.
+          </p>
+          <p>
+            That blend is fixed at training time and invisible afterwards. If a score of
+            0.8 comes back, we cannot tell whether the answer was accurate but rude or polite
+            but wrong. And if we later decide safety should count more, there is no knob to
+            turn. A multi-objective reward model keeps the qualities apart so we can see
+            them and weigh them ourselves.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="definition">
+        <h2>2. Definition</h2>
+        <div class="def-box">
+          <span class="box-label">Definition 8.1 · Multi-objective reward model</span>
+          <p>
+            A multi-objective reward model maps a prompt \(x\) and response \(y\) to a vector
+            of \(K\) scores, one per quality or attribute:
+          </p>
+          <div class="eq-block tight" style="margin:0.4rem 0 0">
+            \[
+              \mathbf r(x,y)=\big(r_1(x,y),\ldots,r_K(x,y)\big)\in\mathbb R^K .
+            \]
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>With four qualities the output might look like this:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            \mathbf r(x,y)=\big[r_{\text{correct}},\,r_{\text{helpful}},\,r_{\text{safe}},\,r_{\text{style}}\big]=\big[0.95,\,0.88,\,0.60,\,0.91\big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Read it coordinate by coordinate: the answer is very likely correct (0.95),
+            helpful (0.88) and well written (0.91), but its safety score (0.60) is low enough
+            to deserve a second look. A single scalar would have averaged that warning away.
+          </p>
+          <p>
+            The name "multi-head" describes the usual implementation: one network with
+            several output heads. "Multi-objective" describes the use: the scores are later
+            treated as separate objectives to balance.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="arch">
+        <h2>3. Shared backbone, many heads</h2>
+        <div class="prose-study">
+          <p>
+            One Transformer reads the prompt and response. As in earlier chapters, we take the
+            hidden state at the final token,
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            h_T=f_\theta(x,y)_{\text{last}}\in\mathbb R^{d},
+          \]
+        </div>
+        <div class="prose-study">
+          <p>and attach \(K\) linear heads instead of one:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            r_k=w_k^\top h_T+b_k,\qquad k=1,\ldots,K,
+            \qquad\text{or in matrix form}\qquad
+            \mathbf r=W h_T+\mathbf b,\quad W\in\mathbb R^{K\times d}.
+          \]
+        </div>
+        <div class="flow-steps" style="max-width:32rem">
+          <div class="flow-step">Prompt \(x\) + response \(y\)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Shared Transformer \(f_\theta\)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">Final hidden state \(h_T\)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Heads \(w_1,\ldots,w_K\)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">\(r_{\text{correct}},\ r_{\text{helpful}},\ r_{\text{safe}},\ r_{\text{style}}\)</div>
+        </div>
+        <div class="prose-study">
+          <p>Why share one backbone instead of training \(K\) separate reward models?</p>
+          <ul>
+            <li>
+              <strong>Shared understanding.</strong> Judging correctness, helpfulness and
+              safety all start from the same work: understanding what was asked and what was
+              said. The backbone does that once.
+            </li>
+            <li>
+              <strong>Cost.</strong> One forward pass yields all \(K\) scores. With
+              \(d=4096\), four heads add only \(4\times4097=16{,}388\) parameters to a
+              backbone with billions.
+            </li>
+            <li>
+              <strong>Data efficiency.</strong> Attribute labels are scarce. A head with few
+              labels borrows features learned from the others.
+            </li>
+          </ul>
+          <p>
+            The price is interference. If two objectives want opposite features, the
+            backbone must compromise, and one head can degrade another. When objectives
+            conflict strongly, separate models are sometimes the safer choice; Safe RLHF
+            (Section 9) trains its reward and cost models separately.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="train">
+        <h2>4. Data and losses</h2>
+        <div class="prose-study">
+          <p>
+            Each head needs labels for its own attribute. The total loss is a weighted sum of
+            per-head losses:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            \mathcal L=\sum_{k=1}^{K}\alpha_k\,m_k\,\mathcal L_k .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Here \(\alpha_k\) balances the heads during training, and \(m_k\in\{0,1\}\) masks
+            heads whose label is missing for this example, so datasets that rate only some
+            attributes can still be mixed. The loss weights \(\alpha_k\) are a training
+            choice. They are not the same as the weights \(\lambda_k\) used later to combine
+            the scores (Section 5).
+          </p>
+          <p>The per-head loss depends on the label type. Three are common.</p>
+          <p><strong>Binary labels</strong> (correct or not, safe or not): read the head as a logit, \(p_k=\sigma(r_k)\), and use BCE,</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            \mathcal L_k=-\big[y_k\log p_k+(1-y_k)\log(1-p_k)\big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p><strong>Ratings</strong> on a scale, such as 0 to 4: regress the head onto the rating,</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            \mathcal L_k=\big(r_k(x,y)-y_k\big)^2,\qquad y_k\in\{0,1,2,3,4\}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p><strong>Per-attribute preferences</strong> ("A is safer than B"): apply Bradley–Terry to that head alone,</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            \mathcal L_k=-\log\sigma\big(r_k(x,y^{+})-r_k(x,y^{-})\big).
+          \]
+        </div>
+        <div class="note-box">
+          <span class="box-label">Note · Attribute-rated data</span>
+          <p>
+            Datasets such as HelpSteer ask annotators to rate each response on several
+            attributes separately (helpfulness, correctness, coherence, complexity and
+            verbosity, each on a 0 to 4 scale) rather than giving one overall preference.
+            One annotated response then supervises every head at once through Equation 6.
+            Such ratings are more expensive per example than a single preference, but they
+            say <em>why</em> a response is good or bad.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="combine">
+        <h2>5. Weighted scalarisation</h2>
+        <div class="prose-study">
+          <p>
+            Best-of-\(N\) selection and PPO both need one number per response. The simplest
+            way to get it is a weighted sum, called linear scalarisation:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            R(x,y)=\sum_{k=1}^{K}\lambda_k\,r_k(x,y),\qquad \lambda_k\ge 0,\quad \sum_{k}\lambda_k=1 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The weights \(\lambda_k\) say how much each quality matters. Take three heads with
+            weights \(0.5,\,0.3,\,0.2\) and scores \(\mathbf r=[0.9,\,0.8,\,0.5]\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            R=0.5(0.9)+0.3(0.8)+0.2(0.5)=0.45+0.24+0.10=0.79 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Only the ratios of the weights matter for ranking, so fixing their sum to 1 loses
+            nothing. The full pipeline from text to training signal is short:
+          </p>
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">1 · Encode prompt and response with the shared Transformer.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">2 · Take the final hidden state \(h_T\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">3 · Apply the \(K\) heads to get \(r_1,\ldots,r_K\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">4 · Normalise each head to a common scale (Section 7).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">5 · Combine with weights \(\lambda_k\), or apply constraints (Section 9).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">6 · Use the result for selection, ranking or RL.</div>
+        </div>
+      </section>
+
+      <section class="study-section" id="tradeoff">
+        <h2>6. The trade-off made visible</h2>
+        <div class="prose-study">
+          <p>
+            Two answers to the same prompt, scored on (correctness, helpfulness, safety):
+          </p>
+        </div>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Answer A</h4>
+            <p>\(\mathbf r_A=[0.98,\ 0.75,\ 0.40]\)</p>
+            <p class="mono-line">Very correct, but unsafe.</p>
+          </div>
+          <div class="compare-card">
+            <h4>Answer B</h4>
+            <p>\(\mathbf r_B=[0.90,\ 0.85,\ 0.95]\)</p>
+            <p class="mono-line">Slightly less correct, much safer.</p>
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            Which is better depends on what we value. With weights \((0.5,0.3,0.2)\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            R_A=0.49+0.225+0.08=0.795,\qquad R_B=0.45+0.255+0.19=0.895 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            B wins. With weights \((0.8,0.2,0)\), which ignore safety, \(R_A=0.934\) and
+            \(R_B=0.890\), and A wins. The general rule is the difference
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            R_A-R_B=0.08\,\lambda_1-0.10\,\lambda_2-0.55\,\lambda_3 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            A is ahead only on correctness, and only by 0.08; it is behind on safety by 0.55.
+            Any meaningful safety weight hands the win to B. A scalar reward model would have
+            made this decision silently, using weights nobody chose. The multi-objective model
+            makes the decision explicit, and Equation 11 says exactly where it flips.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="scale">
+        <h2>7. Normalise before combining</h2>
+        <div class="prose-study">
+          <p>
+            Weights only mean what they appear to mean if the heads live on comparable scales.
+            They often do not. A correctness head trained with BCE (Equation 5) and read as a
+            probability may vary by about 0.1 across responses to a prompt. A helpfulness
+            head trained with Bradley–Terry (Equation 7) produces unbounded logits that may
+            vary by 2.0.
+          </p>
+          <p>
+            With equal weights of 0.5, one typical step in helpfulness moves \(R\) by
+            \(0.5\times2.0=1.0\), while one typical step in correctness moves it by
+            \(0.5\times0.1=0.05\). Helpfulness effectively counts twenty times as much, even
+            though the weights say "equal."
+          </p>
+          <p>
+            The fix is to standardise each head on a reference set of responses before
+            combining:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(12)</span>
+          \[
+            \tilde r_k=\frac{r_k-\mu_k}{\sigma_k},\qquad R=\sum_k\lambda_k\,\tilde r_k ,
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            where \(\mu_k\) and \(\sigma_k\) are the mean and standard deviation of head \(k\)
+            on that set. Now a weight of 0.5 means the same thing for every head: half a
+            standard deviation of \(R\) per standard deviation of that quality.
+          </p>
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Proposition 8.1 · Weights and scales are entangled</span>
+          <p>
+            Rescale each head as \(r_k'=a_k r_k+c_k\) with \(a_k&gt;0\). Then
+            \(\sum_k\lambda_k r_k'=\sum_k(\lambda_k a_k)\,r_k+\text{const}\). Ranking
+            responses by the rescaled heads with weights \(\lambda\) is the same as ranking by
+            the original heads with weights proportional to \(\lambda_k a_k\). Offsets
+            \(c_k\) never matter; scales \(a_k\) change the effective weights.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="pareto">
+        <h2>8. Pareto fronts</h2>
+        <div class="prose-study">
+          <p>
+            Without any weights at all, some comparisons are already settled. Response \(y\)
+            <em>dominates</em> \(y'\) if it is at least as good on every head and strictly
+            better on at least one:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(13)</span>
+          \[
+            y\succ_{\text{P}} y'
+            \iff
+            r_k(y)\ge r_k(y')\ \ \forall k
+            \quad\text{and}\quad
+            r_j(y)&gt;r_j(y')\ \ \text{for some } j .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The responses that no other response dominates form the <em>Pareto front</em>.
+            Every response off the front is a bad choice under every reasonable preference.
+            For example \(C=[0.85,0.80,0.90]\) is dominated by \(B=[0.90,0.85,0.95]\), so C
+            never wins for any non-negative weights. A and B are both on the front: neither
+            dominates the other, and choosing between them requires a value judgement.
+          </p>
+          <p>
+            A fixed weighting is that value judgement. It picks one point on the front, the
+            one that touches the highest line \(\sum_k\lambda_k r_k=\text{const}\). Changing
+            the weights slides the choice along the front.
+          </p>
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Proposition 8.2 · What weights can and cannot reach</span>
+          <p>
+            If every \(\lambda_k&gt;0\), the maximiser of \(\sum_k\lambda_k r_k\) is on the
+            Pareto front. The converse fails: a Pareto-optimal point in a dent of the front
+            can never be the maximiser. With two objectives and candidates \(P=(1,0)\),
+            \(Q=(0,1)\), \(M=(0.45,0.45)\), the balanced answer M is Pareto-optimal, yet
+            \(\max(\lambda_1,\lambda_2)\ge0.5\), while M always scores
+            \(\lambda_1(0.45)+\lambda_2(0.45)=0.45\) for every weighting, so linear weights always pick P or Q.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            This is a real limitation. If you want "reasonably good at everything" rather than
+            "excellent at one thing," a weighted sum may never select it. Non-linear
+            combinations, such as maximising the worst normalised head, can reach such points.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="constraint">
+        <h2>9. Safety as a constraint</h2>
+        <div class="prose-study">
+          <p>
+            A weight treats safety as something that can be traded at a fixed rate: a little
+            more correctness pays for a little less safety. For many safety requirements that
+            is the wrong model. We do not want "less harm is worth more helpfulness"; we want
+            "harm must stay below a limit, and within that limit, be as helpful as possible."
+          </p>
+          <p>
+            Write the safety head as a cost \(c(x,y)\), higher for more harmful responses, and
+            state the goal as a constrained problem:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(14)</span>
+          \[
+            \max_{\pi}\ \mathbb E_{y\sim\pi}\big[r(x,y)\big]
+            \quad\text{subject to}\quad
+            \mathbb E_{y\sim\pi}\big[c(x,y)\big]\le d .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The standard tool is the Lagrangian. Introduce a multiplier \(\mu\ge0\) and
+            train the policy on the shaped reward
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(15)</span>
+          \[
+            r_\mu(x,y)=r(x,y)-\mu\,c(x,y),
+          \]
+        </div>
+        <div class="prose-study">
+          <p>while adjusting \(\mu\) by gradient ascent on the constraint violation:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(16)</span>
+          \[
+            \mu\leftarrow\max\!\big(0,\ \mu+\eta\,(\hat C-d)\big),
+            \qquad \hat C=\text{average cost in the current batch}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Take budget \(d=0.05\), step \(\eta=0.5\), and start at \(\mu=0\). A batch with
+            average cost 0.20 raises \(\mu\) to \(0.5\times0.15=0.075\). The next batch, now
+            safer, averages 0.12 and raises \(\mu\) to \(0.075+0.5\times0.07=0.110\). Once a
+            batch averages 0.04, below budget, \(\mu\) eases back to
+            \(0.110-0.5\times0.01=0.105\). The price of harm rises while the limit is broken
+            and stops rising once it holds.
+          </p>
+        </div>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Safety as a weight</h4>
+            <p>\(R=\lambda_1 r_{\text{help}}+\lambda_3 r_{\text{safe}}\) with \(\lambda\) fixed in advance.</p>
+            <p class="mono-line">Fixed exchange rate.</p>
+          </div>
+          <div class="compare-card">
+            <h4>Safety as a constraint</h4>
+            <p>\(r-\mu c\) with \(\mu\) adjusted until \(\mathbb E[c]\le d\).</p>
+            <p class="mono-line">Exchange rate set by the limit.</p>
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            Safe RLHF follows this recipe: it trains a reward model for helpfulness and a
+            separate cost model for harmlessness on separately collected preferences, then
+            optimises the policy with the Lagrangian method. A cruder variant is a hard gate
+            at selection time: discard any response whose safety score is below a threshold,
+            then rank the rest by the other heads.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="gating">
+        <h2>10. Weights per prompt</h2>
+        <div class="prose-study">
+          <p>
+            One fixed \(\lambda\) is a compromise across all prompts. But "fix this Python
+            bug" should care mostly about correctness, while "write a short poem about autumn"
+            should care more about style and helpfulness. The natural extension is to let the
+            weights depend on the prompt:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(17)</span>
+          \[
+            \boldsymbol\lambda(x)=\operatorname{softmax}\big(g_\phi(h_x)\big),
+            \qquad
+            R(x,y)=\sum_{k=1}^{K}\lambda_k(x)\,r_k(x,y).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Here \(h_x\) is a representation of the prompt alone and \(g_\phi\) is a small
+            gating network. The softmax keeps the weights non-negative and summing to one. The
+            gate sees only the prompt, so the same weights apply to every candidate response
+            for that prompt, and the ranking among candidates stays a fair comparison.
+          </p>
+          <p>
+            ArmoRM is a published example of this design. Its heads are fitted on
+            multi-attribute absolute ratings; a mixture-of-experts style gate is then trained,
+            with the heads held fixed, so that the combined score agrees with pairwise human
+            preferences under a Bradley–Terry loss. The gate learns from preference data which
+            attributes matter for which kind of prompt.
+          </p>
+        </div>
+        <div class="remark-box">
+          <span class="box-label">Remark · Interpretability for free</span>
+          <p>
+            A gated model can report not only a score but also why: "for this prompt, 70% of
+            the weight went to correctness, and this response scored 0.4 there." A scalar
+            reward model cannot give that explanation.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="weak">
+        <h2>11. Weaknesses</h2>
+        <div class="prose-study">
+          <ul>
+            <li><strong>The value judgement moves, it does not vanish.</strong> Someone still chooses \(\lambda\), \(d\) or the gate's training data; the choice is only made visible.</li>
+            <li><strong>Scale sensitivity.</strong> Unnormalised heads silently reweight the objectives (Proposition 8.1), and the normalising statistics drift as the policy changes.</li>
+            <li><strong>Missing points.</strong> Linear weights cannot select Pareto-optimal answers in dents of the front (Proposition 8.2).</li>
+            <li><strong>Correlated heads.</strong> Heads trained on overlapping data leak into each other; helpfulness ratings, for instance, often correlate with length.</li>
+            <li><strong>Costly labels.</strong> Per-attribute ratings take more annotator effort, and annotators disagree more on fine-grained attributes than on overall preference.</li>
+            <li><strong>More surfaces to hack.</strong> Under RL, the policy can push up the easiest head to fool and collect reward through its weight.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section lab-wide" id="lab">
+        <h2>12. Laboratory: watching the winner flip</h2>
+        <div class="prose-study">
+          <p>
+            Two fixed answers have score vectors \(\mathbf r_A=[0.98,0.75,0.40]\) and
+            \(\mathbf r_B=[0.90,0.85,0.95]\) on (correctness, helpfulness, safety). Move the
+            three weight sliders. The weights are rescaled to sum to one, both combined
+            rewards are recomputed, and the winner is reported. The safety threshold turns on a
+            hard constraint: any answer whose safety score is below it is ruled out before
+            weights are applied.
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Linear scalarisation of two answers</h3>
+            <span>\(R=\sum_k\lambda_k r_k\)</span>
+          </div>
+
+          <div class="demo-controls" style="margin-bottom:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem">
+            <div class="control-block">
+              <span class="control-label">Weight on correctness</span>
+              <label class="slider-label">
+                λ₁
+                <input type="range" id="moLc" min="0" max="1" step="0.05" value="0.5" />
+                <strong id="moLcL">0.50</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Weight on helpfulness</span>
+              <label class="slider-label">
+                λ₂
+                <input type="range" id="moLh" min="0" max="1" step="0.05" value="0.3" />
+                <strong id="moLhL">0.30</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Weight on safety</span>
+              <label class="slider-label">
+                λ₃
+                <input type="range" id="moLs" min="0" max="1" step="0.05" value="0.2" />
+                <strong id="moLsL">0.20</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Safety threshold (0 = off)</span>
+              <label class="slider-label">
+                τ
+                <input type="range" id="moTau" min="0" max="1" step="0.05" value="0" />
+                <strong id="moTauL">off</strong>
+              </label>
+            </div>
+          </div>
+
+          <div class="btn-row" style="margin-bottom:1rem">
+            <button type="button" class="btn small" id="moPresetCorrect">Correctness only</button>
+            <button type="button" class="btn small" id="moPresetEqual">Equal weights</button>
+            <button type="button" class="btn small" id="moPresetSafe">Safety-heavy</button>
+          </div>
+
+          <div class="stat-strip" style="grid-template-columns:repeat(3,1fr)">
+            <div><span>Reward \(R_A\)</span><strong id="moRA">-</strong></div>
+            <div><span>Reward \(R_B\)</span><strong id="moRB">-</strong></div>
+            <div><span>Winner</span><strong id="moWin">-</strong></div>
+          </div>
+
+          <h4 style="margin:1rem 0 0.5rem">Computation</h4>
+          <div class="bellman-trace" id="moTrace">Move a slider.</div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Start from "Correctness only", where A wins, then raise the safety weight a little
+            at a time. B takes over almost immediately. Then set \(\lambda_3=0\) and look for
+            the correctness weight at which A and B tie. Finally set the threshold to 0.5:
+            A is excluded whatever the weights.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>13. Worked example, step by step</h2>
+        <div class="prose-study">
+          <p>
+            Use the answers of Section 6, \(\mathbf r_A=[0.98,0.75,0.40]\) and
+            \(\mathbf r_B=[0.90,0.85,0.95]\). Find which answer wins under several policies
+            and the exact weight at which the winner flips.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Dominance: A is higher on correctness, B is higher on helpfulness and safety. Neither dominates; both are on the Pareto front of \(\{A,B\}\).</li>
+            <li class="hidden-step">Weights \((0.5,0.3,0.2)\): \(R_A=0.49+0.225+0.08=0.795\), \(R_B=0.45+0.255+0.19=0.895\). B wins.</li>
+            <li class="hidden-step">Weights \((0.8,0.2,0)\): \(R_A=0.784+0.150=0.934\), \(R_B=0.720+0.170=0.890\). A wins.</li>
+            <li class="hidden-step">General margin: \(R_A-R_B=(0.98-0.90)\lambda_1+(0.75-0.85)\lambda_2+(0.40-0.95)\lambda_3=0.08\lambda_1-0.10\lambda_2-0.55\lambda_3\).</li>
+            <li class="hidden-step">No safety weight, \(\lambda_3=0\), \(\lambda_2=1-\lambda_1\): margin \(=0.18\lambda_1-0.10\), positive iff \(\lambda_1&gt;0.10/0.18\approx0.556\).</li>
+            <li class="hidden-step">Small safety weight, \(\lambda_3=0.1\), \(\lambda_2=0.9-\lambda_1\): margin \(=0.18\lambda_1-0.145\), positive iff \(\lambda_1&gt;0.806\). A safety weight of just 0.1 pushes the flip point from 0.556 to 0.806.</li>
+            <li class="hidden-step">Constraint \(r_{\text{safe}}\ge0.5\): A has 0.40 and is ruled out. B is chosen for every weighting.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>14. What comes next</h2>
+        <div class="prose-study">
+          <p>
+            Every model so far, scalar or vector, reads the response and emits numbers from a
+            head in a single forward pass. The next chapter changes how the judgment is
+            produced: the reward model <em>writes</em> an evaluation in text, and the score is
+            read from the tokens it generates.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Key idea to remember</span>
+          <p>
+            One response, several reward dimensions. Combining them is a separate, explicit
+            choice: normalise the heads, then pick weights, constraints or a gate.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Wu et al., 2023, fine-grained human feedback: separate reward models for different error types, combined with weights.</li>
+            <li>Wang et al., 2023, HelpSteer: a dataset of responses rated on several attributes.</li>
+            <li>Dai et al., 2023, Safe RLHF: separate reward and cost models with a Lagrangian constraint.</li>
+            <li>Wang et al., 2024, ArmoRM: multi-objective reward modelling with a prompt-dependent gating network.</li>
+            <li>Ramé et al., 2023, rewarded soups: interpolating policies fine-tuned on different rewards to move along the Pareto front.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="value.html" style="color:inherit;text-decoration:none">&larr; Value Model</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next chapter</p>
+            <h3>Generative reward model</h3>
+            <p>The reward model writes its judgment before it scores.</p>
+          </div>
+          <a class="btn primary" href="generative.html">Continue &rarr;</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Reward Models · Chapter 08, Multi-objective reward model</p>
+    <p class="muted">Not "how good is it?" but "good in which ways, and which ways matter here?"</p>
+  </footer>
+
+  <script src="multi-objective.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

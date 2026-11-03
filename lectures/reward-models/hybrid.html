@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>14 · Hybrid Rule + Learned Rewards — Reward Models</title>
+  <link rel="stylesheet" href="../notes.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+
+  <div class="layout-book" id="top">
+    <nav class="sidebar" aria-label="Notes">
+      <div class="menu-category">Syed Nazmus Sakib</div>
+      <div class="menu-item"><a href="/index.html">Home</a></div>
+      <div class="menu-item"><a href="/publications.html">Publications</a></div>
+      <div class="menu-item"><a href="/lectures/">Lecture Notes</a></div>
+      <div class="menu-category">Reward Models</div>
+      <div class="menu-item"><a href="index.html">Overview</a></div>
+      <div class="menu-item"><a href="scalar.html">Scalar Reward Model</a></div>
+      <div class="menu-item"><a href="pointwise.html">Pointwise Verifier</a></div>
+      <div class="menu-item"><a href="pairwise.html">Pairwise Comparator</a></div>
+      <div class="menu-item"><a href="listwise.html">Listwise Ranking</a></div>
+      <div class="menu-item"><a href="orm.html">Outcome Reward Model</a></div>
+      <div class="menu-item"><a href="prm.html">Process Reward Model</a></div>
+      <div class="menu-item"><a href="value.html">Value Model</a></div>
+      <div class="menu-item"><a href="multi-objective.html">Multi-Objective RM</a></div>
+      <div class="menu-item"><a href="generative.html">Generative RM</a></div>
+      <div class="menu-item"><a href="critique.html">Critique-then-Score</a></div>
+      <div class="menu-item"><a href="implicit.html">Implicit RM (DPO)</a></div>
+      <div class="menu-item"><a href="conditional.html">Conditional RM</a></div>
+      <div class="menu-item"><a href="ensemble.html">Uncertainty &amp; Ensembles</a></div>
+      <div class="menu-item"><a class="current" aria-current="page" href="hybrid.html">Hybrid Rule + Learned</a></div>
+      <ol class="toc">
+        <li><a href="#question">1. Two kinds of reward</a></li>
+        <li><a href="#rules">2. Rule-based rewards</a></li>
+        <li><a href="#rlvr">3. RL with verifiable rewards</a></li>
+        <li><a href="#r1">4. Accuracy plus format</a></li>
+        <li><a href="#limits">5. When rules fall short</a></li>
+        <li><a href="#combine">6. Ways to combine</a></li>
+        <li><a href="#additive">7. Additive shaping and scale</a></li>
+        <li><a href="#gates">8. Gates and penalties</a></li>
+        <li><a href="#safety">9. Written rules for safety</a></li>
+        <li><a href="#hacking">10. Hacking both sides</a></li>
+        <li><a href="#weak">11. Weaknesses</a></li>
+        <li><a href="#lab">12. Laboratory</a></li>
+        <li><a href="#worked">13. Worked example</a></li>
+        <li><a href="#next">14. What comes next</a></li>
+      </ol>
+      <div class="menu-item"><a href="prm-variants.html">PRM Variants in Depth</a></div>
+    </nav>
+
+    <article class="study-main" id="content" tabindex="-1">
+      <p class="chapter-kicker">Reward Models · Chapter 14</p>
+      <h1 class="study-title">Hybrid rewards: <em>rules where you can</em>, a model where you must</h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Some properties of a response can be checked by a program: the final answer matches
+        the key, the code passes its tests, the output has the required tags. Others, such as
+        clarity, tone or helpfulness, cannot. This chapter defines rule-based (verifiable)
+        rewards, shows how they are used in RL with verifiable rewards and in the accuracy
+        plus format recipe for reasoning models, explains where rules run out, and studies
+        four ways to combine rules with a learned reward model: routing, additive shaping,
+        gating and penalties. It ends with written rules for safety and with the ways each
+        kind of reward is hacked.
+      </div>
+
+      <section class="study-section" id="question">
+        <h2>1. Two kinds of reward</h2>
+        <div class="prose-study">
+          <p class="lead">
+            A rule checks. A learned reward model judges.
+          </p>
+          <p>
+            Every chapter so far has trained a network to imitate human or AI judgements. That
+            is necessary when quality is a matter of judgement. But for many prompts the right
+            answer is known in advance. "What is \(17\times 23\)?" has one correct answer, and
+            a program can compare the model's answer with it.
+          </p>
+          <p>
+            A program has two advantages over a learned model. It does not drift as the policy
+            changes, and it cannot be talked into a high score by confident prose. It also has
+            one large disadvantage: it only sees what it was written to check. A hybrid reward
+            uses each kind of signal for the part of the job it does well.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="rules">
+        <h2>2. Rule-based rewards</h2>
+        <div class="def-box">
+          <span class="box-label">Definition 14.1 · Rule-based (verifiable) reward</span>
+          <p>
+            A rule-based reward is a fixed program \(r_{\text{rule}}(x,y)\) that reads the
+            prompt \(x\), the response \(y\) and any reference data attached to the prompt
+            (an answer key, test cases, a format specification), and returns a number without
+            any learned parameters. When the program decides whether the response is
+            correct, the reward is called <em>verifiable</em>.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            The most common rule is exact match. Extract the final answer from the response,
+            normalise it (strip spaces, simplify fractions, unify number formats), and compare
+            it with the key \(a^\star(x)\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            r_{\text{acc}}(x,y)=\mathbb 1\big[\operatorname{norm}(\operatorname{extract}(y))=\operatorname{norm}(a^\star(x))\big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            For code, the rule runs the program. With \(K\) unit tests, the fraction that
+            pass gives a reward with partial credit:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            r_{\text{test}}(x,y)=\frac{1}{K}\sum_{k=1}^{K}\mathbb 1\big[\text{test }k\text{ passes on }y\big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>Other rules in common use:</p>
+          <ul>
+            <li><strong>Compiler or parser.</strong> 1 if the code compiles or the JSON parses, 0 otherwise.</li>
+            <li><strong>Format check.</strong> A regular expression confirms that the reasoning sits inside &lt;think&gt; tags and the answer inside \(\boxed{\cdot}\).</li>
+            <li><strong>Instruction constraints.</strong> "Answer in fewer than 100 words" or "use exactly three bullet points" can be counted.</li>
+            <li><strong>Length limit.</strong> A penalty that grows once the response exceeds a token budget.</li>
+          </ul>
+          <p>
+            A rule is only as good as its extractor. If the answer is \(\tfrac12\) and the
+            response writes \(0.5\), a careless normaliser marks a correct response wrong.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="rlvr">
+        <h2>3. RL with verifiable rewards</h2>
+        <div class="prose-study">
+          <p>
+            Reinforcement learning with verifiable rewards (RLVR) replaces the learned reward
+            model with a verifier on prompts where one exists. The Tülu 3 recipe applied it to
+            math problems with known answers and to instructions with checkable constraints.
+            The verifier gives a constant reward \(\alpha>0\) when the check passes and zero
+            otherwise, and the usual KL penalty keeps the policy near its reference:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            \max_{\pi}\;\mathbb E_{x\sim\mathcal D,\;y\sim\pi(\cdot\mid x)}\big[\alpha\,\mathbb 1[\operatorname{verify}(x,y)]\big]
+            -\beta\,\mathbb E_{x}\Big[\operatorname{KL}\big(\pi(\cdot\mid x)\,\|\,\pi_{\text{ref}}(\cdot\mid x)\big)\Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Compared with standard RLHF, where the reward is a
+            <a href="scalar.html">scalar RM</a>, only the reward has changed. The optimiser (PPO, GRPO or another policy-gradient
+            method) is the same. What changes is the failure mode: a verifier cannot be
+            flattered, so the policy can only raise its reward by being right more often or by
+            finding a hole in the verifier.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="r1">
+        <h2>4. The accuracy plus format recipe</h2>
+        <div class="prose-study">
+          <p>
+            DeepSeek-R1-Zero was trained with RL from a base model using only rule-based
+            rewards. Its authors chose not to use a neural reward model for this stage,
+            citing the risk of reward hacking during long RL runs. The reward has two parts:
+          </p>
+          <ul>
+            <li><strong>Accuracy.</strong> For math, the final answer must appear in a required form (for example a box) and match the key. For coding problems, a compiler runs predefined tests.</li>
+            <li><strong>Format.</strong> The reasoning must be placed between &lt;think&gt; and &lt;/think&gt; tags.</li>
+          </ul>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            r(x,y)=r_{\text{acc}}(x,y)+r_{\text{fmt}}(y).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The two parts are coupled. The accuracy rule can only read an answer it can find,
+            so the format rule is partly a precondition for the accuracy rule. A model that
+            solves the problem but forgets the box gets nothing for its correct answer.
+          </p>
+          <p>
+            For DeepSeek-R1 the authors also observed that the chain of thought mixed
+            languages. They added a language-consistency reward, the proportion of words in
+            the reasoning that are in the target language, and summed it with the accuracy
+            reward:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            r_{\text{lang}}(y)=\frac{\#\{\text{target-language words in the reasoning}\}}{\#\{\text{words in the reasoning}\}}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            In the final RL stage of DeepSeek-R1, reasoning prompts kept their rule-based
+            rewards while general prompts were scored by learned reward models for
+            helpfulness and harmlessness. That is a hybrid reward of the routing kind
+            (Section 6). The optimiser behind these runs is the
+            <a href="../rl/grpo.html">GRPO</a> method from the RL notes.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="limits">
+        <h2>5. When rules are enough, and when they are not</h2>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Rules are enough</h4>
+            <p>The task has a checkable target: a numeric answer, a test suite, a schema, a word count.</p>
+            <p class="mono-line">Is 391 the answer? Do 12 of 12 tests pass?</p>
+          </div>
+          <div class="compare-card">
+            <h4>Rules fall short</h4>
+            <p>Quality is a judgement: clarity, tone, helpfulness, depth, a sensible refusal.</p>
+            <p class="mono-line">Is this email polite and clear?</p>
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>Rules run out in four recognisable ways.</p>
+          <ul>
+            <li><strong>Open-ended quality.</strong> "Explain recursion to a beginner" has no answer key. A rule can count words but cannot tell a good explanation from a bad one.</li>
+            <li><strong>Partial credit.</strong> A proof with one gap, or code that is right but slow, is neither fully right nor fully wrong. Exact match gives 0 to both.</li>
+            <li><strong>Style.</strong> Two correct answers can differ greatly in readability. A correctness rule scores them the same.</li>
+            <li><strong>Safety nuance.</strong> A keyword filter can block a word, but it cannot tell a dangerous request from a historian's question that uses the same word.</li>
+          </ul>
+          <p>
+            In each case a learned model, trained on judgements, supplies the missing signal.
+            The rule still has a job: it anchors the parts that can be checked.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="combine">
+        <h2>6. Ways to combine rules and a learned RM</h2>
+        <div class="def-box">
+          <span class="box-label">Definition 14.2 · Hybrid reward</span>
+          <p>
+            A hybrid reward is a fixed combination
+            \(R=\Phi\big(r_{\text{RM}},r_1,\ldots,r_K\big)\) of a
+            learned reward \(r_{\text{RM}}\) and rule-based rewards \(r_1,\ldots,r_K\). The
+            combination \(\Phi\) is chosen by the designer and is not learned with the policy.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>Four choices of \(\Phi\) cover most systems:</p>
+          <ul>
+            <li><strong>Routing.</strong> Use the rule when the prompt is verifiable, the learned RM otherwise.</li>
+            <li><strong>Additive shaping.</strong> Add weighted rule rewards to the RM score (Section 7).</li>
+            <li><strong>Gating.</strong> If a hard rule fails, the response gets a floor reward whatever the RM says (Section 8).</li>
+            <li><strong>Penalties.</strong> Subtract costs for length, language mixing or other unwanted traits (Section 8).</li>
+          </ul>
+          <p>Routing needs a set \(\mathcal V\) of prompts that come with a verifier:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            R(x,y)=\begin{cases} r_{\text{rule}}(x,y) & x\in\mathcal V\\ r_{\text{RM}}(x,y) & x\notin\mathcal V \end{cases}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>In a training loop the patterns are usually stacked:</p>
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">1 · Read the prompt and its metadata: task type, answer key, tests, constraints.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">2 · If a verifier exists for this prompt, run it on the response.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">3 · Otherwise, or in addition, score the response with the learned RM.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">4 · Apply hard gates, then add penalties that apply to every prompt.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">5 · Normalise rewards within the batch or group and pass them to the RL update.</div>
+        </div>
+      </section>
+
+      <section class="study-section" id="additive">
+        <h2>7. Additive shaping and the scale problem</h2>
+        <div class="prose-study">
+          <p>The additive form keeps every signal and weights it:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            R(x,y)=w_{\text{RM}}\,r_{\text{RM}}(x,y)+\sum_{k=1}^{K}w_k\,r_{\text{rule},k}(x,y).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The weights only mean something if the terms share a scale. A Bradley-Terry RM
+            outputs unbounded logits, while a rule outputs 0 or 1. Suppose a confident wrong
+            answer gets an RM logit of 4.0 and a plain correct answer gets 2.5. With
+            \(w_{\text{RM}}=w_{\text{acc}}=1\), the totals are \(4.0+0=4.0\) and
+            \(2.5+1=3.5\): the wrong answer wins. Squash the RM score first,
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            \tilde r_{\text{RM}}=\sigma(r_{\text{RM}}),\qquad \sigma(4.0)\approx 0.982,\quad \sigma(2.5)\approx 0.924,
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            and the totals become \(0.982\) and \(1.924\). The correct answer now wins. Other
+            choices, such as standardising RM scores within a batch, serve the same purpose.
+            Once scales are fixed, the weights can be chosen so that correctness cannot be
+            outvoted.
+          </p>
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Proposition 14.1 · Correctness dominates</span>
+          <p>
+            Let \(r_{\text{acc}}\in\{0,1\}\), let \(\tilde r_{\text{RM}}\in[0,1]\), and let all
+            remaining weighted terms together lie in an interval of width \(D\). If
+            \(w_{\text{acc}}>w_{\text{RM}}+D\), every correct response receives a higher total
+            than every incorrect one. The gap between any correct and any incorrect total is
+            at least \(w_{\text{acc}}-w_{\text{RM}}-D>0\).
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            Within each group, correct or incorrect, the RM and the other terms still decide
+            the order. This is a lexicographic preference written as a sum: be right first,
+            then be good.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="gates">
+        <h2>8. Gates and penalties</h2>
+        <div class="prose-study">
+          <p>
+            A gate turns a rule into a hard requirement. Let \(g(x,y)\in\{0,1\}\) be 1 when all
+            hard rules pass (the output parses, the answer tag is present, no banned content).
+            The gated reward is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            R(x,y)=\begin{cases} r_{\text{RM}}(x,y) & g(x,y)=1\\ r_{\text{floor}} & g(x,y)=0 \end{cases},
+            \qquad r_{\text{floor}}&lt;\min r_{\text{RM}}.
+          \]
+        </div>
+        <div class="remark-box">
+          <span class="box-label">Remark · Why not simply multiply?</span>
+          <p>
+            The multiplicative form \(R=g\cdot r_{\text{RM}}\) sets failing responses to 0.
+            That works only if RM scores are never negative. If a passing response scores
+            \(r_{\text{RM}}=-0.8\), a failing response with \(R=0\) now ranks above it. Use a
+            floor below the RM's range, or squash the RM score to \([0,1]\) first.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            Penalties are softer. They subtract a cost that grows with the unwanted trait. A
+            length penalty with budget \(L_{\max}\) and strength \(\lambda\) is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            r_{\text{len}}(y)=-\lambda\,\frac{\max\big(0,\;|y|-L_{\max}\big)}{L_{\max}}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            With \(L_{\max}=1000\) tokens and \(\lambda=0.5\), a 1400-token response pays
+            \(0.5\times 400/1000=0.2\). A language-mixing penalty can be written as
+            \(-(1-r_{\text{lang}})\) using Equation 5. Penalties target known biases of learned
+            RMs: most preference-trained RMs favour longer answers, and an additive length
+            penalty is a direct counterweight.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="safety">
+        <h2>9. Written rules for safety</h2>
+        <div class="prose-study">
+          <p>
+            Safety behaviour is too nuanced for a regular expression, yet designers often know
+            exactly what they want: a refusal should be brief, should not lecture the user,
+            and should not contain the requested harmful content. Two lines of work turn such
+            written rules into rewards by asking a language model to apply them.
+          </p>
+        </div>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Rule Based Rewards</h4>
+            <p>
+              Desired behaviour is broken into explicit propositions, such as "contains a
+              short apology" or "is judgemental toward the user". An LLM grader estimates
+              the probability that each proposition holds. The probabilities are combined
+              with weights fitted on a small labelled set, and the result is added to the
+              learned RM's reward.
+            </p>
+            <p class="mono-line">grader checks each rule, weights combine them</p>
+          </div>
+          <div class="compare-card">
+            <h4>Constitutional AI</h4>
+            <p>
+              A short written constitution of principles guides the model. In a supervised
+              stage the model critiques and revises its own answers against a principle. In
+              an RL stage an AI judge compares two answers under a principle, and its choices
+              train a preference model (RL from AI feedback).
+            </p>
+            <p class="mono-line">principles produce AI preference labels</p>
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>In the additive form, a proposition-based safety reward looks like</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            R(x,y)=r_{\text{RM}}(x,y)+\sum_{j=1}^{J}w_j\,p_j(x,y),\qquad
+            p_j(x,y)=P_{\text{grader}}\big(\text{proposition } j \text{ holds}\mid x,y\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            These are not rule-based in the program sense, because the grader is itself a
+            model. They sit between the two families: the <em>criteria</em> are fixed and
+            written down like rules, while the <em>checking</em> is done by a model. This
+            makes the policy auditable (each rule can be read and changed) without requiring
+            a regex for every nuance. The generative judges of
+            <a href="generative.html">Chapter 09</a> are the natural graders.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="hacking">
+        <h2>10. Reward hacking on both sides</h2>
+        <div class="prose-study">
+          <p>
+            A policy optimises whatever the reward measures, including its blind spots. Rules
+            and learned RMs have different blind spots, which is the main argument for using
+            both.
+          </p>
+        </div>
+        <table class="practice-table">
+          <thead>
+            <tr><th>Hack</th><th>Reward fooled</th><th>What catches it</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Correct tags around an empty or guessed answer</td><td>Format rule</td><td>Correctness rule; small format weight</td></tr>
+            <tr><td>Special-casing the visible tests (hard-coded outputs)</td><td>Unit-test rule</td><td>Hidden held-out tests; code review by a model</td></tr>
+            <tr><td>Guessing on multiple choice</td><td>Exact match</td><td>Negative reward for wrong answers; open-ended versions</td></tr>
+            <tr><td>Writing several answers so the extractor finds one</td><td>Answer extractor</td><td>Strict extraction: exactly one final answer</td></tr>
+            <tr><td>Long, confident, flattering text</td><td>Learned RM</td><td>Length penalty; correctness rule</td></tr>
+            <tr><td>Wrong answer in polished style</td><td>Learned RM</td><td>Correctness rule</td></tr>
+            <tr><td>Correct answer delivered rudely or unsafely</td><td>Correctness rule</td><td>Learned RM; safety propositions</td></tr>
+          </tbody>
+        </table>
+        <div class="prose-study">
+          <p>
+            Multiple choice shows how a small change to a rule removes an incentive. With four
+            options and reward 1 for right, 0 for wrong, a random guess earns \(0.25\) in
+            expectation, more than saying "I don't know". Give \(-\tfrac13\) for a wrong answer
+            instead:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(12)</span>
+          \[
+            \mathbb E[r_{\text{guess}}]=\tfrac14\cdot 1+\tfrac34\cdot\big(-\tfrac13\big)=0 .
+          \]
+        </div>
+        <div class="note-box">
+          <span class="box-label">Note · Each covers the other's gaps</span>
+          <p>
+            Rules are exact but narrow: they fail when the policy finds an input the rule
+            was not written for. Learned RMs are broad but soft: they fail when the policy
+            finds text that looks good without being good. Correctness from the rule blocks
+            the RM's style hacks; judgement from the RM blocks the rule's form-only hacks.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="weak">
+        <h2>11. Weaknesses</h2>
+        <div class="prose-study">
+          <ul>
+            <li><strong>Scale and weight tuning.</strong> The weights in Equation 7 interact with RM calibration and must be retuned when the RM changes.</li>
+            <li><strong>False negatives from verifiers.</strong> Correct answers in unexpected forms (\(0.5\) vs \(\tfrac12\), a reordered list) are marked wrong and the policy is pushed away from them.</li>
+            <li><strong>Narrow coverage.</strong> Verifiable prompts are mostly math, code and constrained instructions. A model trained mostly on them can drift on everything else.</li>
+            <li><strong>Routing errors.</strong> A prompt sent to the wrong branch gets a meaningless reward, for instance an open question checked against a single answer key.</li>
+            <li><strong>Incomplete written rules.</strong> Safety propositions cover the cases their authors thought of; new failure types need new propositions.</li>
+            <li><strong>Sparse signal.</strong> A 0/1 verifier gives no gradient on prompts the policy never solves, or always solves. Group-relative methods see zero advantage on such prompts.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section lab-wide" id="lab">
+        <h2>12. Laboratory: building a hybrid reward</h2>
+        <div class="prose-study">
+          <p>
+            Three responses to the same math prompt have fixed attributes. Switch reward
+            components on and off, set their weights, and watch the totals and the ranking
+            change. The RM score is already squashed to \([0,1]\). The length penalty uses
+            \(L_{\max}=1000\) tokens (Equation 10). The gate sets the total to 0 when the
+            format rule fails.
+          </p>
+        </div>
+
+        <table class="practice-table">
+          <thead>
+            <tr><th>Response</th><th>Correct?</th><th>Well formatted?</th><th>RM score</th><th>Length</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>A · plain and right</td><td>yes</td><td>yes</td><td>0.55</td><td>600</td></tr>
+            <tr><td>B · polished and wrong</td><td>no</td><td>yes</td><td>0.85</td><td>1400</td></tr>
+            <tr><td>C · right, tags missing</td><td>yes</td><td>no</td><td>0.70</td><td>350</td></tr>
+          </tbody>
+        </table>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Hybrid reward mixer</h3>
+            <span>\(R=w_{\text{acc}}r_{\text{acc}}+w_{\text{fmt}}r_{\text{fmt}}+w_{\text{RM}}\tilde r_{\text{RM}}+r_{\text{len}}\)</span>
+          </div>
+
+          <div class="btn-row" style="margin-bottom:0.75rem">
+            <button type="button" class="btn small" id="hybPresetHybrid">Hybrid default</button>
+            <button type="button" class="btn small ghost" id="hybPresetRm">RM only</button>
+            <button type="button" class="btn small ghost" id="hybPresetRules">Rules only</button>
+            <button type="button" class="btn small ghost" id="hybPresetFmt">Format only</button>
+          </div>
+
+          <div class="demo-controls" style="margin-bottom:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem">
+            <div class="control-block">
+              <span class="control-label">Correctness rule</span>
+              <label class="toggle"><input type="checkbox" id="hybAccOn" checked /><span>Use \(r_{\text{acc}}\)</span></label>
+              <label class="slider-label">
+                weight
+                <input type="range" id="hybWAcc" min="0" max="3" step="0.1" value="1" />
+                <strong id="hybWAccL">1.0</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Format rule</span>
+              <label class="toggle"><input type="checkbox" id="hybFmtOn" checked /><span>Use \(r_{\text{fmt}}\)</span></label>
+              <label class="slider-label">
+                weight
+                <input type="range" id="hybWFmt" min="0" max="2" step="0.1" value="0.5" />
+                <strong id="hybWFmtL">0.5</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Learned RM</span>
+              <label class="toggle"><input type="checkbox" id="hybRmOn" checked /><span>Use \(\tilde r_{\text{RM}}\)</span></label>
+              <label class="slider-label">
+                weight
+                <input type="range" id="hybWRm" min="0" max="2" step="0.1" value="1" />
+                <strong id="hybWRmL">1.0</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Length penalty and gate</span>
+              <label class="toggle"><input type="checkbox" id="hybLenOn" checked /><span>Use \(r_{\text{len}}\)</span></label>
+              <label class="slider-label">
+                λ
+                <input type="range" id="hybLam" min="0" max="2" step="0.1" value="0.5" />
+                <strong id="hybLamL">0.5</strong>
+              </label>
+              <label class="toggle"><input type="checkbox" id="hybGate" /><span>Hard gate on format</span></label>
+            </div>
+          </div>
+
+          <div class="stat-strip" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
+            <div><span>Total A</span><strong id="hybTotA">-</strong></div>
+            <div><span>Total B</span><strong id="hybTotB">-</strong></div>
+            <div><span>Total C</span><strong id="hybTotC">-</strong></div>
+            <div><span>Ranking</span><strong id="hybRank">-</strong></div>
+          </div>
+
+          <h4 style="margin:1rem 0 0.5rem">Breakdown</h4>
+          <div class="bellman-trace" id="hybTrace">Adjust a component to see the breakdown.</div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Try "RM only": the polished wrong answer B wins. "Format only" ties A with B and
+            puts the correct C last. At the default settings the correct responses already
+            beat B, but only because of these particular numbers. Raise \(w_{\text{acc}}\)
+            above \(1.7\) and Proposition 14.1 guarantees it (\(w_{\text{RM}}=1\), and format
+            plus length span \(D=0.5+0.2=0.7\) for these responses). Then turn on the gate
+            and see C fall below B: a gate overrides the sum.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>13. Worked example, step by step</h2>
+        <div class="prose-study">
+          <p>
+            A GRPO group samples four responses to one math prompt. The reward is accuracy
+            plus format, \(r=w_{\text{acc}}r_{\text{acc}}+w_{\text{fmt}}r_{\text{fmt}}\).
+            Response 1 is right and formatted, 2 is right without tags, 3 is wrong with tags,
+            4 is wrong without tags. Compute the group-normalised advantages
+            \(\hat A_i=(r_i-\bar r)/\operatorname{std}(r)\) for two weightings.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Equal weights \(w_{\text{acc}}=w_{\text{fmt}}=1\): rewards \(r=[2,\,1,\,1,\,0]\).</li>
+            <li class="hidden-step">Mean \(\bar r=1\). Deviations \([1,0,0,-1]\), variance \(\tfrac{1+0+0+1}{4}=0.5\), std \(\approx 0.707\).</li>
+            <li class="hidden-step">Advantages \(\hat A=[+1.41,\;0,\;0,\;-1.41]\). Right-but-untagged (2) and wrong-but-tagged (3) are treated the same.</li>
+            <li class="hidden-step">Lower the format weight to \(w_{\text{fmt}}=0.2\): rewards \(r=[1.2,\,1.0,\,0.2,\,0]\), mean \(\bar r=0.6\).</li>
+            <li class="hidden-step">Deviations \([0.6,\,0.4,\,-0.4,\,-0.6]\), variance \(\tfrac{0.36+0.16+0.16+0.36}{4}=0.26\), std \(\approx 0.510\).</li>
+            <li class="hidden-step">Advantages \(\hat A\approx[+1.18,\;+0.78,\;-0.78,\;-1.18]\). The correct answer without tags is now pushed up and the formatted wrong answer pushed down.</li>
+            <li class="hidden-step">Lesson: with \(w_{\text{acc}}>w_{\text{fmt}}\), format can break ties but cannot outvote correctness, which is Proposition 14.1 with \(D=w_{\text{fmt}}\).</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>14. What comes next</h2>
+        <div class="prose-study">
+          <p>
+            Rules give a clean outcome signal on verifiable tasks, but they only judge the end
+            of a solution. The last chapter returns to rewards inside the reasoning: the many
+            kinds of process reward model, what each one's step score actually means, and how
+            those scores are used in search.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Key idea to remember</span>
+          <p>
+            Check with a rule whatever can be checked, judge with a learned model whatever
+            cannot, and combine them so that hard requirements cannot be bought with style.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Lambert et al., 2024, Tülu 3: open post-training recipes, including RL with verifiable rewards (RLVR).</li>
+            <li>DeepSeek-AI, 2025, DeepSeek-R1: incentivising reasoning through RL with rule-based accuracy and format rewards.</li>
+            <li>Shao et al., 2024, DeepSeekMath: introduces GRPO, the group-relative optimiser used with these rewards.</li>
+            <li>Mu et al., 2024, Rule Based Rewards for language model safety.</li>
+            <li>Bai et al., 2022, Constitutional AI: harmlessness from AI feedback.</li>
+            <li>Gao et al., 2023, scaling laws for reward model overoptimization.</li>
+            <li>The RL notes on <a href="../rl/grpo.html">GRPO</a>.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="ensemble.html" style="color:inherit;text-decoration:none">&larr; Uncertainty-aware and ensemble RMs</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next chapter</p>
+            <h3>PRM variants in depth</h3>
+            <p>Five kinds of process reward and what each step score means.</p>
+          </div>
+          <a class="btn primary" href="prm-variants.html">Continue &rarr;</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Reward Models · Chapter 14, Hybrid rule-based and learned rewards</p>
+    <p class="muted">Check what can be checked; learn the rest.</p>
+  </footer>
+
+  <script src="hybrid.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

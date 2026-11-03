@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>09 · Generative Reward Model — Reward Models</title>
+  <link rel="stylesheet" href="../notes.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+
+  <div class="layout-book" id="top">
+    <nav class="sidebar" aria-label="Notes">
+      <div class="menu-category">Syed Nazmus Sakib</div>
+      <div class="menu-item"><a href="/index.html">Home</a></div>
+      <div class="menu-item"><a href="/publications.html">Publications</a></div>
+      <div class="menu-item"><a href="/lectures/">Lecture Notes</a></div>
+      <div class="menu-category">Reward Models</div>
+      <div class="menu-item"><a href="index.html">Overview</a></div>
+      <div class="menu-item"><a href="scalar.html">Scalar Reward Model</a></div>
+      <div class="menu-item"><a href="pointwise.html">Pointwise Verifier</a></div>
+      <div class="menu-item"><a href="pairwise.html">Pairwise Comparator</a></div>
+      <div class="menu-item"><a href="listwise.html">Listwise Ranking</a></div>
+      <div class="menu-item"><a href="orm.html">Outcome Reward Model</a></div>
+      <div class="menu-item"><a href="prm.html">Process Reward Model</a></div>
+      <div class="menu-item"><a href="value.html">Value Model</a></div>
+      <div class="menu-item"><a href="multi-objective.html">Multi-Objective RM</a></div>
+      <div class="menu-item"><a class="current" aria-current="page" href="generative.html">Generative RM</a></div>
+      <ol class="toc">
+        <li><a href="#judgment">1. From score to judgment</a></li>
+        <li><a href="#definition">2. Definition</a></li>
+        <li><a href="#versus">3. Discriminative vs generative</a></li>
+        <li><a href="#example">4. Checking by writing it out</a></li>
+        <li><a href="#tokens">5. Scores from token probabilities</a></li>
+        <li><a href="#train">6. Training</a></li>
+        <li><a href="#llmjudge">7. LLM-as-a-judge</a></li>
+        <li><a href="#bias">8. Judge biases</a></li>
+        <li><a href="#sampling">9. Averaging over critiques</a></li>
+        <li><a href="#cost">10. Pipeline and cost</a></li>
+        <li><a href="#weak">11. Weaknesses</a></li>
+        <li><a href="#lab">12. Laboratory</a></li>
+        <li><a href="#worked">13. Worked example</a></li>
+        <li><a href="#next">14. What comes next</a></li>
+      </ol>
+      <div class="menu-item"><a href="critique.html">Critique-then-Score</a></div>
+      <div class="menu-item"><a href="implicit.html">Implicit RM (DPO)</a></div>
+      <div class="menu-item"><a href="conditional.html">Conditional RM</a></div>
+      <div class="menu-item"><a href="ensemble.html">Uncertainty &amp; Ensembles</a></div>
+      <div class="menu-item"><a href="hybrid.html">Hybrid Rule + Learned</a></div>
+      <div class="menu-item"><a href="prm-variants.html">PRM Variants in Depth</a></div>
+    </nav>
+
+    <article class="study-main" id="content" tabindex="-1">
+      <p class="chapter-kicker">Reward Models · Chapter 09</p>
+      <h1 class="study-title">The generative reward model: <em>the verdict as text</em></h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Every reward model so far ends in a numeric head. A generative reward model keeps
+        the language-model head instead: it writes an evaluation of the response and then
+        a verdict, both as ordinary tokens. This chapter defines the model as a joint
+        distribution over critiques and verdicts, shows how to read a score from the
+        probability of a "Yes" token, trains it with the usual next-token loss, covers
+        prompted LLM judges and their biases, and treats averaging over several sampled
+        critiques as a way to spend inference-time compute on better judgments.
+      </div>
+
+      <section class="study-section" id="judgment">
+        <h2>1. From score to judgment</h2>
+        <div class="prose-study">
+          <p class="lead">
+            A discriminative reward model maps an answer to a number. A generative reward model
+            first says what it thinks of the answer, then gives the number.
+          </p>
+          <p>
+            Chapters 01 to 08 all share one design. A Transformer reads the prompt and
+            response, and a small head on the last hidden state outputs one or more scores.
+            Whatever checking the model does happens silently inside a single forward pass.
+          </p>
+          <p>
+            A generative reward model (GRM) drops the numeric head. It is a language model
+            asked to evaluate: it reads the prompt and response, generates a critique
+            \(c\), and ends with a verdict \(r\), such as "Yes", "No" or "8/10":
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            (x,y)\ \longrightarrow\ \text{critique } c\ \longrightarrow\ \text{verdict } r .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The critique is written in the same tokens the model uses for everything else.
+            The model can therefore check arithmetic, restate the question or compare against
+            a reference before it commits to a verdict.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="definition">
+        <h2>2. Definition</h2>
+        <div class="prose-study">
+          <p>A discriminative reward model is a function</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            r_\theta(x,y)\in\mathbb R .
+          \]
+        </div>
+        <div class="def-box">
+          <span class="box-label">Definition 9.1 · Generative reward model</span>
+          <p>
+            A generative reward model is a language model \(p_\theta\) that defines a joint
+            distribution over a critique \(c\) and a verdict \(r\), both token sequences,
+            given a prompt and response:
+          </p>
+          <div class="eq-block tight" style="margin:0.4rem 0 0">
+            \[
+              p_\theta(c,r\mid x,y)=p_\theta(c\mid x,y)\,p_\theta(r\mid x,y,c).
+            \]
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            The factorisation is just the order of generation: first the critique, then the
+            verdict conditioned on it. The quantity we actually want is the verdict
+            probability with the critique summed out:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            p_\theta(r\mid x,y)=\sum_{c}p_\theta(c\mid x,y)\,p_\theta(r\mid x,y,c).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The sum runs over every possible critique, so it cannot be computed exactly. The
+            model may reach a verdict along many lines of reasoning; Equation 3 averages over
+            them. Section 9 estimates it by sampling. The special case with an empty critique,
+            \(c=\varnothing\), is a model that answers "Yes" or "No" immediately.
+          </p>
+        </div>
+        <div class="remark-box">
+          <span class="box-label">Remark · Scope of this chapter</span>
+          <p>
+            Here the focus is the output format: the judgment is produced as generated tokens,
+            whether by a prompted model or one fine-tuned on critiques. Chapter 10 turns to
+            reward models explicitly trained to reason at length before scoring, where the
+            quality of that reasoning is itself optimised.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="versus">
+        <h2>3. Discriminative vs generative</h2>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Discriminative RM</h4>
+            <p>\(r_\theta(x,y)\) from a linear head on \(h_T\). One forward pass.</p>
+            <p class="mono-line">answer → score</p>
+          </div>
+          <div class="compare-card">
+            <h4>Generative RM</h4>
+            <p>\(p_\theta(c,r\mid x,y)\) from the language-model head. Many decoding steps.</p>
+            <p class="mono-line">answer → reason about answer → score</p>
+          </div>
+        </div>
+        <table class="practice-table">
+          <thead>
+            <tr><th>Aspect</th><th>Discriminative</th><th>Generative</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Output layer</td><td>New numeric head</td><td>Existing next-token head</td></tr>
+            <tr><td>Compute per judgment</td><td>One forward pass</td><td>Prefill plus decoding of the critique</td></tr>
+            <tr><td>Explanation</td><td>None</td><td>Readable critique</td></tr>
+            <tr><td>Extra compute at test time</td><td>Cannot help</td><td>Longer or more critiques</td></tr>
+            <tr><td>Reuse of pre-training</td><td>Through the backbone only</td><td>Backbone and output head, same task format</td></tr>
+            <tr><td>Training data</td><td>Labels or preferences</td><td>Labels, preferences or critiques</td></tr>
+          </tbody>
+        </table>
+        <div class="prose-study">
+          <p>
+            The last two rows are the main argument for the generative form. Verification
+            becomes another text-generation task, the kind of task the model was pre-trained
+            on, and its accuracy can be raised after training by spending more tokens.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="example">
+        <h2>4. Checking by writing it out</h2>
+        <div class="prose-study">
+          <p>Question: what is \(17\times 8\)? Candidate answer: \(17\times8=126\).</p>
+          <p>A discriminative RM must judge in one pass. It might output</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            r_\theta(x,y)=0.03 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>A generative RM writes the check first:</p>
+        </div>
+        <div class="bellman-trace" style="max-width:32rem">Critique: 17 × 8 = 10 × 8 + 7 × 8 = 80 + 56 = 136. The answer says 126, which is wrong.
+Verdict: No</div>
+        <div class="prose-study">
+          <p>
+            and assigns \(P(\text{correct})=0.01\). The two numbers are similar. The difference
+            is that the generative model's verdict rests on an intermediate result, 136, that
+            it computed in the open.
+          </p>
+          <p>
+            The benefit grows with the difficulty of the check. Take the equation
+            \(3(x+2)=15\), and a candidate solution whose first line is \(3x+2=15\). A
+            classifier must spot the error from the surface of the text. A generative RM can
+            redo the step:
+          </p>
+        </div>
+        <div class="flow-steps" style="max-width:32rem">
+          <div class="flow-step">Distribute the 3: \(3(x+2)=3x+6\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">The candidate wrote \(3x+2\): the 2 was not multiplied.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">Correct path: \(3x+6=15\Rightarrow x=3\). The candidate's path leads to \(x=13/3\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">Verdict: No, \(r\approx0\).</div>
+        </div>
+        <div class="prose-study">
+          <p>
+            Each line of the critique is an easy step that conditions the next. The verdict
+            token is predicted after the evidence is on the page, not before.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="tokens">
+        <h2>5. Scores from token probabilities</h2>
+        <div class="prose-study">
+          <p>
+            RL and best-of-\(N\) need a number, not a word. The cleanest way to get one is to
+            read it from the model's next-token distribution. Append a question \(I\) such as
+            "Is the answer correct? Answer Yes or No." and take
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            r(x,y)=p_\theta(\text{Yes}\mid x,y,I,c)
+            \approx\frac{e^{\ell_{\text{Yes}}}}{e^{\ell_{\text{Yes}}}+e^{\ell_{\text{No}}}}
+            =\sigma\big(\ell_{\text{Yes}}-\ell_{\text{No}}\big),
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            where \(\ell\) are the logits at the verdict position. The right-hand form
+            renormalises over the two allowed answers. If \(\ell_{\text{Yes}}=2.1\) and
+            \(\ell_{\text{No}}=-0.4\), the score is \(\sigma(2.5)\approx0.924\). This is the
+            approach of Generative Verifiers (GenRM): verification posed as next-token
+            prediction, with the probability of "Yes" as the reward.
+          </p>
+          <p>
+            For a rating scale the same idea gives an expected score. If the model puts
+            probability 0.2, 0.5 and 0.3 on the tokens "7", "8" and "9", then
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            \bar s=\sum_{s}s\,p_\theta(s\mid x,y,c)=7(0.2)+8(0.5)+9(0.3)=8.1 .
+          \]
+        </div>
+        <div class="note-box">
+          <span class="box-label">Note · Probabilities beat parsed text</span>
+          <p>
+            Parsing the generated word gives a hard 0 or 1 (or a single integer rating). The
+            token probability keeps the model's confidence: 0.924 and 0.51 are both "Yes" as
+            text but very different as rewards. Continuous scores also break ties when ranking
+            many candidates.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="train">
+        <h2>6. Training</h2>
+        <div class="prose-study">
+          <p>
+            Suppose the training set holds tuples \((x,y,c^\ast,r^\ast)\): a prompt, a
+            response, a good critique and the correct verdict. Concatenate the target
+            \(z=[c^\ast,r^\ast]\) and train with the ordinary language-model loss:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            \mathcal L_{\text{SFT}}=-\sum_{t=1}^{|z|}\log p_\theta\big(z_t\mid z_{&lt;t},x,y\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Unlike a scalar head, the model learns to generate evaluation text. With no
+            critiques available, the same loss on a one-token target trains a direct verifier:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            \mathcal L_{\text{verdict}}=-\log p_\theta\big(r^\ast\mid x,y,I\big),\qquad r^\ast\in\{\text{Yes},\text{No}\}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This is binary cross-entropy in disguise, but computed through the existing
+            next-token head instead of a new one.
+          </p>
+          <p>Where do good critiques \(c^\ast\) come from? Three common sources:</p>
+          <ul>
+            <li><strong>Human-written</strong> critiques. Highest quality, most expensive.</li>
+            <li><strong>A stronger model's</strong> critiques, distilled into a smaller judge.</li>
+            <li>
+              <strong>Self-generated and filtered.</strong> Sample several critiques from the
+              model itself and keep only those whose verdict matches the known label
+              \(r^\ast\). This is rejection sampling: it needs only verdict labels, which are
+              cheap when answers can be checked.
+            </li>
+          </ul>
+          <p>
+            Because Equations 7 and 8 are the same loss as ordinary fine-tuning, judge data can
+            be mixed with other instruction data in one training run.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="llmjudge">
+        <h2>7. LLM-as-a-judge</h2>
+        <div class="prose-study">
+          <p>
+            The simplest generative RM needs no reward-model training at all. Take a strong
+            instruction-tuned model and prompt it to evaluate. This is LLM-as-a-judge, widely
+            used both for evaluation benchmarks and as a source of AI feedback for training.
+            Two prompt formats dominate.
+          </p>
+        </div>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Single-answer grading</h4>
+            <p>"Rate this response from 1 to 10." One response per call; the score is absolute.</p>
+            <p class="mono-line">pointwise, like Chapter 02</p>
+          </div>
+          <div class="compare-card">
+            <h4>Pairwise comparison</h4>
+            <p>"Which response, A or B, is better?" Two responses per call; the verdict is relative.</p>
+            <p class="mono-line">pairwise, like Chapter 03</p>
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            Pairwise judgments are usually more consistent, because comparing is easier than
+            calibrating an absolute scale. Single-answer grades are cheaper for \(N\)
+            candidates (\(N\) calls instead of up to \(\binom N2\)) and can be compared across
+            prompts. The pairwise verdict probability plays the role of the Bradley–Terry
+            probability of Chapter 03:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            P(A\succ B\mid x)\approx p_\theta(\text{"A"}\mid x,\,y_A,\,y_B,\,c).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            A third variant, reference-guided grading, supplies a correct solution in the
+            prompt. It helps most on maths and code, where judges are otherwise easily misled
+            by a confident but wrong answer.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="bias">
+        <h2>8. Judge biases</h2>
+        <div class="prose-study">
+          <p>
+            A prompted judge inherits the habits of the model behind it. Three biases are well
+            documented:
+          </p>
+          <ul>
+            <li><strong>Position bias.</strong> In pairwise prompts, the judge favours whichever response appears first (or second), independent of content.</li>
+            <li><strong>Verbosity bias.</strong> Longer, more detailed-looking answers are preferred even when the extra length adds nothing.</li>
+            <li><strong>Self-preference.</strong> A judge tends to rate text written by itself, or by its own model family, more highly.</li>
+          </ul>
+          <p>
+            Position bias has a simple fix: ask both orders and average. Suppose the judge
+            prefers A with probability 0.70 when A is shown first, and with probability 0.40
+            when A is shown second. Then
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            P(A\succ B)=\tfrac12\big(P_{AB}(A)+P_{BA}(A)\big)=\tfrac12(0.70+0.40)=0.55 ,
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            and half the gap, \(\tfrac12(0.70-0.40)=0.15\), estimates how much the first slot
+            alone is worth. When the two orders disagree on the winner, as here, many pipelines
+            record a tie rather than trust either call.
+          </p>
+        </div>
+        <div class="note-box">
+          <span class="box-label">Note · Mitigations for the other two</span>
+          <p>
+            Verbosity bias is reduced by instructing the judge to ignore length, by comparing
+            responses of similar length, or by regressing length out of the scores.
+            Self-preference is reduced by using a judge from a different model family than the
+            policy being trained or evaluated. None of these removes the bias completely.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="sampling">
+        <h2>9. Averaging over critiques</h2>
+        <div class="prose-study">
+          <p>
+            A single sampled critique can go wrong: an arithmetic slip in the check itself, or
+            a line of reasoning that misses the real error. Equation 3 says the verdict we want
+            is an average over critiques. Monte-Carlo estimation gives it directly. Sample
+            \(K\) critiques independently and average the verdict probabilities:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            \hat p_K=\frac1K\sum_{k=1}^{K}p_\theta\big(r\mid x,y,c_k\big),
+            \qquad c_k\sim p_\theta(c\mid x,y).
+          \]
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Proposition 9.1 · More critiques, less noise</span>
+          <p>
+            \(\hat p_K\) is an unbiased estimate of \(p_\theta(r\mid x,y)\), and its variance
+            falls as \(1/K\):
+          </p>
+          <div class="eq-block tight" style="margin:0.4rem 0 0">
+            \[
+              \mathbb E\big[\hat p_K\big]=p_\theta(r\mid x,y),\qquad
+              \operatorname{Var}\big(\hat p_K\big)=\frac{\operatorname{Var}_{c}\big[p_\theta(r\mid x,y,c)\big]}{K}.
+            \]
+          </div>
+          <p>
+            Both follow from the critiques being independent draws from \(p_\theta(c\mid x,y)\).
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            This is a form of inference-time compute: the same trained judge gives more
+            reliable verdicts if we pay for more samples. The standard error shrinks as
+            \(1/\sqrt K\), so going from 1 to 4 critiques halves it, and from 4 to 16 halves it
+            again. A discriminative RM has no such dial; its one forward pass is all it can do.
+          </p>
+          <p>
+            Two caveats. First, averaging removes noise between critiques, not bias shared by
+            all of them: if the judge systematically misses a kind of error, every critique
+            misses it. Second, a common alternative is majority vote over the parsed verdicts.
+            It is robust to an occasional overconfident critique but discards the confidence
+            information of Section 5.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="cost">
+        <h2>10. Pipeline and cost</h2>
+        <div class="flow-steps">
+          <div class="flow-step">1 · Give the prompt and candidate answer to the reward model, with an evaluation instruction.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">2 · Sample \(K\) critiques that check the answer.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">3 · After each critique, read the verdict probability \(p_\theta(\text{Yes}\mid x,y,c_k)\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">4 · Average the \(K\) probabilities (Equation 11).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">5 · Use the averaged score for ranking, search or RL.</div>
+        </div>
+        <div class="prose-study">
+          <p>
+            The cost difference is large. Both models first read \((x,y)\), a parallel prefill.
+            A discriminative RM stops there. A generative RM then decodes token by token. With
+            critiques of length \(L_c\), it generates about
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(12)</span>
+          \[
+            \text{generated tokens per judgment}\approx K\,(L_c+1).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            With \(L_c=300\) and \(K=8\) that is about 2,400 sequential decoding steps for one
+            judgment. In RL, where every rollout of every batch must be scored, this can exceed
+            the cost of generating the rollouts themselves. The trade-off is simple: better
+            verification potential, much more inference cost.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="weak">
+        <h2>11. Weaknesses</h2>
+        <div class="prose-study">
+          <ul>
+            <li><strong>Inference cost.</strong> Decoding critiques is orders of magnitude slower than one forward pass (Equation 12).</li>
+            <li><strong>Persuasive but wrong critiques.</strong> A fluent critique can contain its own errors, and readers, human or machine, tend to trust it.</li>
+            <li><strong>Unfaithful verdicts.</strong> The verdict token need not follow from the critique; the model may decide first and rationalise afterwards.</li>
+            <li><strong>Inherited biases.</strong> Position, verbosity and self-preference (Section 8) carry over from the underlying model.</li>
+            <li><strong>Prompt sensitivity.</strong> Small changes to the evaluation instruction or rating scale can shift scores noticeably.</li>
+            <li><strong>Exploitable through text.</strong> The policy writes the text the judge reads; under RL it can learn phrasings that sway the judge, including claims about its own correctness.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section lab-wide" id="lab">
+        <h2>12. Laboratory: averaging sampled verdicts</h2>
+        <div class="prose-study">
+          <p>
+            A judge evaluates one answer. Its marginal verdict \(p(\text{correct}\mid x,y)\)
+            is set by the first slider. Each sampled critique leads to its own verdict
+            probability, scattered around that value with the spread set by the second slider.
+            Choose \(K\), sample, and compare the individual verdicts with their average. The
+            repeat button shows how the spread of the average shrinks as \(K\) grows.
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Monte-Carlo verdicts</h3>
+            <span>\(\hat p_K=\frac1K\sum_k p(r\mid x,y,c_k)\)</span>
+          </div>
+
+          <div class="demo-controls" style="margin-bottom:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem">
+            <div class="control-block">
+              <span class="control-label">Marginal verdict</span>
+              <label class="slider-label">
+                p
+                <input type="range" id="genP" min="0.05" max="0.95" step="0.05" value="0.7" />
+                <strong id="genPL">0.70</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Spread of one critique's verdict</span>
+              <label class="slider-label">
+                s
+                <input type="range" id="genS" min="0.02" max="0.4" step="0.02" value="0.2" />
+                <strong id="genSL">0.20</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Critiques sampled</span>
+              <label class="slider-label">
+                K
+                <input type="range" id="genK" min="1" max="32" step="1" value="4" />
+                <strong id="genKL">4</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Sample</span>
+              <div class="btn-row">
+                <button type="button" class="btn small primary" id="genSample">Sample K critiques</button>
+                <button type="button" class="btn small" id="genMany">Repeat 500 times</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="stat-strip" style="grid-template-columns:repeat(3,1fr)">
+            <div><span>Average \(\hat p_K\)</span><strong id="genAvg">-</strong></div>
+            <div><span>Standard error</span><strong id="genSE">-</strong></div>
+            <div><span>Majority vote</span><strong id="genVote">-</strong></div>
+          </div>
+
+          <h4 style="margin:1rem 0 0.5rem">Sampled verdicts</h4>
+          <div class="bellman-trace" id="genTrace">Press "Sample K critiques".</div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Try \(p=0.7\) and \(s=0.3\) with \(K=1\): single verdicts often fall below 0.5 and
+            flip the decision the judge makes on average. Then repeat with \(K=16\). The spread of the average
+            drops by a factor of four, and the share of averages on the wrong side of 0.5 falls
+            sharply.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>13. Worked example, step by step</h2>
+        <div class="prose-study">
+          <p>
+            A judge evaluates a solution that is in fact correct. Five critiques are sampled,
+            and after each one the probability of "Yes" is read off. Combine them and compare
+            with relying on a single critique.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Verdict probabilities: \(p_1,\ldots,p_5=0.9,\ 0.3,\ 0.8,\ 0.8,\ 0.7\). Critique 2 made a slip in its own check.</li>
+            <li class="hidden-step">Average: \(\hat p_5=\tfrac15(0.9+0.3+0.8+0.8+0.7)=\tfrac{3.5}{5}=0.70\).</li>
+            <li class="hidden-step">Majority vote at threshold 0.5: four of five say "Yes", so the vote is \(4/5=0.8\) and the answer is accepted.</li>
+            <li class="hidden-step">Spread: deviations from 0.70 are \(0.2,-0.4,0.1,0.1,0\); squares sum to \(0.22\); sample variance \(0.22/4=0.055\); standard deviation \(\approx0.235\).</li>
+            <li class="hidden-step">Standard error of the average: \(0.235/\sqrt5\approx0.105\). The average is about two standard errors above 0.5.</li>
+            <li class="hidden-step">With \(K=1\), the outcome depends on which critique was drawn. Drawing critique 2 gives 0.3 and rejects a correct answer.</li>
+            <li class="hidden-step">Cost: with critiques of about 250 tokens, \(K=5\) means about \(5\times251=1{,}255\) generated tokens for one judgment.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>14. What comes next</h2>
+        <div class="prose-study">
+          <p>
+            In this chapter the critique was a means to a verdict: prompted, or imitated from
+            examples. The next chapter takes the reasoning seriously as the object of training.
+            Critique-then-score reward models are trained to think at length before they score,
+            so that more reasoning reliably buys better judgments.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Key idea to remember</span>
+          <p>Discriminative RM: answer → score. Generative RM: answer → reason about answer → score, with the score read from token probabilities.</p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Zheng et al., 2023, judging LLM-as-a-judge with MT-Bench and Chatbot Arena: judge formats and position, verbosity and self-enhancement biases.</li>
+            <li>Zhang et al., 2024, Generative Verifiers: reward modelling as next-token prediction (GenRM).</li>
+            <li>Wang et al., 2023, large language models are not fair evaluators: position bias in pairwise judging.</li>
+            <li>Kim et al., 2023, Prometheus: an open model fine-tuned for fine-grained, rubric-based evaluation.</li>
+            <li>Bai et al., 2022, Constitutional AI: AI-generated feedback in place of human labels.</li>
+            <li>Lee et al., 2023, RLAIF: reinforcement learning from AI feedback compared with human feedback.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="multi-objective.html" style="color:inherit;text-decoration:none">&larr; Multi-Objective Reward Model</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next chapter</p>
+            <h3>Critique-then-score reasoning RM</h3>
+            <p>Reward models trained to reason at length before they score.</p>
+          </div>
+          <a class="btn primary" href="critique.html">Continue &rarr;</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Reward Models · Chapter 09, Generative reward model</p>
+    <p class="muted">Not "what number does the head output?" but "what does the judge say, and how sure is it?"</p>
+  </footer>
+
+  <script src="generative.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>13 · Uncertainty-Aware Reward Model — Reward Models</title>
+  <link rel="stylesheet" href="../notes.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+
+  <div class="layout-book" id="top">
+    <nav class="sidebar" aria-label="Notes">
+      <div class="menu-category">Syed Nazmus Sakib</div>
+      <div class="menu-item"><a href="/index.html">Home</a></div>
+      <div class="menu-item"><a href="/publications.html">Publications</a></div>
+      <div class="menu-item"><a href="/lectures/">Lecture Notes</a></div>
+      <div class="menu-category">Reward Models</div>
+      <div class="menu-item"><a href="index.html">Overview</a></div>
+      <div class="menu-item"><a href="scalar.html">Scalar Reward Model</a></div>
+      <div class="menu-item"><a href="pointwise.html">Pointwise Verifier</a></div>
+      <div class="menu-item"><a href="pairwise.html">Pairwise Comparator</a></div>
+      <div class="menu-item"><a href="listwise.html">Listwise Ranking</a></div>
+      <div class="menu-item"><a href="orm.html">Outcome Reward Model</a></div>
+      <div class="menu-item"><a href="prm.html">Process Reward Model</a></div>
+      <div class="menu-item"><a href="value.html">Value Model</a></div>
+      <div class="menu-item"><a href="multi-objective.html">Multi-Objective RM</a></div>
+      <div class="menu-item"><a href="generative.html">Generative RM</a></div>
+      <div class="menu-item"><a href="critique.html">Critique-then-Score</a></div>
+      <div class="menu-item"><a href="implicit.html">Implicit RM (DPO)</a></div>
+      <div class="menu-item"><a href="conditional.html">Conditional RM</a></div>
+      <div class="menu-item"><a class="current" aria-current="page" href="ensemble.html">Uncertainty &amp; Ensembles</a></div>
+      <ol class="toc">
+        <li><a href="#question">1. How sure is the score?</a></li>
+        <li><a href="#overopt">2. Over-optimisation</a></li>
+        <li><a href="#definition">3. Definition</a></li>
+        <li><a href="#example">4. Agreement and disagreement</a></li>
+        <li><a href="#build">5. Building an ensemble</a></li>
+        <li><a href="#aggregate">6. Aggregation rules</a></li>
+        <li><a href="#conservative">7. Conservative reward in RL</a></li>
+        <li><a href="#shared">8. Shared errors</a></li>
+        <li><a href="#kinds">9. Epistemic vs aleatoric</a></li>
+        <li><a href="#other">10. Other estimates and uses</a></li>
+        <li><a href="#weak">11. Weaknesses</a></li>
+        <li><a href="#lab">12. Laboratory</a></li>
+        <li><a href="#worked">13. Worked example</a></li>
+        <li><a href="#next">14. What comes next</a></li>
+      </ol>
+      <div class="menu-item"><a href="hybrid.html">Hybrid Rule + Learned</a></div>
+      <div class="menu-item"><a href="prm-variants.html">PRM Variants in Depth</a></div>
+    </nav>
+
+    <article class="study-main" id="content" tabindex="-1">
+      <p class="chapter-kicker">Reward Models · Chapter 13</p>
+      <h1 class="study-title">Uncertainty-aware reward models: <em>how sure</em> is the score?</h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        A reward model returns a number with no sign of how much to trust it. When a policy
+        is optimised against that number, it seeks out exactly the answers where the number
+        is wrong. This chapter describes that over-optimisation, builds an ensemble of
+        reward models whose disagreement measures uncertainty, compares rules for turning
+        several scores into one, and shows the limits: ensembles cannot see errors their
+        members share, and disagreement measures what the model does not know, not what
+        people disagree about.
+      </div>
+
+      <section class="study-section" id="question">
+        <h2>1. How sure is the score?</h2>
+        <div class="prose-study">
+          <p class="lead">
+            One number cannot say whether the model is confidently right or guessing.
+          </p>
+          <p>A scalar reward model gives</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            r_\theta(x,y)=0.82 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            For an answer like those in the training data, 0.82 may be accurate. For an odd
+            answer unlike anything the model was trained on, 0.82 may be an accident of
+            extrapolation. Both look the same. An uncertainty-aware reward model reports two
+            things: a reward, and how uncertain that reward is.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="overopt">
+        <h2>2. Reward over-optimisation</h2>
+        <div class="prose-study">
+          <p>
+            In RLHF the policy maximises the learned reward \(r_\phi\) while a KL penalty keeps
+            it near a reference policy:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            \max_{\pi}\;\mathbb E_{x,\;y\sim\pi(\cdot\mid x)}\big[r_\phi(x,y)\big]
+            -\beta\,\mathrm{KL}\big(\pi(\cdot\mid x)\,\big\|\,\pi_{\text{ref}}(\cdot\mid x)\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The learned reward is a <em>proxy</em> for what we actually want, the
+            <em>gold</em> reward. Early in training, raising the proxy also raises the gold
+            reward. Later the policy finds answers the proxy overrates, and the gold reward
+            falls while the proxy keeps rising. This is Goodhart's law applied to reward
+            models, and it is called reward over-optimisation or reward hacking.
+          </p>
+          <p>
+            Gao et al. measured this in a controlled setting: a large reward model played the
+            role of the gold labeller, and smaller proxy reward models were trained on its
+            labels. They plotted gold reward against distance from the initial policy,
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            d=\sqrt{\mathrm{KL}\big(\pi\,\|\,\pi_{\text{init}}\big)} ,
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            and found that simple curves fit well for best-of-\(n\) sampling and for RL:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            R_{\text{bon}}(d)=d\,\big(\alpha_{\text{bon}}-\beta_{\text{bon}}\,d\big),
+            \qquad
+            R_{\text{RL}}(d)=d\,\big(\alpha_{\text{RL}}-\beta_{\text{RL}}\log d\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Both rise, peak and fall. The fitted coefficients changed smoothly with the size
+            of the proxy reward model, with larger proxies over-optimised less. The lesson for
+            this chapter: the proxy is least reliable exactly where the policy pushes hardest,
+            far from the data it was trained on. That is where we most need to know how
+            uncertain it is.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="definition">
+        <h2>3. Definition</h2>
+        <div class="prose-study">
+          <p>
+            The simplest way to measure uncertainty is to train several reward models and see
+            whether they agree.
+          </p>
+        </div>
+        <div class="def-box">
+          <span class="box-label">Definition 13.1 · Ensemble reward model</span>
+          <p>
+            An ensemble reward model consists of \(K\) reward models
+            \(r_1,\ldots,r_K\) trained on the same task. For a prompt and response it returns
+            the pair \((\mu,\sigma)\): the mean reward and the spread of the members' rewards.
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            \mu(x,y)=\frac1K\sum_{k=1}^{K}r_k(x,y),
+          \]
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            \sigma^2(x,y)=\frac1K\sum_{k=1}^{K}\big(r_k(x,y)-\mu(x,y)\big)^2 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Members that were trained differently agree where the data pin the answer down and
+            drift apart where they do not. A large \(\sigma\) therefore signals low confidence.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="example">
+        <h2>4. Agreement and disagreement</h2>
+        <div class="prose-study">
+          <p>Four reward models score answer P:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            [0.91,\,0.88,\,0.93,\,0.90]
+            \;\Rightarrow\;
+            \mu_P=\tfrac{3.62}{4}=0.905,\quad
+            \sigma_P^2=\tfrac{0.0013}{4}=0.000325,\quad
+            \sigma_P\approx0.018 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>High reward, high confidence. The same four models score answer Q:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            [0.95,\,0.22,\,0.81,\,0.40]
+            \;\Rightarrow\;
+            \mu_Q=\tfrac{2.38}{4}=0.595,\quad
+            \sigma_Q^2=\tfrac{0.3509}{4}\approx0.0877,\quad
+            \sigma_Q\approx0.296 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The mean of Q is middling, but the members range from 0.22 to 0.95. One model
+            loves Q and another rejects it. A system that saw only 0.595 would not know to be
+            cautious.
+          </p>
+        </div>
+        <div class="note-box">
+          <span class="box-label">Note · Dividing by K or K − 1</span>
+          <p>
+            Equation (6) is the population variance. Some work divides by \(K-1\) instead,
+            which for Q gives \(\sigma_Q=\sqrt{0.3509/3}\approx0.342\). Either is fine if used
+            consistently, since the penalty weight \(\lambda\) of Section 6 absorbs the
+            difference. This chapter uses \(1/K\) throughout.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="build">
+        <h2>5. Building an ensemble</h2>
+        <div class="prose-study">
+          <p>
+            An ensemble is only useful if its members make different mistakes. Ways to make
+            them differ, roughly from cheapest to most diverse:
+          </p>
+          <ul>
+            <li><strong>Different fine-tuning seeds.</strong> Same pretrained backbone, different head initialisation and data order.</li>
+            <li><strong>Bootstrapped data.</strong> Each member trains on a resample of the preference pairs.</li>
+            <li><strong>Shared backbone, several heads.</strong> One Transformer with \(K\) linear heads. Almost free at inference, but the heads share every feature, so they disagree little.</li>
+            <li><strong>Different pretraining seeds.</strong> Members start from separately pretrained backbones. Most expensive, and the most diverse.</li>
+          </ul>
+        </div>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Independent members</h4>
+            <p>\(K\) full reward models. \(K\) times the memory and compute, but members can differ in what features they learned.</p>
+            <p class="mono-line">cost ≈ K forward passes</p>
+          </div>
+          <div class="compare-card">
+            <h4>Multi-head</h4>
+            <p>One backbone, \(K\) heads. Cost close to a single model, but disagreement only reflects the heads, not the representation.</p>
+            <p class="mono-line">cost ≈ 1 forward pass</p>
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            A related idea averages the <em>weights</em> rather than the outputs. Fine-tune
+            \(K\) reward models from the same pretrained start, then use
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            \phi_{\text{WARM}}=\frac1K\sum_{k=1}^{K}\phi_k .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This is WARM, weight-averaged reward models (Ramé et al.). The result is a single
+            model with single-model inference cost that was reported to be more robust to
+            distribution shift and label noise than its members. It gives a better point
+            estimate, but no \(\sigma\): a single model cannot disagree with itself.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="aggregate">
+        <h2>6. Aggregation rules</h2>
+        <div class="prose-study">
+          <p>
+            The policy needs one number. The ensemble gives \(K\). Besides the mean of
+            Equation (5), three rules are common.
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            R_{\min}=\min_{k}\,r_k \qquad\text{(worst case)}
+          \]
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            R_{\lambda}=\mu-\lambda\,\sigma \qquad\text{(mean minus spread)}
+          \]
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(12)</span>
+          \[
+            R_{\text{var}}=\mu-\lambda\,\sigma^2 \qquad\text{(variance penalty)}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Coste et al. compare mean, worst-case and a variance-penalised rule of the form
+            (12), which they call uncertainty-weighted optimisation, for RLHF against an
+            ensemble. A further option keeps \(\mu\) as the reward but down-weights
+            high-\(\sigma\) samples in the policy update. Applied to answers P and Q of
+            Section 4, with \(\lambda=1\):
+          </p>
+        </div>
+        <table class="practice-table">
+          <thead>
+            <tr><th>Answer</th><th>Mean \(\mu\)</th><th>Min</th><th>\(\mu-\sigma\)</th><th>\(\mu-\sigma^2\)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>P (agree)</td><td>0.905</td><td>0.880</td><td>0.887</td><td>0.905</td></tr>
+            <tr><td>Q (disagree)</td><td>0.595</td><td>0.220</td><td>0.299</td><td>0.507</td></tr>
+          </tbody>
+        </table>
+        <div class="prose-study">
+          <p>
+            The rules barely touch P and cut Q sharply. Because \(\sigma&lt;1\) here,
+            \(\sigma^2&lt;\sigma\) and the variance penalty is the mildest of the three at the
+            same \(\lambda\).
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="conservative">
+        <h2>7. Conservative reward in RL</h2>
+        <div class="prose-study">
+          <p>
+            Using \(R_\lambda\) in place of \(\mu\) makes the reward pessimistic where the
+            ensemble is unsure. Compare an answer with \(\mu=0.90,\ \sigma=0.20\) and one with
+            \(\mu=0.75,\ \sigma=0.02\), at \(\lambda=1\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(13)</span>
+          \[
+            0.90-1\cdot0.20=0.70
+            \qquad\text{vs}\qquad
+            0.75-1\cdot0.02=0.73 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            By the mean the first answer wins; by the conservative reward the second does. An
+            uncertain high reward is discounted. If the policy finds a strange answer that one
+            member loves and the others do not, the disagreement raises \(\sigma\) and the
+            exploit stops paying. This targets reward hacking, out-of-distribution
+            exploitation and overconfident reward-model mistakes, the failures that produce
+            bad RL updates.
+          </p>
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Proposition 13.1 · Worst case and mean minus spread</span>
+          <p>
+            For \(K\) member rewards with mean \(\mu\) and population standard deviation
+            \(\sigma\),
+            \(\mu-\sigma\sqrt{K-1}\;\le\;\min_k r_k\;\le\;\mu\).
+            Hence for \(\lambda\ge\sqrt{K-1}\) the rule \(\mu-\lambda\sigma\) is at least as
+            pessimistic as the worst member. With \(K=4\) the threshold is
+            \(\sqrt3\approx1.73\).
+          </p>
+          <p>
+            The left inequality is Samuelson's inequality: no value can lie more than
+            \(\sigma\sqrt{K-1}\) from the mean. For Q, \(0.595-1.73\cdot0.296\approx0.082\le0.22\).
+          </p>
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">1 · Train \(K\) reward models that differ in seed, data or pretraining.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">2 · Sample responses from the current policy.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">3 · Score each response with all \(K\) members.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">4 · Compute \(\mu\) and \(\sigma\), Equations (5) and (6).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">5 · Form the conservative reward, for example \(\mu-\lambda\sigma\) or \(\min_k r_k\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">6 · Update the policy (with the usual KL penalty) on the conservative reward; repeat.</div>
+        </div>
+        <div class="note-box">
+          <span class="box-label">Note · Two kinds of caution</span>
+          <p>
+            The KL term in Equation (2) is already a form of caution: it keeps the policy near
+            the reference everywhere. The uncertainty penalty is targeted: it bites only on
+            answers where the reward models disagree. The two are used together.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="shared">
+        <h2>8. When all members are wrong together</h2>
+        <div class="prose-study">
+          <p>
+            Disagreement detects errors the members do not share. Model member \(k\)'s reward
+            as the true reward plus a shared bias \(b\) plus its own error \(\varepsilon_k\),
+            with the \(\varepsilon_k\) independent with variance \(s^2\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(14)</span>
+          \[
+            r_k=r^\ast+b+\varepsilon_k
+            \quad\Rightarrow\quad
+            \mu=r^\ast+b+\bar\varepsilon,
+            \qquad
+            \mathbb E\big[\sigma^2\big]=\tfrac{K-1}{K}\,s^2 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Averaging shrinks the independent part, but \(b\) passes straight into \(\mu\),
+            and \(\sigma\) does not depend on \(b\) at all. If every member has learned that
+            longer answers are better, a policy that pads its answers gets a high \(\mu\) and a
+            small \(\sigma\), and no penalty on \(\sigma\) will stop it.
+          </p>
+          <p>
+            Eisenstein et al. found exactly this pattern: reward-model ensembles reduced reward
+            hacking but did not remove it, because members tended to share error patterns.
+            Ensembles whose members differed in pretraining seed generalised better than
+            ensembles differing only in fine-tuning seed, since they shared less.
+          </p>
+        </div>
+        <div class="remark-box">
+          <span class="box-label">Remark · Mitigate, not eliminate</span>
+          <p>
+            An ensemble is a check for disagreement. It cannot flag a mistake that all members
+            make in the same way.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="kinds">
+        <h2>9. Epistemic vs aleatoric uncertainty</h2>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Epistemic</h4>
+            <p>Uncertainty from lack of knowledge: too little or no training data near this answer. More data reduces it.</p>
+            <p class="mono-line">Members disagree.</p>
+          </div>
+          <div class="compare-card">
+            <h4>Aleatoric</h4>
+            <p>Uncertainty in the labels themselves: annotators genuinely disagree. More data does not reduce it.</p>
+            <p class="mono-line">People disagree.</p>
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            Ensemble disagreement measures the epistemic kind. For a comparison label
+            \(\ell\in\{0,1\}\), let member \(k\) predict \(p_k=P_k(y_2\succ y_1)\) and pick a
+            member uniformly at random. The law of total variance splits the label's variance
+            into two parts:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(15)</span>
+          \[
+            \bar p\,(1-\bar p)
+            =\underbrace{\frac1K\sum_k p_k(1-p_k)}_{\text{aleatoric}}
+            +\underbrace{\frac1K\sum_k\big(p_k-\bar p\big)^2}_{\text{epistemic}},
+            \qquad \bar p=\frac1K\sum_k p_k .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            If annotators split 50/50 on a pair, a well-trained ensemble learns
+            \(p_k\approx0.5\) in every member: the aleatoric part is 0.25 and the epistemic part
+            is 0. The ensemble is confident, correctly, that people disagree. If instead the
+            members predict \(p_k=[0.9,0.1,0.9,0.1]\), the mean is again 0.5, but the split is
+            0.09 aleatoric and 0.16 epistemic: the models do not know. Only the second case
+            should trigger the penalty of Section 7. Disagreement between people is the
+            subject of the previous chapter on <a href="conditional.html">conditional reward
+            models</a>.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="other">
+        <h2>10. Other uncertainty estimates and uses</h2>
+        <div class="prose-study">
+          <p>
+            Ensembles are the most common estimate, not the only one.
+          </p>
+          <ul>
+            <li>
+              <strong>MC dropout.</strong> Keep dropout on at inference and run the same model
+              \(M\) times with different random masks \(m_j\). The spread of the outputs is a
+              cheap stand-in for an ensemble (Gal and Ghahramani).
+            </li>
+          </ul>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(16)</span>
+          \[
+            \mu=\frac1M\sum_{j=1}^{M}r_{\theta,m_j}(x,y),
+            \qquad
+            \sigma^2=\frac1M\sum_{j=1}^{M}\big(r_{\theta,m_j}(x,y)-\mu\big)^2 .
+          \]
+        </div>
+        <div class="prose-study">
+          <ul>
+            <li>
+              <strong>Predicting a distribution.</strong> Give the head two outputs, a mean
+              \(\mu_\theta\) and a standard deviation \(\sigma_\theta\), and treat each reward as
+              Gaussian. The preference probability then accounts for both answers' spreads:
+            </li>
+          </ul>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(17)</span>
+          \[
+            P(y_w\succ y_l)=\Phi\!\left(\frac{\mu_\theta(x,y_w)-\mu_\theta(x,y_l)}{\sqrt{\sigma_\theta^2(x,y_w)+\sigma_\theta^2(x,y_l)}}\right),
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            where \(\Phi\) is the standard normal CDF. A single model trained this way mostly
+            learns aleatoric spread from the labels; it has no built-in way to know what it has
+            not seen.
+          </p>
+          <p>Uses of \(\sigma\) beyond the conservative reward:</p>
+          <ul>
+            <li><strong>Active labelling.</strong> Send the pairs with the highest disagreement to human annotators first.</li>
+            <li><strong>Out-of-distribution flags.</strong> Route high-\(\sigma\) answers to a stronger judge or a human.</li>
+            <li><strong>Best-of-\(n\) selection.</strong> Pick the candidate with the highest \(\mu-\lambda\sigma\) rather than the highest \(\mu\).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section" id="weak">
+        <h2>11. Weaknesses</h2>
+        <div class="prose-study">
+          <ul>
+            <li><strong>Cost.</strong> Independent members multiply training and inference compute by \(K\).</li>
+            <li><strong>Diversity is hard to get.</strong> Members fine-tuned from one backbone agree too much, so \(\sigma\) understates the real uncertainty.</li>
+            <li><strong>Shared errors are invisible.</strong> A bias common to all members enters \(\mu\) and leaves \(\sigma\) unchanged (Equation 14).</li>
+            <li><strong>\(\sigma\) is not calibrated.</strong> Nothing guarantees that \(\sigma=0.1\) means the same thing on different prompts.</li>
+            <li><strong>Choosing \(\lambda\).</strong> Too small and hacking continues; too large and the policy avoids anything novel, including genuinely better answers.</li>
+            <li><strong>Epistemic only.</strong> Disagreement does not measure genuine disagreement between people.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section lab-wide" id="lab">
+        <h2>12. Laboratory: ranking under uncertainty</h2>
+        <div class="prose-study">
+          <p>
+            Four ensemble members score three candidate answers. Answer A is modest and
+            agreed on, answer B is rated highly by two members and poorly by the others, and
+            answer C is in between. Move \(\lambda\) and watch the ranking under
+            \(\mu-\lambda\sigma\) change. The "Shared error" preset makes every member
+            overrate B by the same amount.
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Mean, spread and worst case</h3>
+            <span>\(R_\lambda=\mu-\lambda\sigma\)</span>
+          </div>
+
+          <div class="demo-controls" style="margin-bottom:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem">
+            <div class="control-block">
+              <span class="control-label">Uncertainty penalty</span>
+              <label class="slider-label">
+                λ
+                <input type="range" id="ensLambda" min="0" max="2" step="0.05" value="1" />
+                <strong id="ensLambdaL">1.00</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Member scores</span>
+              <div class="btn-row">
+                <button type="button" class="btn small primary" id="ensPresetDefault">Contested B</button>
+                <button type="button" class="btn small" id="ensPresetShared">Shared error</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="stat-strip" style="grid-template-columns:repeat(4,1fr)">
+            <div><span>Best by mean</span><strong id="ensPickMean">-</strong></div>
+            <div><span>Best by \(\mu-\lambda\sigma\)</span><strong id="ensPickPen">-</strong></div>
+            <div><span>Best by min</span><strong id="ensPickMin">-</strong></div>
+            <div><span>Ranking by \(\mu-\lambda\sigma\)</span><strong id="ensRank">-</strong></div>
+          </div>
+
+          <div class="bar-chart" id="ensBars" aria-label="Conservative reward of each answer"></div>
+
+          <h4 style="margin:1rem 0 0.5rem">Ensemble table</h4>
+          <div class="bellman-trace" id="ensTrace">Move the slider.</div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            With the default scores, B wins for \(\lambda&lt;0.76\), C for
+            \(0.76&lt;\lambda&lt;1.06\), and A beyond that. Now press "Shared error": B's
+            members agree, \(\sigma_B\) is tiny, and B wins at every \(\lambda\), whether or not
+            it deserves to.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>13. Worked example, step by step</h2>
+        <div class="prose-study">
+          <p>
+            Use the lab's default scores. Members score A as \([0.66,0.63,0.67,0.64]\), B as
+            \([0.99,0.55,0.97,0.69]\) and C as \([0.79,0.66,0.81,0.62]\). Rank the answers by
+            the mean, by \(\mu-\sigma\), and by the worst case.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Means: \(\mu_A=\tfrac{2.60}{4}=0.65\), \(\mu_B=\tfrac{3.20}{4}=0.80\), \(\mu_C=\tfrac{2.88}{4}=0.72\).</li>
+            <li class="hidden-step">B's deviations: \(+0.19,-0.25,+0.17,-0.11\). Squares sum to \(0.1396\), so \(\sigma_B^2=0.0349\) and \(\sigma_B\approx0.187\).</li>
+            <li class="hidden-step">Likewise \(\sigma_A^2=\tfrac{0.0010}{4}=0.00025\), \(\sigma_A\approx0.016\), and \(\sigma_C^2=\tfrac{0.0266}{4}=0.00665\), \(\sigma_C\approx0.082\).</li>
+            <li class="hidden-step">By the mean (\(\lambda=0\)): \(B\,(0.80)\succ C\,(0.72)\succ A\,(0.65)\).</li>
+            <li class="hidden-step">By \(\mu-\sigma\): \(A=0.634\), \(B=0.613\), \(C=0.638\), so \(C\succ A\succ B\).</li>
+            <li class="hidden-step">By the worst case: \(\min A=0.63\), \(\min B=0.55\), \(\min C=0.62\), so \(A\succ C\succ B\).</li>
+            <li class="hidden-step">Crossovers: B and C tie at \(\lambda=\tfrac{0.80-0.72}{0.187-0.082}\approx0.76\); C and A tie at \(\lambda=\tfrac{0.72-0.65}{0.082-0.016}\approx1.06\). Growing caution moves the choice from B to C to A.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>14. What comes next</h2>
+        <div class="prose-study">
+          <p>
+            Ensembles make a learned reward more cautious, but every member is still a learned
+            model with the same blind spots. The next chapter combines learned rewards with
+            rules that cannot be fooled in the same way: exact-match checks, unit tests and
+            format constraints.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Key idea to remember</span>
+          <p>A normal RM says how good an answer looks. An uncertainty-aware RM also says how sure it is, \((\mu,\sigma)\), and a cautious policy trusts uncertain rewards less.</p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Gao et al., 2023, scaling laws for reward model overoptimization.</li>
+            <li>Coste et al., 2023, reward model ensembles help mitigate overoptimization.</li>
+            <li>Eisenstein et al., 2023, reward model ensembles mitigate but do not eliminate reward hacking.</li>
+            <li>Ramé et al., 2024, WARM: on the benefits of weight-averaged reward models.</li>
+            <li>Lakshminarayanan et al., 2017, simple and scalable predictive uncertainty estimation using deep ensembles.</li>
+            <li>Gal and Ghahramani, 2016, dropout as a Bayesian approximation.</li>
+            <li>The RL notes on <a href="../rl/ppo.html">PPO</a>, where the KL-penalised objective is optimised.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="conditional.html" style="color:inherit;text-decoration:none">&larr; Conditional Reward Model</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next chapter</p>
+            <h3>Hybrid rule-based and learned rewards</h3>
+            <p>Checkable rules alongside a learned score.</p>
+          </div>
+          <a class="btn primary" href="hybrid.html">Continue &rarr;</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Reward Models · Chapter 13, Uncertainty-aware reward model</p>
+    <p class="muted">Not only "how good does it look?" but "how sure are we?"</p>
+  </footer>
+
+  <script src="ensemble.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

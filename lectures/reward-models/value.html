@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>07 · Value Model — Reward Models</title>
+  <link rel="stylesheet" href="../notes.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+
+  <div class="layout-book" id="top">
+    <nav class="sidebar" aria-label="Notes">
+      <div class="menu-category">Syed Nazmus Sakib</div>
+      <div class="menu-item"><a href="/index.html">Home</a></div>
+      <div class="menu-item"><a href="/publications.html">Publications</a></div>
+      <div class="menu-item"><a href="/lectures/">Lecture Notes</a></div>
+      <div class="menu-category">Reward Models</div>
+      <div class="menu-item"><a href="index.html">Overview</a></div>
+      <div class="menu-item"><a href="scalar.html">Scalar Reward Model</a></div>
+      <div class="menu-item"><a href="pointwise.html">Pointwise Verifier</a></div>
+      <div class="menu-item"><a href="pairwise.html">Pairwise Comparator</a></div>
+      <div class="menu-item"><a href="listwise.html">Listwise Ranking</a></div>
+      <div class="menu-item"><a href="orm.html">Outcome Reward Model</a></div>
+      <div class="menu-item"><a href="prm.html">Process Reward Model</a></div>
+      <div class="menu-item"><a class="current" aria-current="page" href="value.html">Value Model</a></div>
+      <ol class="toc">
+        <li><a href="#question">1. A different question</a></li>
+        <li><a href="#definition">2. Definition</a></li>
+        <li><a href="#vsprm">3. Value model vs PRM</a></li>
+        <li><a href="#example">4. Correct is not promising</a></li>
+        <li><a href="#labels">5. Labels from rollouts</a></li>
+        <li><a href="#train">6. Training</a></li>
+        <li><a href="#rl">7. Link to RL value functions</a></li>
+        <li><a href="#search">8. Value-guided search</a></li>
+        <li><a href="#progress">9. Progress as a step reward</a></li>
+        <li><a href="#weak">10. Weaknesses</a></li>
+        <li><a href="#lab">11. Laboratory</a></li>
+        <li><a href="#worked">12. Worked example</a></li>
+        <li><a href="#next">13. What comes next</a></li>
+      </ol>
+      <div class="menu-item"><a href="multi-objective.html">Multi-Objective RM</a></div>
+      <div class="menu-item"><a href="generative.html">Generative RM</a></div>
+      <div class="menu-item"><a href="critique.html">Critique-then-Score</a></div>
+      <div class="menu-item"><a href="implicit.html">Implicit RM (DPO)</a></div>
+      <div class="menu-item"><a href="conditional.html">Conditional RM</a></div>
+      <div class="menu-item"><a href="ensemble.html">Uncertainty &amp; Ensembles</a></div>
+      <div class="menu-item"><a href="hybrid.html">Hybrid Rule + Learned</a></div>
+      <div class="menu-item"><a href="prm-variants.html">PRM Variants in Depth</a></div>
+    </nav>
+
+    <article class="study-main" id="content" tabindex="-1">
+      <p class="chapter-kicker">Reward Models · Chapter 07</p>
+      <h1 class="study-title">The value model: <em>future success</em> of a prefix</h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        A process reward model asks whether the latest reasoning step is correct. A value
+        model asks something else: given everything written so far, how likely is the
+        solver to reach a correct final answer? This chapter defines the value model as a
+        probability of eventual success, shows why a correct step can still lead to a poor
+        position, builds training targets from Monte-Carlo rollouts, connects the idea to
+        value functions in reinforcement learning, and uses the model to steer search.
+      </div>
+
+      <section class="study-section" id="question">
+        <h2>1. A different question</h2>
+        <div class="prose-study">
+          <p class="lead">
+            A PRM judges the step. A value model judges the position the step leaves you in.
+          </p>
+          <p>
+            In Chapter 06 the process reward model scored each step \(s_t\) by asking
+            whether it is correct given what came before. That is a local question. When we
+            use a model to <em>guide</em> generation, the question we really care about is
+            global: if we continue from here, will we finish correctly?
+          </p>
+          <p>
+            A value model answers that global question directly. It looks at a reasoning
+            prefix and returns a number between 0 and 1, read as the chance that a
+            continuation from this prefix ends in a correct answer.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="definition">
+        <h2>2. Definition</h2>
+        <div class="prose-study">
+          <p>
+            Write the problem as \(x\) and the first \(t\) reasoning steps as
+            \(s_1,\ldots,s_t\). The prefix, or reasoning state, is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            z_t=(x,s_1,\ldots,s_t).
+          \]
+        </div>
+        <div class="def-box">
+          <span class="box-label">Definition 7.1 · Value model</span>
+          <p>
+            A value model is a function \(V_\theta(z_t)\in[0,1]\) trained to approximate
+          </p>
+          <div class="eq-block tight" style="margin:0.4rem 0 0">
+            \[
+              V(z_t)=P\big(\text{eventual success}\mid z_t\big).
+            \]
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            Architecturally it is the same Transformer-plus-head as earlier chapters. The
+            backbone reads the prefix, we take the hidden state at the last token, and a
+            linear head followed by a sigmoid turns it into a probability:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            V_\theta(z_t)=\sigma\big(w^\top h_t+b\big),\qquad h_t=f_\theta(z_t)_{\text{last}}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Nothing in the architecture says "value." The meaning comes entirely from the
+            training target, which is the subject of Section 5.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="vsprm">
+        <h2>3. Value model vs PRM</h2>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Process reward model</h4>
+            <p>\(P(s_t\text{ correct}\mid x,s_{&lt;t})\). Looks backward at the step just taken.</p>
+            <p class="mono-line">Was this step good?</p>
+          </div>
+          <div class="compare-card">
+            <h4>Value model</h4>
+            <p>\(P(\text{final success}\mid x,s_{\le t})\). Looks forward from the state the step creates.</p>
+            <p class="mono-line">Are we now in a good position?</p>
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            The two often agree. A wrong step usually makes success unlikely, so both scores
+            drop together. They come apart in two places: a correct step that leads somewhere
+            hard, and a slightly sloppy step from which recovery is still easy.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="example">
+        <h2>4. Correct is not the same as promising</h2>
+        <div class="prose-study">
+          <p>Problem: find \(23\times 17\). Two candidate first steps are generated.</p>
+          <p><strong>Branch A.</strong> Split the multiplier:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            23\times 17=23\,(10+7)=230+161.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            <strong>Branch B.</strong> "Add 23 to itself seventeen times." This is also
+            mathematically valid.
+          </p>
+          <p>A step-level PRM checks local correctness, so both steps score high:</p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            q_A\approx 0.95,\qquad q_B\approx 0.95.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            A value model asks how often each branch actually finishes correctly. Branch B
+            needs sixteen additions, and every one is a chance to slip, so its value is lower:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            V_A\approx 0.95,\qquad V_B\approx 0.55.
+          \]
+        </div>
+        <div class="remark-box">
+          <span class="box-label">Remark · The slogan of this chapter</span>
+          <p>A correct step is not the same as a good future state.</p>
+        </div>
+      </section>
+
+      <section class="study-section" id="labels">
+        <h2>5. Where the labels come from: rollouts</h2>
+        <div class="prose-study">
+          <p>
+            No human can label "probability of eventual success" directly. We estimate it by
+            simulation. From the prefix \(z_t\), sample \(M\) full continuations with a
+            completion policy \(\pi\), check each final answer, and record
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            R_m=\begin{cases}1 & \text{continuation } m \text{ ends correct}\\ 0 & \text{otherwise}\end{cases},
+            \qquad
+            \hat V(z_t)=\frac{1}{M}\sum_{m=1}^{M}R_m .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            With \(M=5\) and outcomes \([1,1,0,1,0]\), the estimate is
+            \(\hat V=\tfrac{3}{5}=0.6\). Correctness only has to be checkable at the end
+            (an answer key, a unit test, a proof checker), which is far cheaper than labelling
+            every step by hand.
+          </p>
+          <p>
+            The estimate is noisy. Each \(R_m\) is a Bernoulli draw with mean \(V\), so
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            \operatorname{SE}\big(\hat V\big)=\sqrt{\frac{V(1-V)}{M}} .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            At \(V=0.6\) and \(M=5\) the standard error is about \(0.22\): the label could
+            easily have come out as 0.4 or 0.8. Quadrupling \(M\) only halves the error.
+            Rollout budget is the main cost of value labels.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="train">
+        <h2>6. Training</h2>
+        <div class="prose-study">
+          <p>
+            Collect many prefixes (every step boundary of many sampled solutions), attach a
+            rollout estimate to each, and regress:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            \mathcal L_{\text{MSE}}=\big(V_\theta(z_t)-\hat V(z_t)\big)^2 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Because \(\hat V\) is a probability, binary cross-entropy with a soft target is an
+            equally natural choice, and it keeps gradients informative near 0 and 1:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            \mathcal L_{\text{BCE}}=-\Big[\hat V\log V_\theta+(1-\hat V)\log\big(1-V_\theta\big)\Big].
+          \]
+        </div>
+        <div class="note-box">
+          <span class="box-label">Note · Outcome labels are enough</span>
+          <p>
+            A cheaper variant skips the extra rollouts. Take full solutions whose final
+            answer is known to be right or wrong, and label <em>every</em> prefix of a
+            solution with that solution's outcome. Averaged over many solutions, the
+            expected label at a prefix is still its success probability. This is the idea
+            behind outcome-supervised value models.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="rl">
+        <h2>7. Link to RL value functions</h2>
+        <div class="prose-study">
+          <p>
+            Treat reasoning as an episodic MDP: the state is the prefix \(z_t\), an action
+            appends a step, and the only reward is 1 at the end if the answer is correct.
+            With no discounting, the state-value function of the completion policy \(\pi\) is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            V^{\pi}(z_t)=\mathbb E_{\pi}\big[R\mid z_t\big]=P_{\pi}\big(\text{success}\mid z_t\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            So the value model is exactly \(V^\pi\) from the
+            <a href="../rl/value.html">value functions chapter</a> of the RL notes, and the
+            rollout estimate of Section 5 is Monte-Carlo policy evaluation. Two consequences
+            follow.
+          </p>
+          <ul>
+            <li>
+              <strong>Values depend on the policy.</strong> A strong solver and a weak solver
+              assign different values to the same prefix. A value model is always the value
+              <em>under some completion policy</em>, usually the model being trained.
+            </li>
+            <li>
+              <strong>Bootstrapping is possible.</strong> Instead of full rollouts, train
+              toward the next state's prediction, \(V(z_t)\leftarrow V(z_{t+1})\), as in TD
+              learning. This is cheaper but inherits TD's bias.
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section" id="search">
+        <h2>8. Value-guided search</h2>
+        <div class="prose-study">
+          <p>
+            The main use of a value model is deciding which partial solutions to keep
+            exploring. Suppose the solver proposes three next steps and the value model scores
+            the resulting prefixes:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            V_A=0.92,\qquad V_B=0.31,\qquad V_C=0.78 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            With a beam of width 2 we continue A and C and prune B. Repeating this at every
+            step is value-guided beam search. The same scores can serve as leaf evaluations in
+            tree search such as MCTS, where they replace expensive full rollouts.
+          </p>
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">1 · Take the problem and the current prefixes.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">2 · Generate several candidate next steps for each prefix.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">3 · Score every extended prefix with \(V_\theta\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">4 · Keep the top-\(k\) prefixes, drop the rest.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">5 · Repeat until prefixes reach final answers; return the best.</div>
+        </div>
+      </section>
+
+      <section class="study-section" id="progress">
+        <h2>9. Progress as a step reward</h2>
+        <div class="prose-study">
+          <p>
+            A value model also gives a principled per-step reward. The step \(s_t\) moved us
+            from \(z_{t-1}\) to \(z_t\); how much did it help?
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(12)</span>
+          \[
+            A_t=V(z_t)-V(z_{t-1}).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This is an advantage in the RL sense. A step that raises the chance of success
+            earns a positive reward, a step that wastes effort earns about zero, and a step
+            that damages the solution earns a negative one. Rewarding progress rather than raw
+            correctness avoids paying the solver for correct but useless steps, like Branch B
+            in Section 4.
+          </p>
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Proposition 7.1 · Progress telescopes</span>
+          <p>
+            Summed over a whole solution of \(T\) steps,
+            \(\sum_{t=1}^{T}A_t=V(z_T)-V(z_0)\). Total progress equals final value minus
+            starting value, so progress rewards cannot be farmed by adding steps.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="weak">
+        <h2>10. Weaknesses</h2>
+        <div class="prose-study">
+          <ul>
+            <li><strong>Rollout cost.</strong> Each label needs \(M\) full generations; good labels need large \(M\).</li>
+            <li><strong>Noisy targets.</strong> With small \(M\), labels scatter widely around the true value (Equation 7).</li>
+            <li><strong>Policy dependence.</strong> As the solver improves, old value labels go stale and must be refreshed.</li>
+            <li><strong>Checkable answers only.</strong> Rollout labels need an automatic success test, which open-ended writing lacks.</li>
+            <li><strong>Exploitable in search.</strong> Search pushes toward prefixes the value model overrates, so its errors are amplified, not averaged out.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section lab-wide" id="lab">
+        <h2>11. Laboratory: estimating value from rollouts</h2>
+        <div class="prose-study">
+          <p>
+            Set the true success probability of a prefix and the rollout budget \(M\). Each
+            press samples \(M\) continuations, reports the estimate \(\hat V\), and shows its
+            standard error and a 95% interval. Small budgets give labels that swing widely.
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Monte-Carlo value labels</h3>
+            <span>\(\hat V=\frac{1}{M}\sum_m R_m\)</span>
+          </div>
+
+          <div class="demo-controls" style="margin-bottom:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem">
+            <div class="control-block">
+              <span class="control-label">True value of the prefix</span>
+              <label class="slider-label">
+                V
+                <input type="range" id="valTrue" min="0.05" max="0.95" step="0.05" value="0.6" />
+                <strong id="valTrueL">0.60</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Rollouts per label</span>
+              <label class="slider-label">
+                M
+                <input type="range" id="valM" min="1" max="64" step="1" value="5" />
+                <strong id="valML">5</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Sample</span>
+              <div class="btn-row">
+                <button type="button" class="btn small primary" id="valSample">Sample rollouts</button>
+                <button type="button" class="btn small" id="valMany">Sample 200 labels</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="stat-strip" style="grid-template-columns:repeat(3,1fr)">
+            <div><span>Estimate \(\hat V\)</span><strong id="valHat">-</strong></div>
+            <div><span>Standard error</span><strong id="valSE">-</strong></div>
+            <div><span>95% interval</span><strong id="valCI">-</strong></div>
+          </div>
+
+          <h4 style="margin:1rem 0 0.5rem">Rollout outcomes</h4>
+          <div class="bellman-trace" id="valTrace">Press "Sample rollouts".</div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Try \(V=0.6\) with \(M=5\), then \(M=64\). "Sample 200 labels" repeats the whole
+            labelling process and reports how far the labels spread around the truth.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>12. Worked example, step by step</h2>
+        <div class="prose-study">
+          <p>
+            A solver is at prefix \(z_1\) with \(V(z_1)=0.50\). It proposes three next steps.
+            Five rollouts from each extended prefix give the outcomes below. Choose two
+            branches to keep and compute the progress reward of each.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Outcomes: A gives \([1,1,1,1,0]\), B gives \([0,0,1,0,0]\), C gives \([1,0,1,1,1]\).</li>
+            <li class="hidden-step">Estimates: \(\hat V_A=\tfrac45=0.8\), \(\hat V_B=\tfrac15=0.2\), \(\hat V_C=\tfrac45=0.8\).</li>
+            <li class="hidden-step">Beam width 2: keep A and C, prune B.</li>
+            <li class="hidden-step">Progress rewards: \(A_A=0.8-0.5=+0.3\), \(A_B=0.2-0.5=-0.3\), \(A_C=0.8-0.5=+0.3\).</li>
+            <li class="hidden-step">Caution: with \(M=5\) the standard error at \(V=0.8\) is \(\sqrt{0.8\cdot0.2/5}\approx0.18\). A and C are indistinguishable; B is clearly worse.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>13. What comes next</h2>
+        <div class="prose-study">
+          <p>
+            The value model completes the "what is judged" axis: whole answers (ORM), single
+            steps (PRM), and future success of a prefix (value). The next chapters change a
+            different axis, <em>what the model outputs</em>, starting with reward models that
+            return several scores at once.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Key idea to remember</span>
+          <p>PRM: was this step good? Value model: are we now in a good position to eventually succeed?</p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Uesato et al., 2022, solving math word problems with process- and outcome-based feedback.</li>
+            <li>Yu et al., 2023, outcome-supervised verifiers for planning in mathematical reasoning (OVM).</li>
+            <li>Wang et al., 2024, Math-Shepherd: rollout-based step labels without human annotation.</li>
+            <li>Setlur et al., 2024, rewarding progress: scaling automated process verifiers.</li>
+            <li>The RL notes on <a href="../rl/value.html">value functions</a> and <a href="../rl/td.html">TD learning</a>.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="prm.html" style="color:inherit;text-decoration:none">&larr; Process Reward Model</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next chapter</p>
+            <h3>Multi-objective reward model</h3>
+            <p>Several scores per answer instead of one.</p>
+          </div>
+          <a class="btn primary" href="multi-objective.html">Continue &rarr;</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Reward Models · Chapter 07, Value model</p>
+    <p class="muted">Not "was this step right?" but "will we get there from here?"</p>
+  </footer>
+
+  <script src="value.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>12 · Conditional Reward Model — Reward Models</title>
+  <link rel="stylesheet" href="../notes.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+
+  <div class="layout-book" id="top">
+    <nav class="sidebar" aria-label="Notes">
+      <div class="menu-category">Syed Nazmus Sakib</div>
+      <div class="menu-item"><a href="/index.html">Home</a></div>
+      <div class="menu-item"><a href="/publications.html">Publications</a></div>
+      <div class="menu-item"><a href="/lectures/">Lecture Notes</a></div>
+      <div class="menu-category">Reward Models</div>
+      <div class="menu-item"><a href="index.html">Overview</a></div>
+      <div class="menu-item"><a href="scalar.html">Scalar Reward Model</a></div>
+      <div class="menu-item"><a href="pointwise.html">Pointwise Verifier</a></div>
+      <div class="menu-item"><a href="pairwise.html">Pairwise Comparator</a></div>
+      <div class="menu-item"><a href="listwise.html">Listwise Ranking</a></div>
+      <div class="menu-item"><a href="orm.html">Outcome Reward Model</a></div>
+      <div class="menu-item"><a href="prm.html">Process Reward Model</a></div>
+      <div class="menu-item"><a href="value.html">Value Model</a></div>
+      <div class="menu-item"><a href="multi-objective.html">Multi-Objective RM</a></div>
+      <div class="menu-item"><a href="generative.html">Generative RM</a></div>
+      <div class="menu-item"><a href="critique.html">Critique-then-Score</a></div>
+      <div class="menu-item"><a href="implicit.html">Implicit RM (DPO)</a></div>
+      <div class="menu-item"><a class="current" aria-current="page" href="conditional.html">Conditional RM</a></div>
+      <ol class="toc">
+        <li><a href="#problem">1. One notion of good?</a></li>
+        <li><a href="#hidden">2. Hidden context</a></li>
+        <li><a href="#definition">3. Definition</a></li>
+        <li><a href="#context">4. What the context can be</a></li>
+        <li><a href="#condition">5. Ways to condition</a></li>
+        <li><a href="#train">6. Training</a></li>
+        <li><a href="#latent">7. Latent user variables</a></li>
+        <li><a href="#soups">8. Mixing per-preference models</a></li>
+        <li><a href="#data">9. Data and evaluation</a></li>
+        <li><a href="#risk">10. Style, not truth</a></li>
+        <li><a href="#weak">11. Weaknesses</a></li>
+        <li><a href="#lab">12. Laboratory</a></li>
+        <li><a href="#worked">13. Worked example</a></li>
+        <li><a href="#next">14. What comes next</a></li>
+      </ol>
+      <div class="menu-item"><a href="ensemble.html">Uncertainty &amp; Ensembles</a></div>
+      <div class="menu-item"><a href="hybrid.html">Hybrid Rule + Learned</a></div>
+      <div class="menu-item"><a href="prm-variants.html">PRM Variants in Depth</a></div>
+    </nav>
+
+    <article class="study-main" id="content" tabindex="-1">
+      <p class="chapter-kicker">Reward Models · Chapter 12</p>
+      <h1 class="study-title">The conditional reward model: <em>good for whom?</em></h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Every reward model so far returns one score per answer, as if all people agreed on
+        what a good answer is. They do not. This chapter shows what goes wrong when
+        preferences from different groups are pooled into one model, then adds a context
+        \(c\) to the reward, \(r(x,y,c)\). It covers what \(c\) can be, how to feed it to the
+        model, how to infer it from a few labels, how to mix separate per-preference models
+        instead, and the data, evaluation and safety questions that personalization raises.
+      </div>
+
+      <section class="study-section" id="problem">
+        <h2>1. One notion of good?</h2>
+        <div class="prose-study">
+          <p class="lead">
+            A standard reward model assumes one universal ordering of answers. Real users
+            disagree.
+          </p>
+          <p>
+            The scalar reward model of Chapter 01 is a function of the prompt and the answer
+            only:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            r_\theta(x,y)\in\mathbb R .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Take the prompt "Explain transformers." and two answers: \(y_1\) is a short
+            plain-language explanation, \(y_2\) is a long mathematical one with attention
+            equations. User A wants concise answers. User B wants the mathematics. A reward
+            that knows who is asking would score them like this:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            r(y_1,c_A)=0.92,\quad r(y_2,c_A)=0.61,\qquad
+            r(y_1,c_B)=0.55,\quad r(y_2,c_B)=0.95 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The answers are the same. The rewards differ because the context differs,
+            \(c_A\neq c_B\). Equation (1) has no slot for that difference, so it must give
+            both users the same pair of numbers. At least one of them will be served badly.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="hidden">
+        <h2>2. Hidden context in preference data</h2>
+        <div class="prose-study">
+          <p>
+            Preference datasets mix labels from many annotators. If who labelled a pair is
+            not recorded, the annotator's taste is <em>hidden context</em>: it shapes the
+            label, but the model never sees it. Suppose a fraction \(\pi_g\) of comparisons
+            comes from group \(g\), and that group prefers \(y_2\) over \(y_1\) with probability
+            \(P_g(y_2\succ y_1)\). The pooled data then shows
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            P_{\text{pool}}(y_2\succ y_1)=\sum_g \pi_g\,P_g(y_2\succ y_1).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            A single Bradley-Terry model fitted to plenty of these comparisons matches the
+            pooled probability, so its margin is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            r(y_2)-r(y_1)=\operatorname{logit}P_{\text{pool}}(y_2\succ y_1),
+            \qquad \operatorname{logit}p=\log\frac{p}{1-p}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Now take two equal groups with opposite, strong views: group A prefers \(y_1\)
+            with probability 0.9, group B prefers \(y_2\) with probability 0.9. The pooled
+            probability is \(0.5\cdot 0.1+0.5\cdot 0.9=0.5\), so the single model's margin is
+            exactly 0. It reports that the two answers are equally good. No annotator holds
+            that view.
+          </p>
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Proposition 12.1 · A pooled margin is a compromise</span>
+          <p>
+            Let group \(g\) have share \(\pi_g\) and margin
+            \(\Delta_g=r_g(y_2)-r_g(y_1)\), so \(P_g(y_2\succ y_1)=\sigma(\Delta_g)\). The
+            margin of a single Bradley-Terry model fitted to the pooled comparisons is
+            \(\Delta=\operatorname{logit}\big(\sum_g\pi_g\,\sigma(\Delta_g)\big)\), which lies
+            between \(\min_g\Delta_g\) and \(\max_g\Delta_g\). With two equal groups and
+            margins \(\pm\Delta_0\), it is exactly 0.
+          </p>
+          <p>
+            Proof sketch: the pooled probability is an average of numbers in
+            \([\sigma(\min_g\Delta_g),\sigma(\max_g\Delta_g)]\), and \(\sigma\) and
+            \(\operatorname{logit}\) are increasing. For the equal split,
+            \(\tfrac12\sigma(\Delta_0)+\tfrac12\sigma(-\Delta_0)=\tfrac12\).
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            With more than two answers, a majority can erase a minority entirely. Add a
+            medium-length answer \(y_3\). Group A (60% of labels) ranks
+            \(y_1\succ y_3\succ y_2\); group B (40%) ranks \(y_2\succ y_3\succ y_1\). Give each
+            answer 2 points for first place, 1 for second, 0 for third, weighted by group
+            share (a Borda count):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            y_1:\;0.6\cdot2+0.4\cdot0=1.2,\qquad
+            y_3:\;0.6\cdot1+0.4\cdot1=1.0,\qquad
+            y_2:\;0.6\cdot0+0.4\cdot2=0.8 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The pooled ordering is \(y_1\succ y_3\succ y_2\), which is exactly group A's.
+            Siththaranjan et al. show that standard preference learning under hidden context
+            aggregates in this Borda-like way. A policy optimised against that reward gives
+            \(y_1\) to everyone, and 40% of users receive their least favourite answer.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="definition">
+        <h2>3. Definition</h2>
+        <div class="prose-study">
+          <p>
+            The fix is to make the hidden context visible. Give the reward model a third
+            input \(c\) that describes the user, task or criterion the answer is judged
+            against.
+          </p>
+        </div>
+        <div class="def-box">
+          <span class="box-label">Definition 12.1 · Conditional reward model</span>
+          <p>
+            A conditional (or personalized) reward model is a function
+            \(r_\theta(x,y,c)\in\mathbb R\) of a prompt \(x\), a response \(y\) and a context
+            \(c\), trained so that for each context the Bradley-Terry probability matches
+            that context's preferences:
+          </p>
+          <div class="eq-block tight" style="margin:0.4rem 0 0">
+            \[
+              P(y_w\succ y_l\mid x,c)=\sigma\big(r_\theta(x,y_w,c)-r_\theta(x,y_l,c)\big).
+            \]
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            The question changes from "Is this answer good?" to "Is this answer good for
+            this user, task or condition?" If the model ignores \(c\), it collapses back to
+            Equation (1). So the universal reward model is the special case of a constant
+            context.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="context">
+        <h2>4. What the context can be</h2>
+        <div class="prose-study">
+          <p>The definition says nothing about the form of \(c\). Four kinds are common.</p>
+          <ul>
+            <li>
+              <strong>User profile.</strong> An identifier, a learned user embedding, or
+              stated preferences such as "prefers short answers" or "is a beginner".
+            </li>
+            <li>
+              <strong>Written rubric or system prompt.</strong> A natural-language
+              instruction for how to judge: "Reward answers that cite sources; penalise
+              speculation." The same model can then be reused with new rubrics.
+            </li>
+            <li>
+              <strong>Task or domain.</strong> A label such as code, medical, or creative
+              writing. A terse answer is good code review and poor storytelling.
+            </li>
+            <li>
+              <strong>Attribute targets.</strong> A vector of desired levels, for example
+              helpfulness 4, verbosity 1, on a 0 to 4 scale.
+            </li>
+          </ul>
+          <p>
+            Attribute targets come from attribute-conditioned training such as SteerLM. There
+            an attribute model rates responses on dimensions like helpfulness and verbosity,
+            and the language model is fine-tuned to produce a response given the target
+            values it should have. Read as a reward, one simple choice is to score how close
+            the predicted attributes \(a_\phi(x,y)\) are to the target \(c\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            r(x,y,c)=-\big\|a_\phi(x,y)-c\big\|^2 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            A user who asks for verbosity 1 then rewards a short answer, and a user who asks
+            for verbosity 4 rewards a long one, with the same attribute model underneath.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="condition">
+        <h2>5. Ways to condition</h2>
+        <div class="prose-study">
+          <p>
+            Encode the prompt and response with the Transformer as before, and the context as
+            a vector \(e_c\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            h_T=f_\theta(x,y)_{\text{last}},\qquad e_c=\operatorname{Emb}(c).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The simplest idea is to concatenate them, \([h_T;e_c]\), and apply a linear head.
+            This does not work, and it is worth seeing why:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            w^\top[h_T;e_c]+b=w_h^\top h_T+\underbrace{w_c^\top e_c}_{\text{same for every }y}+b .
+          \]
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Proposition 12.2 · Additive context cannot reorder</span>
+          <p>
+            If the context enters the reward only through a term that does not depend on
+            \(y\), then \(r(x,y_2,c)-r(x,y_1,c)\) is the same for every \(c\). Every user gets
+            the same preference probabilities, and the context is useless for ranking.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            The context has to <em>interact</em> with the response. Three ways do this.
+          </p>
+          <ul>
+            <li>
+              <strong>A nonlinear head</strong> on the concatenation, such as a small MLP:
+              \(r=g_\theta(h_T,e_c)\).
+            </li>
+            <li>
+              <strong>A context-dependent weight</strong>, so the context decides which
+              features of the response matter:
+            </li>
+          </ul>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            r_\theta(x,y,c)=\big(w+W e_c\big)^\top h_T+b .
+          \]
+        </div>
+        <div class="prose-study">
+          <ul>
+            <li>
+              <strong>Context in the text.</strong> Write \(c\) into the input before the
+              response, \(r_\theta(c\oplus x,y)\), where \(\oplus\) joins strings. Attention
+              then mixes context and response at every layer.
+            </li>
+          </ul>
+        </div>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Learned context embedding</h4>
+            <p>\(c\) is an ID or a short vector; \(e_c\) is learned. Compact and cheap, but each new user or attribute needs data to learn its embedding.</p>
+            <p class="mono-line">r = g(h_T, e_c)</p>
+          </div>
+          <div class="compare-card">
+            <h4>Context as text</h4>
+            <p>\(c\) is a written profile or rubric placed in the prompt. Works for unseen rubrics if the backbone reads them well, but costs context length.</p>
+            <p class="mono-line">r = f("rubric: ... prompt: ... answer: ...")</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="study-section" id="train">
+        <h2>6. Training</h2>
+        <div class="prose-study">
+          <p>
+            Each preference record now carries its context: \((x,c,y_w,y_l)\). The loss is the
+            Bradley-Terry loss of Chapter 01, evaluated with the record's own context:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            \mathcal L(\theta)=-\log\sigma\big(r_\theta(x,y_w,c)-r_\theta(x,y_l,c)\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The model learns "for this context, which answer is preferred?" The same pair
+            \((y_1,y_2)\) can appear twice with opposite labels and different contexts, and
+            that is no longer label noise. It is signal about how \(c\) changes preference.
+          </p>
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">1 · Take a prompt \(x\), two responses, and the context \(c\) of the person who compared them.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">2 · Encode the prompt and each response with the backbone.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">3 · Encode \(c\), as an embedding or as text placed before the response.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">4 · Combine them so that \(c\) interacts with the response representation.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">5 · Predict \(r_\theta(x,y_w,c)\) and \(r_\theta(x,y_l,c)\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">6 · Minimise Equation (10), pushing the preferred response above the other for that context.</div>
+        </div>
+        <div class="note-box">
+          <span class="box-label">Note · Shared and personal parts</span>
+          <p>
+            Most of what makes an answer good is shared: correctness, clarity, safety. In
+            practice almost all parameters are shared across contexts and only a small part
+            (an embedding, a head, a few adapter weights) depends on \(c\). This lets users
+            with few labels borrow strength from everyone else.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="latent">
+        <h2>7. Latent user variables</h2>
+        <div class="prose-study">
+          <p>
+            Often we do not have a profile, only a few comparisons the user has made. We can
+            treat the user's taste as a latent vector \(z\) and infer it from those labels. Let
+            \(D_u=\{(x_i,y_{w,i},y_{l,i})\}_{i=1}^{n}\) be user \(u\)'s labelled pairs. An
+            encoder maps them to a distribution over \(z\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            z\sim q_\psi(z\mid D_u),\qquad r_\theta(x,y,z).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Encoder and reward model are trained together in the style of a variational
+            autoencoder. The reward must explain the user's held-out comparisons, and a KL
+            term keeps \(q_\psi\) close to a prior \(p(z)\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(12)</span>
+          \[
+            \mathcal L=-\mathbb E_{z\sim q_\psi(z\mid D_u)}\Big[\sum_{j}\log\sigma\big(r_\theta(x_j,y_{w,j},z)-r_\theta(x_j,y_{l,j},z)\big)\Big]
+            +\beta\,\mathrm{KL}\big(q_\psi(z\mid D_u)\,\big\|\,p(z)\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This is the idea behind variational preference learning (Poddar et al.). At test
+            time a new user supplies a handful of comparisons, the encoder infers \(z\), and
+            the reward model is personalized with no further training. With no comparisons
+            the posterior falls back to the prior, which acts like the average user.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="soups">
+        <h2>8. Mixing per-preference models</h2>
+        <div class="prose-study">
+          <p>
+            A different route avoids one big conditional model. Train separate networks for a
+            few basic preferences (concise, detailed, formal, playful), all fine-tuned from the
+            same starting weights, and combine them per user. Two ways to combine:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(13)</span>
+          \[
+            r_{\lambda}(x,y)=\sum_{i}\lambda_i\,r_i(x,y),
+            \qquad
+            \theta_{\lambda}=\sum_{i}\lambda_i\,\theta_i,
+            \qquad \lambda_i\ge 0,\;\sum_i\lambda_i=1 .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The first mixes outputs, which costs one forward pass per basic model. The second
+            mixes weights, giving a single network. Rewarded soups (Ramé et al.) interpolate
+            the weights of networks fine-tuned on different rewards; personalized soups (Jang
+            et al.) merge policies trained for separate preference dimensions after training.
+            Weight interpolation works well in practice when the models share a pretrained
+            starting point, but it is an empirical finding, not a guarantee.
+          </p>
+        </div>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Conditional RM</h4>
+            <p>One model, context as input. Handles rich, free-form contexts and unseen rubrics. Needs preference data labelled with context.</p>
+            <p class="mono-line">r(x, y, c)</p>
+          </div>
+          <div class="compare-card">
+            <h4>Mixture of per-preference models</h4>
+            <p>A few basic models, user given by weights \(\lambda\). Simple and inspectable, but users can only be mixtures of the chosen basics.</p>
+            <p class="mono-line">Σ λ_i r_i(x, y)</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="study-section" id="data">
+        <h2>9. Data and evaluation</h2>
+        <div class="prose-study">
+          <ul>
+            <li>
+              <strong>Few labels per user.</strong> Most users label a few pairs or none. A
+              per-user model with millions of parameters overfits; the personal part must be
+              small and the shared part large.
+            </li>
+            <li>
+              <strong>Cold start.</strong> A new user has no labels. The model must fall back
+              to a sensible default, such as the prior in Section 7 or a written profile.
+            </li>
+            <li>
+              <strong>Privacy.</strong> Profiles and labelled histories are personal data.
+              Storing them, and training on them, raises consent and leakage questions that a
+              universal reward model does not.
+            </li>
+          </ul>
+          <p>
+            Evaluation must also change. A single held-out accuracy can hide a model that
+            serves the majority and ignores everyone else. Useful checks:
+          </p>
+          <ul>
+            <li><strong>Per-group accuracy</strong>, and the worst group's accuracy, not only the average.</li>
+            <li>
+              <strong>Context-swap test.</strong> Score each test pair with a wrong context.
+              If accuracy barely drops, the model is not using \(c\).
+            </li>
+            <li><strong>Accuracy against labels from new users</strong>, to measure cold-start behaviour.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section" id="risk">
+        <h2>10. Personalize style, not truth</h2>
+        <div class="prose-study">
+          <p>
+            Personalization rewards what a user prefers. Users often prefer hearing that they
+            are right. A reward model conditioned on "this user believes X" can learn to reward
+            answers that agree with X, whether or not X is true. Preference-trained models are
+            already known to drift toward such sycophancy; conditioning on the user makes the
+            target easier to hit.
+          </p>
+          <p>
+            One safeguard is to split the reward so that context only touches the parts that
+            should vary between people:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(14)</span>
+          \[
+            r(x,y,c)=r_{\text{core}}(x,y)+r_{\text{pref}}(x,y,c),
+            \qquad \big|r_{\text{pref}}\big|\le B .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The core term judges accuracy and safety and does not see \(c\). The preference
+            term judges length, tone and format. Because the preference term is bounded by
+            \(B\), it can change a pairwise margin by at most \(2B\). If one answer leads on
+            the core term by more than \(2B\), no context can reverse that.
+          </p>
+        </div>
+        <div class="remark-box">
+          <span class="box-label">Remark · What should depend on the user</span>
+          <p>
+            Length, depth, tone and format can depend on who is asking. Facts and safety
+            limits should not.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="weak">
+        <h2>11. Weaknesses</h2>
+        <div class="prose-study">
+          <ul>
+            <li><strong>Sparse personal data.</strong> Each user contributes few labels, so personal parameters are poorly estimated.</li>
+            <li><strong>Context must be available.</strong> At RL or inference time the right \(c\) must be known and accurate; a wrong profile gives a confidently wrong reward.</li>
+            <li><strong>Silent collapse.</strong> If shared signal dominates training, the model can learn to ignore \(c\) and still look accurate on average.</li>
+            <li><strong>Unseen contexts.</strong> A rubric or user type absent from training may be read poorly, especially with learned embeddings.</li>
+            <li><strong>Sycophancy and echo chambers.</strong> Rewarding what a user wants to hear can reward inaccuracy and reinforce existing views.</li>
+            <li><strong>Privacy cost.</strong> Personalization requires collecting and storing information about people.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section lab-wide" id="lab">
+        <h2>12. Laboratory: one answer pair, many users</h2>
+        <div class="prose-study">
+          <p>
+            The two answers of Section 1 are fixed. Slide the user's weight on depth \(w\)
+            from 0 (user A, concise) to 1 (user B, detailed). The reward interpolates between
+            the two users' rewards, so
+            \(r(y_1,w)=0.92-0.37w\) and \(r(y_2,w)=0.61+0.34w\). The second slider sets the
+            share \(\pi\) of detail-seeking annotators in a pooled dataset, and the lab reports
+            what a single unconditional reward model trained on that pool would say.
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Conditional vs pooled reward</h3>
+            <span>\(r(y,w)=(1-w)\,r(y,c_A)+w\,r(y,c_B)\)</span>
+          </div>
+
+          <div class="demo-controls" style="margin-bottom:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem">
+            <div class="control-block">
+              <span class="control-label">User's weight on depth</span>
+              <label class="slider-label">
+                w
+                <input type="range" id="condW" min="0" max="1" step="0.01" value="0.2" />
+                <strong id="condWL">0.20</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Share of detail-seeking annotators</span>
+              <label class="slider-label">
+                π
+                <input type="range" id="condPi" min="0" max="1" step="0.01" value="0.5" />
+                <strong id="condPiL">0.50</strong>
+              </label>
+            </div>
+          </div>
+
+          <div class="stat-strip" style="grid-template-columns:repeat(4,1fr)">
+            <div><span>\(r(y_1,w)\) short</span><strong id="condR1">-</strong></div>
+            <div><span>\(r(y_2,w)\) detailed</span><strong id="condR2">-</strong></div>
+            <div><span>This user prefers</span><strong id="condPref">-</strong></div>
+            <div><span>Crossover \(w^\ast\)</span><strong id="condCross">-</strong></div>
+          </div>
+
+          <div class="bar-chart" id="condBars" aria-label="Rewards of the two answers"></div>
+
+          <div class="stat-strip" style="grid-template-columns:repeat(3,1fr)">
+            <div><span>Pooled \(P(y_2\succ y_1)\)</span><strong id="condPool">-</strong></div>
+            <div><span>Single-RM margin</span><strong id="condSingle">-</strong></div>
+            <div><span>Single RM picks</span><strong id="condSinglePick">-</strong></div>
+          </div>
+
+          <h4 style="margin:1rem 0 0.5rem">Calculation</h4>
+          <div class="bellman-trace" id="condTrace">Move a slider.</div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Move \(w\) across \(w^\ast\approx0.437\) and the preferred answer flips. Then note
+            that the single model's choice depends only on \(\pi\), not on \(w\): it gives every
+            user the same answer. At \(\pi=0.5\) its margin is only about \(+0.04\), close to
+            indifference, while each real user has a margin of 0.31 or 0.40.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>13. Worked example, step by step</h2>
+        <div class="prose-study">
+          <p>
+            Use the rewards of Equation (2). Half the labels come from user A, half from user
+            B, each labelling according to their own Bradley-Terry probabilities. Compare the
+            training loss of the conditional model with that of the best single model.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">User A: margin \(0.92-0.61=0.31\), so \(P_A(y_1\succ y_2)=\sigma(0.31)\approx0.577\) and \(P_A(y_2\succ y_1)\approx0.423\).</li>
+            <li class="hidden-step">User B: margin \(0.95-0.55=0.40\), so \(P_B(y_2\succ y_1)=\sigma(0.40)\approx0.599\).</li>
+            <li class="hidden-step">Pooled 50/50: \(P_{\text{pool}}(y_2\succ y_1)=\tfrac12(0.423)+\tfrac12(0.599)\approx0.511\).</li>
+            <li class="hidden-step">Best single model, Equation (4): margin \(\operatorname{logit}(0.511)=\log\tfrac{0.511}{0.489}\approx+0.044\). It slightly prefers \(y_2\) for everyone.</li>
+            <li class="hidden-step">On a label from A (\(y_1\succ y_2\)): conditional loss \(-\log0.577\approx0.550\); single-model loss \(-\log\sigma(-0.044)=-\log0.489\approx0.715\).</li>
+            <li class="hidden-step">On a label from B (\(y_2\succ y_1\)): conditional loss \(-\log0.599\approx0.513\); single-model loss \(-\log0.511\approx0.672\).</li>
+            <li class="hidden-step">Averages: conditional \(\approx0.532\); single \(\approx0.693\approx\log 2\). Without the context, the best model is barely better than a coin flip on this pair.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>14. What comes next</h2>
+        <div class="prose-study">
+          <p>
+            A conditional reward model admits that "good" depends on who is asking. The next
+            chapter admits something else: even for a fixed context, a reward model can be
+            unsure. An ensemble of reward models reports both a score and how far to trust it.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Key idea to remember</span>
+          <p>Universal RM: is this answer good? Conditional RM: is this answer good for this user, task or condition?</p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Siththaranjan et al., 2023, hidden context in preference data and distributional preference learning.</li>
+            <li>Poddar et al., 2024, personalizing RLHF with variational preference learning.</li>
+            <li>Dong et al., 2023, SteerLM: attribute-conditioned fine-tuning as a user-steerable alternative to RLHF.</li>
+            <li>Ramé et al., 2023, rewarded soups: interpolating weights fine-tuned on diverse rewards.</li>
+            <li>Jang et al., 2023, personalized soups: personalized alignment by post-hoc parameter merging.</li>
+            <li>Sharma et al., 2023, towards understanding sycophancy in language models.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="implicit.html" style="color:inherit;text-decoration:none">&larr; Implicit Reward Model</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next chapter</p>
+            <h3>Uncertainty-aware reward model</h3>
+            <p>A score plus how far to trust it.</p>
+          </div>
+          <a class="btn primary" href="ensemble.html">Continue &rarr;</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Reward Models · Chapter 12, Conditional reward model</p>
+    <p class="muted">Not "is this answer good?" but "is it good for this person?"</p>
+  </footer>
+
+  <script src="conditional.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

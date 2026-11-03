@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>15 · PRM Variants in Depth — Reward Models</title>
+  <link rel="stylesheet" href="../notes.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+
+  <div class="layout-book" id="top">
+    <nav class="sidebar" aria-label="Notes">
+      <div class="menu-category">Syed Nazmus Sakib</div>
+      <div class="menu-item"><a href="/index.html">Home</a></div>
+      <div class="menu-item"><a href="/publications.html">Publications</a></div>
+      <div class="menu-item"><a href="/lectures/">Lecture Notes</a></div>
+      <div class="menu-category">Reward Models</div>
+      <div class="menu-item"><a href="index.html">Overview</a></div>
+      <div class="menu-item"><a href="scalar.html">Scalar Reward Model</a></div>
+      <div class="menu-item"><a href="pointwise.html">Pointwise Verifier</a></div>
+      <div class="menu-item"><a href="pairwise.html">Pairwise Comparator</a></div>
+      <div class="menu-item"><a href="listwise.html">Listwise Ranking</a></div>
+      <div class="menu-item"><a href="orm.html">Outcome Reward Model</a></div>
+      <div class="menu-item"><a href="prm.html">Process Reward Model</a></div>
+      <div class="menu-item"><a href="value.html">Value Model</a></div>
+      <div class="menu-item"><a href="multi-objective.html">Multi-Objective RM</a></div>
+      <div class="menu-item"><a href="generative.html">Generative RM</a></div>
+      <div class="menu-item"><a href="critique.html">Critique-then-Score</a></div>
+      <div class="menu-item"><a href="implicit.html">Implicit RM (DPO)</a></div>
+      <div class="menu-item"><a href="conditional.html">Conditional RM</a></div>
+      <div class="menu-item"><a href="ensemble.html">Uncertainty &amp; Ensembles</a></div>
+      <div class="menu-item"><a href="hybrid.html">Hybrid Rule + Learned</a></div>
+      <div class="menu-item"><a class="current" aria-current="page" href="prm-variants.html">PRM Variants in Depth</a></div>
+      <ol class="toc">
+        <li><a href="#question">1. One name, five meanings</a></li>
+        <li><a href="#setup">2. Step labels</a></li>
+        <li><a href="#human">3. Human step labels</a></li>
+        <li><a href="#firsterror">4. The first-error convention</a></li>
+        <li><a href="#rollout">5. Rollout labels</a></li>
+        <li><a href="#mcmeaning">6. What a rollout label measures</a></li>
+        <li><a href="#binary">7. Binary search for the error</a></li>
+        <li><a href="#value">8. Value and progress PRMs</a></li>
+        <li><a href="#generative">9. Generative PRMs</a></li>
+        <li><a href="#search">10. Search-aware PRMs</a></li>
+        <li><a href="#aggregate">11. Aggregating step scores</a></li>
+        <li><a href="#pitfalls">12. Pitfalls</a></li>
+        <li><a href="#map">13. The key map</a></li>
+        <li><a href="#lab">14. Laboratory</a></li>
+        <li><a href="#worked">15. Worked example</a></li>
+        <li><a href="#next">16. Closing the series</a></li>
+      </ol>
+    </nav>
+
+    <article class="study-main" id="content" tabindex="-1">
+      <p class="chapter-kicker">Reward Models · Chapter 15</p>
+      <h1 class="study-title">PRM variants: <em>what a step score means</em></h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        Chapter 06 introduced the process reward model as one object. In practice the name
+        covers several different models whose step scores answer different questions. This
+        chapter separates five variants: human-labelled step correctness, Monte-Carlo
+        rollout labels (with binary search for the first error), value and progress PRMs,
+        generative PRMs that verify a step in words, and PRMs built into test-time search.
+        It then studies how step scores are aggregated into a solution score, where each
+        variant fails, and closes the series with a map of all five.
+      </div>
+
+      <section class="study-section" id="question">
+        <h2>1. One name, five meanings</h2>
+        <div class="prose-study">
+          <p class="lead">
+            Every PRM outputs a number per step. The variants differ in what that number is
+            trained to mean.
+          </p>
+          <p>
+            In <a href="prm.html">Chapter 06</a> we met the PRM as a classifier that reads a
+            reasoning prefix and returns a score \(q_t\). Two papers can both call their model
+            a PRM while one predicts "a careful human would mark this step correct" and the
+            other predicts "if we keep sampling from here, we will probably reach the right
+            answer". Those are different quantities, they are learned from different data, and
+            they fail in different ways.
+          </p>
+          <p>The five variants in this chapter are:</p>
+          <ol>
+            <li><strong>Human-supervised PRM:</strong> is this step correct?</li>
+            <li><strong>Rollout (Monte-Carlo) PRM:</strong> can this prefix still succeed?</li>
+            <li><strong>Value-style PRM:</strong> how promising is this state, and how much did the step help?</li>
+            <li><strong>Generative PRM:</strong> reason about the step in words, then judge it.</li>
+            <li><strong>Search-aware PRM:</strong> use the scores to decide which partial solutions to keep.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="setup">
+        <h2>2. Step labels: the common frame</h2>
+        <div class="prose-study">
+          <p>
+            Write the problem as \(x\) and a solution as steps \(s_1,\ldots,s_T\). The prefix
+            after \(t\) steps is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            z_t=(x,s_1,\ldots,s_t),\qquad z_0=x .
+          \]
+        </div>
+        <div class="def-box">
+          <span class="box-label">Definition 15.1 · Step label</span>
+          <p>
+            A step label is a target \(y_t\in[0,1]\) attached to the prefix \(z_t\), together
+            with a mask \(m_t\in\{0,1\}\) that says whether the step is supervised at all. A
+            PRM variant is defined by the quantity that \(y_t\) estimates.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            Almost every discriminative variant is then trained with the same masked binary
+            cross-entropy, which accepts both hard (0/1) and soft (fractional) targets:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            \mathcal L=-\frac{1}{\sum_t m_t}\sum_{t=1}^{T}m_t\Big[y_t\log q_t+(1-y_t)\log(1-q_t)\Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Because the loss is the same, the architecture is the same, and even the numbers
+            look alike, it is easy to forget that the label is what gives \(q_t\) its meaning.
+            The rest of the chapter is about labels.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="human">
+        <h2>3. Variant 1: human step labels</h2>
+        <div class="prose-study">
+          <p>
+            Annotators read a solution step by step and mark each step. In PRM800K the marks
+            were positive, negative or neutral; a neutral step is acceptable but not clearly
+            useful. How neutral maps to a training target is a design choice. The model
+            learns local correctness:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            q_t\approx P\big(s_t\text{ is correct}\mid x,s_{&lt;t}\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Example. Steps \(s_1\): "\(20\%\) of \(100\) is \(20\)", and \(s_2\): "the
+            discounted price is \(100+20=120\)". Labels \([1,0]\). A trained PRM might predict
+            \([0.97,\,0.08]\), giving a loss of
+            \(\tfrac12\big[-\log 0.97-\log 0.92\big]\), which is
+            \(\tfrac12(0.030+0.083)\approx 0.057\).
+          </p>
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">1 · Sample solutions from a generator on problems with known answers.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">2 · Annotators mark each step positive, negative or neutral.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">3 · Map marks to targets and masks; train with Equation 2.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">4 · Score new solutions step by step in one forward pass.</div>
+        </div>
+        <div class="prose-study">
+          <p>
+            The label is the closest to what we mean by "a correct step", and it does not
+            depend on any policy. The price is human time: every label needs someone able to
+            check the mathematics.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="firsterror">
+        <h2>4. The first-error convention</h2>
+        <div class="prose-study">
+          <p>
+            What label should a step get if it follows a mistake? "Therefore \(x=7\)" may be
+            valid algebra applied to a wrong equation. Calling it correct rewards building on
+            an error; calling it wrong punishes good algebra. The common way out is to stop
+            labelling at the first error. Let
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            \tau=\min\{t:\ s_t\text{ is incorrect}\},\qquad
+            y_t=\begin{cases}1 & t&lt;\tau\\ 0 & t=\tau\end{cases},\qquad
+            m_t=0\ \text{ for } t&gt;\tau .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Under this convention \(q_t\) is read as the chance that step \(t\) is correct
+            <em>given that all earlier steps were</em>. That reading gives the step scores a
+            clean probabilistic meaning.
+          </p>
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Proposition 15.1 · Chain rule for step correctness</span>
+          <p>
+            If \(q_t=P(s_t\text{ correct}\mid x,\ s_1,\ldots,s_{t-1}\text{ all correct})\), then
+          </p>
+          <div class="eq-block tight" style="margin:0.4rem 0 0">
+            <span class="eq-tag">(5)</span>
+            \[
+              P(\text{no error in } s_1,\ldots,s_T)=\prod_{t=1}^{T}q_t,
+              \qquad
+              P(\tau=t)=(1-q_t)\prod_{i=1}^{t-1}q_i .
+            \]
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            The first identity justifies the product aggregation of Section 11. The second
+            turns a PRM into an error locator: the most likely first-error step is the
+            \(t\) that maximises \(P(\tau=t)\). Benchmarks such as ProcessBench evaluate PRMs
+            on exactly this task of finding the earliest wrong step.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="rollout">
+        <h2>5. Variant 2: rollout (Monte-Carlo) labels</h2>
+        <div class="prose-study">
+          <p>
+            Human labels do not scale. Math-Shepherd replaced them with simulation: from each
+            prefix \(z_t\), a completer policy \(\pi\) samples \(M\) continuations, and each
+            is checked against the answer key, giving outcomes \(R_1,\ldots,R_M\in\{0,1\}\).
+            Two labels can be made from the outcomes:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            y_t^{\text{soft}}=\frac{1}{M}\sum_{m=1}^{M}R_m,
+            \qquad
+            y_t^{\text{hard}}=\mathbb 1\Big[\textstyle\sum_{m=1}^{M}R_m\ge 1\Big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The hard label says "at least one continuation reached the right answer". With
+            \(M=5\) and outcomes \([1,1,1,0,0]\), the soft label is \(0.6\) and the hard label
+            is \(1\).
+          </p>
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">1 · Split a sampled solution into steps and form every prefix \(z_t\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">2 · From each prefix, sample \(M\) completions with the completer \(\pi\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">3 · Check each completion's final answer against the key.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">4 · Turn the outcomes into a soft or hard label (Equation 6).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">5 · Train the PRM on these labels with Equation 2.</div>
+        </div>
+      </section>
+
+      <section class="study-section" id="mcmeaning">
+        <h2>6. What a rollout label actually measures</h2>
+        <div class="prose-study">
+          <p>
+            A soft rollout label is an unbiased estimate of the success probability of the
+            completer from that prefix:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            \mathbb E\big[y_t^{\text{soft}}\big]=P_{\pi}\big(\text{success}\mid z_t\big)=V^{\pi}(z_t),
+            \qquad
+            P\big(y_t^{\text{hard}}=1\big)=1-\big(1-V^{\pi}(z_t)\big)^{M}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This is the value function of <a href="value.html">Chapter 07</a>, not step
+            correctness. Three consequences matter.
+          </p>
+          <ul>
+            <li>
+              <strong>Policy dependence.</strong> The same prefix gets a high label under a
+              strong completer and a low one under a weak completer. Labels go stale as the
+              policy improves.
+            </li>
+            <li>
+              <strong>Noise.</strong> With \(M=8\), the standard error at \(V=0.5\) is
+              \(\sqrt{0.25/8}\approx 0.18\) (Equation 7 of Chapter 07).
+            </li>
+            <li>
+              <strong>Hard labels are lenient.</strong> A prefix with \(V=0.1\) and \(M=8\)
+              gets \(y^{\text{hard}}=1\) with probability \(1-0.9^{8}\approx 0.57\).
+            </li>
+          </ul>
+        </div>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Correct step, low label</h4>
+            <p>
+              The step is valid but opens a hard path, or the completer is too weak to finish
+              from it. Rollouts fail, so the label says "bad" about a correct step.
+            </p>
+            <p class="mono-line">human 1, rollout 0/8</p>
+          </div>
+          <div class="compare-card">
+            <h4>Wrong step, high label</h4>
+            <p>
+              The step contains a slip that later steps silently fix, or the answer is reached
+              by a lucky guess. Rollouts succeed, so the label says "good" about a wrong step.
+            </p>
+            <p class="mono-line">human 0, rollout 5/8</p>
+          </div>
+        </div>
+        <div class="remark-box">
+          <span class="box-label">Remark · Recoverability, not correctness</span>
+          <p>
+            A rollout label measures whether this policy can still recover from here. That is
+            useful for search, but it is not what an annotator means by "this step is wrong".
+            Studies that compare the two kinds of labels report that Monte-Carlo labels
+            disagree with careful step judgements often enough to matter.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="binary">
+        <h2>7. Finding the first error by binary search</h2>
+        <div class="prose-study">
+          <p>
+            Labelling every prefix of a \(T\)-step solution costs \(T\cdot M\) rollouts. If we
+            only want the first-error labels of Equation 4, we can do better. Take a solution
+            whose final answer is wrong, so the full prefix fails, and assume that once a
+            prefix becomes unrecoverable it stays so. Then the first error is the first prefix
+            whose rollouts all fail:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            \hat\tau=\min\big\{t:\ \hat V(z_t)=0\big\},
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            and under the monotonicity assumption \(\hat V(z_t)=0\) holds for every
+            \(t\ge\hat\tau\), so the search can halve the interval at each query. The OmegaPRM
+            method builds on this idea and embeds the binary search in a Monte-Carlo tree search
+            so that rollouts are shared across queries.
+          </p>
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">1 · Start from a solution with a wrong final answer: the error lies in steps \(1..T\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">2 · Set \(\text{lo}=1,\ \text{hi}=T\) and pick \(\text{mid}=\lfloor(\text{lo}+\text{hi})/2\rfloor\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">3 · Roll out \(M\) continuations from \(z_{\text{mid}}\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">4 · If any succeeds, the error is later: \(\text{lo}=\text{mid}+1\). Otherwise \(\text{hi}=\text{mid}\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">5 · When \(\text{lo}=\text{hi}\), that step is \(\hat\tau\): label earlier steps 1, it 0, mask the rest.</div>
+        </div>
+        <div class="prose-study">
+          <p>
+            For \(T=16\) this needs \(\lceil\log_2 16\rceil=4\) queries instead of up to 16. The
+            savings grow with solution length. The cost is that every weakness of Section 6
+            remains: a false zero from too few rollouts moves \(\hat\tau\) earlier, and a
+            lucky success moves it later.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="value">
+        <h2>8. Variant 3: value-style PRMs and progress</h2>
+        <div class="prose-study">
+          <p>
+            A value-style PRM accepts that rollout labels measure future success and trains
+            for it on purpose:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            V_t=P\big(\text{eventual success}\mid x,s_{\le t}\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            <a href="value.html">Chapter 07</a> developed this model in full. Here we only
+            note how it changes the meaning of a step score. Take \(37\times 19\) with two
+            valid first steps. A: \(37(20-1)=740-37\). B: "add 37 nineteen times". A local
+            correctness PRM gives both about \(0.95\). A value PRM gives \(V_A=0.94\) and
+            \(V_B=0.52\), because B has many more chances to slip.
+          </p>
+          <p>
+            The step itself is then credited by how much it changed the value, the
+            <em>progress</em> or advantage of the step:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            A_t=V_t-V_{t-1}=Q(z_{t-1},s_t)-V(z_{t-1}).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            If \(V_0=0.70\) before the first step, A earns \(+0.24\) and B earns \(-0.18\). A
+            restatement of the problem earns about \(0\). Setlur et al. argue that progress
+            should be measured under a separate prover policy rather than the policy being
+            trained, so that it reflects how much a step helps rather than how well the
+            current policy happens to continue from it.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="generative">
+        <h2>9. Variant 4: generative PRMs</h2>
+        <div class="prose-study">
+          <p>
+            The variants so far map a prefix straight to a number. A generative PRM first
+            writes a verification of the step, then gives a verdict. This is the generative
+            judge of <a href="generative.html">Chapter 09</a> applied step by step.
+          </p>
+          <p>Candidate step: \(3(x+2)=3x+2\). A generative PRM writes:</p>
+        </div>
+        <div class="bellman-trace" style="max-width:40rem">Distributing 3 over (x + 2) gives 3x + 6, not 3x + 2.
+The constant term was not multiplied.
+Verdict: incorrect.</div>
+        <div class="prose-study">
+          <p>
+            A score is read from the verdict. Either take the probability of the "correct"
+            token after the critique \(c_t\), or sample \(K\) independent verifications and
+            count:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            q_t=p_\theta\big(\text{correct}\mid x,s_{\le t},c_t\big)
+            \qquad\text{or}\qquad
+            q_t=\frac{1}{K}\sum_{k=1}^{K}\mathbb 1\big[v_t^{(k)}=\text{correct}\big].
+          \]
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">1 · Read the problem, the earlier steps and the current step.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">2 · Generate a verification: recompute, check each claim against what came before.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">3 · Name the inconsistency or error, if any.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">4 · Emit a verdict; read \(q_t\) from it (Equation 11).</div>
+        </div>
+        <div class="prose-study">
+          <p>
+            The written check lets the verifier spend more computation on hard steps, and
+            sampling \(K\) verifications trades cost for reliability. The verdict can still be
+            wrong, and a fluent but mistaken check is persuasive to a human reader. Cost is the
+            main drawback: one verification per step per candidate.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="search">
+        <h2>10. Variant 5: search-aware PRMs</h2>
+        <div class="prose-study">
+          <p>
+            The last variant is defined by use rather than labels: the PRM decides, during
+            generation, which partial solutions get more compute. Two settings are common.
+          </p>
+          <p>
+            <strong>Best-of-\(N\).</strong> Sample \(N\) complete solutions, score each with an
+            aggregate \(S(y_i)\) of its step scores (Section 11), and return the best. A
+            softer version, weighted voting, sums scores over solutions that reach the same
+            final answer \(a\):
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(12)</span>
+          \[
+            \hat y=\arg\max_{i}S(y_i),
+            \qquad
+            \hat a=\arg\max_{a}\sum_{i:\ \operatorname{ans}(y_i)=a}S(y_i).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            <strong>Step-level beam search.</strong> Keep \(B\) prefixes, expand each, and
+            keep the best. With a local-correctness PRM, a branch's running score is
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(13)</span>
+          \[
+            C_t=\sum_{i=1}^{t}\log q_i=\log\prod_{i=1}^{t}q_i ,
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            so one very low step score sinks the branch. With a value PRM, the current
+            \(V_t\) is used directly. Example: three expansions score \(0.91\), \(0.18\) and
+            \(0.77\); with \(B=2\) we keep the first and third.
+          </p>
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">1 · Start from the problem as the only prefix.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">2 · Sample several next steps for every kept prefix.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">3 · Score each extended prefix with the PRM (\(C_t\) or \(V_t\)).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">4 · Keep the top \(B\) prefixes; drop the rest.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">5 · Repeat until every kept prefix ends in an answer; return the best.</div>
+        </div>
+        <div class="prose-study">
+          <p>
+            Snell et al. compared best-of-\(N\), beam search and lookahead search with PRM
+            verifiers and found that the best choice depends on problem difficulty and
+            compute budget. The same step scores can also serve as dense rewards for RL, as in
+            Chapter 06, where every weakness discussed below is amplified by optimisation.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="aggregate">
+        <h2>11. Aggregating step scores into a solution score</h2>
+        <div class="prose-study">
+          <p>
+            Best-of-\(N\) and reranking need one number per solution. Five aggregators are
+            common:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(14)</span>
+          \[
+            \begin{aligned}
+              S_{\min}&amp;=\min_t q_t, &amp;
+              S_{\text{prod}}&amp;=\prod_{t=1}^{T}q_t, &amp;
+              S_{\log}&amp;=\frac{1}{T}\sum_{t=1}^{T}\log q_t,\\
+              S_{\text{mean}}&amp;=\frac{1}{T}\sum_{t=1}^{T}q_t, &amp;
+              S_{\text{last}}&amp;=q_T, &amp;
+              S_{\text{geo}}&amp;=e^{S_{\log}}.
+            \end{aligned}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Compare a clean solution with \(q=[0.95,\,0.90,\,0.92,\,0.90,\,0.95]\) and the same
+            solution with one bad middle step, \(q_3=0.10\):
+          </p>
+        </div>
+        <table class="practice-table">
+          <thead>
+            <tr><th>Aggregation</th><th>Clean</th><th>One bad step</th><th>Effect</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>min</td><td>0.900</td><td>0.100</td><td>falls to the bad step</td></tr>
+            <tr><td>product</td><td>0.673</td><td>0.073</td><td>divided by 9.2</td></tr>
+            <tr><td>mean log (geo)</td><td>−0.079 (0.924)</td><td>−0.523 (0.593)</td><td>moderate drop</td></tr>
+            <tr><td>mean</td><td>0.924</td><td>0.760</td><td>small drop</td></tr>
+            <tr><td>last step</td><td>0.950</td><td>0.950</td><td>no change</td></tr>
+          </tbody>
+        </table>
+        <div class="thm-box">
+          <span class="box-label">Proposition 15.2 · Ordering of aggregators</span>
+          <p>
+            For any scores \(q_t\in(0,1]\),
+            \(S_{\text{prod}}\le S_{\min}\le S_{\text{geo}}\le S_{\text{mean}}\). The first
+            inequality holds because every other factor is at most 1; the last is the
+            inequality of arithmetic and geometric means. The last-step score is not ordered
+            with the others: it ignores every step but one.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            Which aggregator fits depends on the label. For a local-correctness PRM under the
+            first-error convention, the product is the probability of no error
+            (Proposition 15.1), and the minimum is a robust stand-in. For a value-style PRM,
+            \(q_T\) already estimates the success of the whole solution, so the last step is a
+            natural choice, and taking the product of values would multiply overlapping
+            estimates of the same event. The mean is the weakest detector: an error in one
+            step of five moves it by at most a fifth of the drop.
+          </p>
+        </div>
+        <div class="note-box">
+          <span class="box-label">Note · Length effects</span>
+          <p>
+            The product falls with length even when every step is good:
+            \(0.9^{10}\approx 0.349\) against \(0.9^{3}=0.729\). So it prefers short
+            solutions. The mean and geometric mean do not shrink with length, which removes
+            that bias but opens another one, discussed next.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="pitfalls">
+        <h2>12. Pitfalls</h2>
+        <div class="prose-study">
+          <ul>
+            <li>
+              <strong>Rollout labels disagree with step correctness.</strong> Section 6 gave
+              both directions: correct steps with low labels and wrong steps with high labels.
+              A PRM trained on such labels inherits the disagreement and is weaker at locating
+              the first error.
+            </li>
+            <li>
+              <strong>Correct but useless steps are rewarded.</strong> A local-correctness PRM
+              gives high scores to restating the problem or checking trivial facts. Append
+              five such steps with \(q=0.99\) to the clean solution of Section 11: the mean
+              rises from \(0.924\) to \(0.957\) and the geometric mean from \(0.924\) to
+              \(0.956\), while the product falls from \(0.673\) to \(0.640\) and the minimum
+              stays at \(0.90\). Under a mean, padding pays. Progress rewards (Equation 10)
+              give such steps about zero.
+            </li>
+            <li>
+              <strong>Search over-exploits PRM errors.</strong> Search selects whatever the PRM
+              scores highest, including its mistakes. If each wrong candidate independently
+              has a small chance \(\varepsilon\) of outscoring every correct one, then with
+              \(N_w\) wrong candidates
+            </li>
+          </ul>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(15)</span>
+          \[
+            P(\text{some wrong candidate wins})=1-(1-\varepsilon)^{N_w}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            With \(\varepsilon=0.02\) this is about \(0.08\) for \(N_w=4\) but about \(0.73\)
+            for \(N_w=64\). More candidates give more chances to find a PRM error, so accuracy
+            can stop improving, or fall, as \(N\) grows.
+          </p>
+          <ul>
+            <li><strong>Step segmentation.</strong> "Step" usually means a line or paragraph. If the PRM was trained on one segmentation and used on another, its scores drift.</li>
+            <li><strong>Distribution shift.</strong> A PRM trained on one policy's mistakes may miss the different mistakes of a stronger or different policy.</li>
+            <li><strong>Outcome leakage.</strong> A PRM may learn to guess whether the final answer looks familiar instead of checking the step in front of it.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section" id="map">
+        <h2>13. The key map</h2>
+        <table class="practice-table">
+          <thead>
+            <tr><th>Variant</th><th>Step score means</th><th>Labels from</th><th>Main risk</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Human PRM</td><td>Is this step correct?</td><td>Annotators, to the first error</td><td>Cost; neutral and post-error steps are ambiguous</td></tr>
+            <tr><td>Rollout PRM</td><td>Can this prefix still succeed?</td><td>Sampled continuations checked against the key</td><td>Policy dependent, noisy, disagrees with correctness</td></tr>
+            <tr><td>Value / progress PRM</td><td>How promising is this state; how much did the step help?</td><td>Rollouts or outcome labels; differences of values</td><td>Same as rollouts; needs a good value baseline</td></tr>
+            <tr><td>Generative PRM</td><td>A reasoned verdict on the step</td><td>Verification text and verdicts, often from a stronger judge</td><td>Inference cost; persuasive wrong checks</td></tr>
+            <tr><td>Search-aware PRM</td><td>Which branches get more compute</td><td>Any of the above</td><td>Search amplifies PRM errors</td></tr>
+          </tbody>
+        </table>
+        <div class="prose-study">
+          <p>
+            The rows split along one line. The first and fourth rows judge a step backward, by
+            local correctness. The second and third look forward, at future success. The last
+            row is about what we do with either kind of score.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section lab-wide" id="lab">
+        <h2>14. Laboratory: which aggregations punish one error?</h2>
+        <div class="prose-study">
+          <p>
+            Set five step scores. The panel shows five aggregations of Equation 14 side by
+            side. Turn on "inject a bad step" to overwrite one step with a low score, choose
+            which step, and compare each aggregation with its clean value.
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Step-score aggregation</h3>
+            <span>\(S_{\min},\ S_{\text{prod}},\ S_{\log},\ S_{\text{mean}},\ S_{\text{last}}\)</span>
+          </div>
+
+          <div class="btn-row" style="margin-bottom:0.75rem">
+            <button type="button" class="btn small" id="pvPresetClean">Clean solution</button>
+            <button type="button" class="btn small ghost" id="pvPresetFlat">All 0.80</button>
+            <button type="button" class="btn small ghost" id="pvPresetFade">Fading confidence</button>
+          </div>
+
+          <div class="demo-controls" style="margin-bottom:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem">
+            <div class="control-block">
+              <span class="control-label">Step scores</span>
+              <label class="slider-label">
+                \(q_1\)
+                <input type="range" id="pvQ1" min="0.01" max="0.99" step="0.01" value="0.95" />
+                <strong id="pvQ1L">0.95</strong>
+              </label>
+              <label class="slider-label">
+                \(q_2\)
+                <input type="range" id="pvQ2" min="0.01" max="0.99" step="0.01" value="0.90" />
+                <strong id="pvQ2L">0.90</strong>
+              </label>
+              <label class="slider-label">
+                \(q_3\)
+                <input type="range" id="pvQ3" min="0.01" max="0.99" step="0.01" value="0.92" />
+                <strong id="pvQ3L">0.92</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Step scores</span>
+              <label class="slider-label">
+                \(q_4\)
+                <input type="range" id="pvQ4" min="0.01" max="0.99" step="0.01" value="0.90" />
+                <strong id="pvQ4L">0.90</strong>
+              </label>
+              <label class="slider-label">
+                \(q_5\)
+                <input type="range" id="pvQ5" min="0.01" max="0.99" step="0.01" value="0.95" />
+                <strong id="pvQ5L">0.95</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">One bad step</span>
+              <label class="toggle"><input type="checkbox" id="pvBad" /><span>Inject a bad step</span></label>
+              <label class="slider-label">
+                which step
+                <input type="range" id="pvBadPos" min="1" max="5" step="1" value="3" />
+                <strong id="pvBadPosL">3</strong>
+              </label>
+              <label class="slider-label">
+                bad score
+                <input type="range" id="pvBadVal" min="0.01" max="0.5" step="0.01" value="0.10" />
+                <strong id="pvBadValL">0.10</strong>
+              </label>
+            </div>
+          </div>
+
+          <div class="stat-strip" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
+            <div><span>Min</span><strong id="pvMin">-</strong></div>
+            <div><span>Product</span><strong id="pvProd">-</strong></div>
+            <div><span>Mean log (geo)</span><strong id="pvMlog">-</strong></div>
+            <div><span>Mean</span><strong id="pvMean">-</strong></div>
+            <div><span>Last step</span><strong id="pvLast">-</strong></div>
+          </div>
+
+          <h4 style="margin:1rem 0 0.5rem">Clean vs with the bad step</h4>
+          <div class="bellman-trace" id="pvTrace">Move a slider to compare aggregations.</div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            With the bad step at position 3, the last-step score does not move at all. Move it
+            to position 5 and the last step catches it, while the mean still drops far less
+            than the minimum or the product.
+            Then try "All 0.80": the product is already low with no bad step, which is its
+            length bias.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>15. Worked example, step by step</h2>
+        <div class="prose-study">
+          <p>
+            An 8-step solution ends with a wrong answer, so \(\hat V(z_8)=0\). We want
+            first-error labels using \(M=8\) rollouts per query. If we estimated every prefix,
+            we would find \(\hat V(z_1),\ldots,\hat V(z_7)=\tfrac78,\tfrac68,\tfrac68,\tfrac58,\tfrac48,\tfrac08,\tfrac08\).
+            Binary search sees only the ones it asks for.
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">Start: the first error lies in steps \(1..8\), so \(\text{lo}=1,\ \text{hi}=8\).</li>
+            <li class="hidden-step">Query \(\text{mid}=\lfloor 9/2\rfloor=4\): \(\hat V(z_4)=\tfrac58&gt;0\). The error is later: \(\text{lo}=5\).</li>
+            <li class="hidden-step">Query \(\text{mid}=\lfloor 13/2\rfloor=6\): \(\hat V(z_6)=0\). The error is at 6 or earlier: \(\text{hi}=6\).</li>
+            <li class="hidden-step">Query \(\text{mid}=\lfloor 11/2\rfloor=5\): \(\hat V(z_5)=\tfrac48&gt;0\). So \(\text{lo}=6=\text{hi}\) and \(\hat\tau=6\).</li>
+            <li class="hidden-step">Cost: 3 queries, \(3\times 8=24\) rollouts. A linear scan from step 1 stops at step 6 after 6 queries, \(48\) rollouts.</li>
+            <li class="hidden-step">Hard first-error labels: \(y=[1,1,1,1,1,0]\), steps 7 and 8 masked.</li>
+            <li class="hidden-step">Soft labels for the same steps would be \([0.875,\,0.75,\,0.75,\,0.625,\,0.5,\,0]\). Step 5 is labelled correct by the hard rule but carries a soft label of only \(0.5\).</li>
+            <li class="hidden-step">Caution: a zero from 8 rollouts is weak evidence. If the true \(V(z_6)\) were \(0.1\), all 8 rollouts fail with probability \(0.9^{8}\approx 0.43\), and \(\hat\tau\) would be too early.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>16. Closing the series</h2>
+        <div class="prose-study">
+          <p>
+            This chapter ends the series. Looking back, the fifteen chapters moved along a
+            few axes. <em>What is judged</em>: a whole answer (scalar RM, ORM), a single step
+            (PRM), or the future of a prefix (value model). <em>What is output</em>: one
+            score, several scores, or text with a verdict (multi-objective, generative and
+            critique-then-score models). <em>How it is trained and used</em>: pointwise,
+            pairwise and listwise losses, implicit rewards inside the policy, conditioning on
+            instructions, uncertainty from ensembles, and rules combined with learned
+            judgement. PRM variants sit where these axes meet: the same step score can mean
+            correctness or future success, be produced by a classifier or by a written check,
+            and be used for training or for search.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Key idea to remember</span>
+          <p>
+            A step score means what its label means. Human labels measure local correctness,
+            rollout labels measure recoverability under a policy, value differences measure
+            progress, and generative verdicts are reasoned judgements. Search then spends
+            compute on whatever the score rewards, including its errors.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Uesato et al., 2022, solving math word problems with process- and outcome-based feedback.</li>
+            <li>Lightman et al., 2023, Let's verify step by step: human step labels (PRM800K).</li>
+            <li>Wang et al., 2024, Math-Shepherd: rollout-based step labels without human annotation.</li>
+            <li>Luo et al., 2024, automated process supervision with binary search for the first error (OmegaPRM).</li>
+            <li>Setlur et al., 2024, rewarding progress: scaling automated process verifiers.</li>
+            <li>Snell et al., 2024, scaling test-time compute with verifier-guided search.</li>
+            <li>Zhang et al., 2024, generative verifiers: reward modelling as next-token prediction.</li>
+            <li>Khalifa et al., 2025, process reward models that think (ThinkPRM).</li>
+            <li>Zheng et al., 2024, ProcessBench: identifying the earliest error in mathematical reasoning.</li>
+            <li>Zhang et al., 2025, lessons from developing process reward models in mathematical reasoning.</li>
+            <li>Earlier chapters: <a href="prm.html">process reward model</a>, <a href="value.html">value model</a>, <a href="generative.html">generative RM</a>.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="hybrid.html" style="color:inherit;text-decoration:none">&larr; Hybrid rule-based and learned rewards</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Series complete</p>
+            <h3>You have reached the end of the reward model series</h3>
+            <p>Return to the overview to revisit any chapter.</p>
+          </div>
+          <a class="btn primary" href="index.html">Back to overview</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Reward Models · Chapter 15, PRM variants in depth</p>
+    <p class="muted">Same number per step, different questions behind it.</p>
+  </footer>
+
+  <script src="prm-variants.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

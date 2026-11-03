@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>10 · Critique-then-Score — Reward Models</title>
+  <link rel="stylesheet" href="../notes.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        tags: 'ams'
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+
+  <div class="layout-book" id="top">
+    <nav class="sidebar" aria-label="Notes">
+      <div class="menu-category">Syed Nazmus Sakib</div>
+      <div class="menu-item"><a href="/index.html">Home</a></div>
+      <div class="menu-item"><a href="/publications.html">Publications</a></div>
+      <div class="menu-item"><a href="/lectures/">Lecture Notes</a></div>
+      <div class="menu-category">Reward Models</div>
+      <div class="menu-item"><a href="index.html">Overview</a></div>
+      <div class="menu-item"><a href="scalar.html">Scalar Reward Model</a></div>
+      <div class="menu-item"><a href="pointwise.html">Pointwise Verifier</a></div>
+      <div class="menu-item"><a href="pairwise.html">Pairwise Comparator</a></div>
+      <div class="menu-item"><a href="listwise.html">Listwise Ranking</a></div>
+      <div class="menu-item"><a href="orm.html">Outcome Reward Model</a></div>
+      <div class="menu-item"><a href="prm.html">Process Reward Model</a></div>
+      <div class="menu-item"><a href="value.html">Value Model</a></div>
+      <div class="menu-item"><a href="multi-objective.html">Multi-Objective RM</a></div>
+      <div class="menu-item"><a href="generative.html">Generative RM</a></div>
+      <div class="menu-item"><a class="current" aria-current="page" href="critique.html">Critique-then-Score</a></div>
+      <ol class="toc">
+        <li><a href="#bridge">1. From verdict to critique</a></li>
+        <li><a href="#definition">2. Definition</a></li>
+        <li><a href="#readout">3. Two read-outs</a></li>
+        <li><a href="#why">4. Why write it down</a></li>
+        <li><a href="#cost">5. What it costs</a></li>
+        <li><a href="#sft">6. Supervised critics</a></li>
+        <li><a href="#selftaught">7. Self-taught evaluators</a></li>
+        <li><a href="#rl">8. RL on the verdict</a></li>
+        <li><a href="#principles">9. Principles and rubrics</a></li>
+        <li><a href="#scaling">10. Scaling the judge</a></li>
+        <li><a href="#weak">11. Failure modes</a></li>
+        <li><a href="#lab">12. Laboratory</a></li>
+        <li><a href="#worked">13. Worked example</a></li>
+        <li><a href="#next">14. What comes next</a></li>
+      </ol>
+      <div class="menu-item"><a href="implicit.html">Implicit RM (DPO)</a></div>
+      <div class="menu-item"><a href="conditional.html">Conditional RM</a></div>
+      <div class="menu-item"><a href="ensemble.html">Uncertainty &amp; Ensembles</a></div>
+      <div class="menu-item"><a href="hybrid.html">Hybrid Rule + Learned</a></div>
+      <div class="menu-item"><a href="prm-variants.html">PRM Variants in Depth</a></div>
+    </nav>
+
+    <article class="study-main" id="content" tabindex="-1">
+      <p class="chapter-kicker">Reward Models · Chapter 10</p>
+      <h1 class="study-title">Critique-then-score: reward models that <em>reason first</em></h1>
+
+      <div class="abstract">
+        <strong>Abstract.</strong>
+        A generative judge can answer "is this response good?" with a single verdict token.
+        A reasoning reward model first writes a critique, and only then commits to a score.
+        This chapter defines the critique-then-score pipeline, compares a scalar head and a
+        verdict as the final read-out, explains what the written critique buys and what it
+        costs, and covers three ways to train the critic: imitation of reference critiques,
+        self-taught bootstrapping, and reinforcement learning on a verifiable verdict. It
+        ends with principle-guided judging, inference-time scaling by voting over sampled
+        critiques, and the ways a fluent critique can be wrong.
+      </div>
+
+      <section class="study-section" id="bridge">
+        <h2>1. From verdict to critique</h2>
+        <div class="prose-study">
+          <p class="lead">
+            Chapter 09 let the judge speak. This chapter trains it to think before it speaks.
+          </p>
+          <p>
+            In <a href="generative.html">Chapter 09</a> a generative reward model produced its
+            judgment as tokens: sometimes a bare "Yes" or "No", sometimes a critique followed by
+            a verdict. The critique there was a means to the verdict. It came from a prompt, or
+            was imitated from example critiques, and nobody asked whether it was good reasoning.
+          </p>
+          <p>
+            A reasoning reward model makes the critique the centre of the design. It first
+            generates a critique \(c\): text that checks the response, quotes the parts that
+            matter, and names errors. The score is computed afterwards, conditioned on that
+            critique. Three questions follow, and they organise this chapter: what should read
+            the critique (Section 3), how to train the critic so that its reasoning leads to
+            correct scores (Sections 6 to 8), and how to spend more inference compute on the
+            judge (Sections 9 and 10).
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="definition">
+        <h2>2. Definition</h2>
+        <div class="prose-study">
+          <p>
+            Let \(p_\theta\) be a language model used as a critic. Given \((x,y)\) it samples a
+            critique token by token:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(1)</span>
+          \[
+            \hat c\sim p_\theta(c\mid x,y).
+          \]
+        </div>
+        <div class="def-box">
+          <span class="box-label">Definition 10.1 · Critique-then-score reward model</span>
+          <p>
+            A critique-then-score reward model is a pair \((p_\theta,g_\phi)\): a critic that
+            generates \(\hat c\) as in Equation (1), and a scorer that reads the prompt, the
+            response and the critique together,
+          </p>
+          <div class="eq-block tight" style="margin:0.4rem 0 0">
+            \[
+              r(x,y)=g_\phi\big(x,y,\hat c\big).
+            \]
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            Because \(\hat c\) is sampled, \(r(x,y)\) is a random variable. As in Chapter 09
+            (its Equation 3), the quantity we would like is the average over critiques,
+            estimated with \(K\) samples:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(2)</span>
+          \[
+            \bar r(x,y)=\mathbb E_{c\sim p_\theta(\cdot\mid x,y)}\big[g_\phi(x,y,c)\big]
+            \approx\frac{1}{K}\sum_{k=1}^{K}g_\phi\big(x,y,\hat c_k\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            With \(K=1\) and greedy decoding this is the usual single-critique judge. The new
+            ingredient is the scorer \(g_\phi\): it need not be a verdict token at all.
+            Section 10 returns to larger \(K\).
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="readout">
+        <h2>3. Two read-outs: scalar head or verdict</h2>
+        <div class="prose-study">
+          <p>
+            The scorer \(g_\phi\) can take two forms. Both read the sequence
+            \([x,y,\hat c]\); they differ in what sits on top of the backbone.
+          </p>
+        </div>
+        <div class="compare-pair">
+          <div class="compare-card">
+            <h4>Scalar head on the critique</h4>
+            <p>
+              Take the hidden state at the last token of \([x,y,\hat c]\) and apply a linear
+              head, exactly as in the <a href="scalar.html">scalar chapter</a>. Train the head
+              with the Bradley-Terry loss.
+            </p>
+            <p class="mono-line">critique, then w&#8868;h</p>
+          </div>
+          <div class="compare-card">
+            <h4>Verdict tokens after the critique</h4>
+            <p>
+              Keep the language-model head. After the critique the model writes a verdict, such
+              as "Score: 7" or "[[A]]". Read the score from the token or its probability.
+            </p>
+            <p class="mono-line">critique, then "Score: 7"</p>
+          </div>
+        </div>
+        <div class="prose-study">
+          <p>
+            The scalar-head version is the design of Critique-out-Loud reward models: one
+            backbone first generates a critique, then a reward head reads the prompt, response
+            and critique. Its head is trained on pairs exactly as before, now with critiques in
+            the input:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(3)</span>
+          \[
+            \mathcal L_{\text{head}}
+            =-\log\sigma\Big(g_\phi\big(x,y_w,\hat c_w\big)-g_\phi\big(x,y_l,\hat c_l\big)\Big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The verdict version stays entirely in text. When the verdict is a number on a
+            scale, a smoother score is the expected value under the model's distribution over
+            score tokens:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(4)</span>
+          \[
+            r(x,y)=\sum_{s=1}^{10}s\cdot p_\theta\big(s\mid x,y,\hat c\big).
+          \]
+        </div>
+        <div class="note-box">
+          <span class="box-label">Note · Train the head on the critic's own critiques</span>
+          <p>
+            At deployment the head will read critiques the critic generated, not reference
+            critiques written by a human or a stronger model. Training the head on
+            self-generated \(\hat c\), rather than on reference \(c^*\), keeps its training
+            inputs and its test inputs from the same distribution.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="why">
+        <h2>4. Why write the critique down</h2>
+        <div class="prose-study">
+          <p>
+            Take the prompt "A train leaves at 14:50 and the trip takes 1 h 25 min. When does
+            it arrive, and what does a 170 km ticket cost at $0.12 per km?" The response says
+            "It arrives at 16:15 and the ticket costs $24.00." A critic might write:
+          </p>
+        </div>
+        <div class="bellman-trace" style="max-width:36rem">
+<pre style="margin:0;font-family:inherit;white-space:pre-wrap">
+Part 1. 14:50 + 1 h = 15:50; 15:50 + 25 min = 16:15. Correct.
+Part 2. 170 × 0.12 = 20.40. The response says 24.00. Incorrect.
+Summary: one of two parts is wrong; the error is arithmetic.
+Score: 4
+</pre>
+        </div>
+        <div class="prose-study">
+          <p>Three things happened that a single forward pass does not do explicitly.</p>
+          <ul>
+            <li>
+              <strong>Decomposition.</strong> The judgment was split into two small checks.
+              Each check is easier than "is the whole answer good?".
+            </li>
+            <li>
+              <strong>Error localisation.</strong> The critique names the wrong part and the
+              correct value. A scalar of 0.3 says something is off; the critique says what.
+            </li>
+            <li>
+              <strong>Interpretability.</strong> A person can read the critique and audit the
+              score. If the critique is wrong, it is wrong in a visible way.
+            </li>
+          </ul>
+          <p>
+            Chapter 09 made the basic point that a verdict written after the evidence rests on
+            work done in the open. The three properties above are what a reasoning reward model
+            is designed to make reliable, rather than hoped for from a prompt.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="cost">
+        <h2>5. What it costs</h2>
+        <div class="prose-study">
+          <p>
+            <a href="generative.html#cost">Chapter 09</a> counted the decoding cost of one
+            judgment: about \(K(L_c+1)\) generated tokens for \(K\) critiques of length
+            \(L_c\). Scale that to an RL step. Suppose each critique is 400 tokens and we sample
+            \(K=8\) per response. With 512 prompts and 8 responses per prompt, the judge must
+            generate
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(5)</span>
+          \[
+            512\times 8\times 8\times 400=13{,}107{,}200\ \text{tokens}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            That is about thirteen million sequentially decoded tokens per step, before the
+            policy update. A scalar reward model generates none. Reasoning reward models make
+            this worse in two ways specific to this chapter.
+          </p>
+          <ul>
+            <li><strong>Longer critiques.</strong> A judge trained to reason (Section 8) tends to write longer traces than a prompted one, so \(L_c\) grows.</li>
+            <li><strong>Training the critic costs generation too.</strong> Self-training and RL (Sections 7 and 8) sample many critiques per training pair, before the judge is ever used.</li>
+          </ul>
+          <p>
+            The design question is therefore not whether a critique helps, but whether it helps
+            more than spending the same compute elsewhere, for example on more policy samples.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="sft">
+        <h2>6. Training the critic: supervised critiques</h2>
+        <div class="prose-study">
+          <p>
+            The direct approach is imitation. Collect reference critiques \(c^*\) for many
+            \((x,y)\), written by people or by a stronger model, and fine-tune the critic with
+            the language-modelling loss on the critique tokens:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(6)</span>
+          \[
+            \mathcal L_{\text{SFT}}=-\sum_{t=1}^{|c^*|}\log p_\theta\big(c^*_t\mid x,y,c^*_{&lt;t}\big).
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            Chapter 09 used the same loss on critique plus verdict. The limits are the same as
+            for any imitation: the critic can only be as careful as its references, and good
+            critiques of hard answers are expensive to write. The loss also rewards copying the
+            <em>style</em> of a reference critique, whether or not the critic's own checks are
+            right.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="selftaught">
+        <h2>7. Self-taught evaluators</h2>
+        <div class="prose-study">
+          <p>
+            Human critiques are scarce. A self-taught evaluator builds its own training data.
+            The trick is to create pairs whose preferred side is known by construction. Take an
+            instruction \(x\), write a slightly altered instruction \(x'\), and let a model
+            answer both. The answer to \(x\) is preferred for \(x\) because the answer to
+            \(x'\) solves a different problem. No human labels the pair.
+          </p>
+          <p>
+            The current judge then writes several critiques and verdicts for each pair. Only
+            judgments that reach the known verdict \(v^*\) are kept:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(7)</span>
+          \[
+            \mathcal D_{\text{new}}=\big\{(x,y_A,y_B,\hat c,\hat v)\;:\;\hat v=v^*\big\}.
+          \]
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">1 · Take unlabeled instructions \(x\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">2 · Build a pair with a known winner, e.g. answer \(x\) and a perturbed \(x'\).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">3 · Sample critiques and verdicts from the current judge.</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">4 · Keep judgments whose verdict matches the known winner (Equation 7).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step">5 · Fine-tune the judge on the kept critiques with Equation (6).</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step highlight">6 · Repeat with the improved judge.</div>
+        </div>
+        <div class="remark-box">
+          <span class="box-label">Remark · Correct verdict, unchecked reasoning</span>
+          <p>
+            The filter checks only the verdict. A critique that reaches the right verdict for a
+            wrong reason passes the filter and is trained on. The same gap reappears in the
+            next section.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="rl">
+        <h2>8. Reinforcement learning on the verdict</h2>
+        <div class="prose-study">
+          <p>
+            Filtering keeps good judgments but never pushes the judge away from bad ones.
+            Reinforcement learning does both. Treat the judge as a policy: given
+            \((x,y_A,y_B)\) it generates a critique and then a verdict \(\hat v\in\{A,B\}\).
+            Preference data already contains the right answer \(v^*\), so the reward is
+            checkable by a rule:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(8)</span>
+          \[
+            R(\hat c,\hat v)=\begin{cases}1 &amp; \hat v=v^*\\ 0 &amp; \hat v\ne v^*\text{ or no parsable verdict}\end{cases}
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            The judge is then trained to maximise expected reward, for example with
+            <a href="../rl/grpo.html">GRPO</a>, sampling several judgments per pair and
+            comparing their rewards:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(9)</span>
+          \[
+            \max_\theta\;\mathbb E_{(x,y_A,y_B,v^*)}\;\mathbb E_{(\hat c,\hat v)\sim p_\theta}\big[R(\hat c,\hat v)\big].
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            This is the recipe of reasoning reward models such as RM-R1: preference labels are
+            turned into a verifiable reward, and the critique is learned as whatever reasoning
+            helps reach the right verdict. No reference critique is needed, only the label.
+          </p>
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Key idea · A preference label is a verifiable answer</span>
+          <p>
+            To the judge, "which response is better?" is a question with a known answer, like
+            a maths problem with an answer key. That is why the RL methods used for reasoning
+            on verifiable tasks transfer to training reward models.
+          </p>
+        </div>
+        <div class="note-box">
+          <span class="box-label">Note · Position shortcuts under RL</span>
+          <p>
+            <a href="generative.html#bias">Chapter 09</a> handled position bias at inference by
+            asking both orders. Under RL the risk is sharper: if the preferred response is
+            usually shown first, the judge earns most of the reward of Equation (8) by always
+            answering \(A\), with no reasoning at all. Presenting every pair in both orders,
+            \((y_A,y_B)\) and \((y_B,y_A)\), takes that shortcut away.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="principles">
+        <h2>9. Principles and rubrics</h2>
+        <div class="prose-study">
+          <p>
+            "Is this good?" is vague for open-ended prompts. A rubric makes it concrete. A
+            principle-guided judge first writes the criteria that matter for this prompt, then
+            critiques each response against them, then scores:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(10)</span>
+          \[
+            x,y_{1:n}\;\longrightarrow\;\underbrace{P}_{\text{principles}}
+            \;\longrightarrow\;\underbrace{c}_{\text{critique}}
+            \;\longrightarrow\;\underbrace{s_1,\ldots,s_n}_{\text{scores}}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            For a request to explain recursion to a beginner, the principles might be
+            "technically correct", "uses one concrete example", and "avoids jargon or defines
+            it". Each response is then checked against the same three items, which makes scores
+            for different responses more comparable.
+          </p>
+          <p>
+            DeepSeek's work on generalist reward modelling uses this pattern: the judge
+            generates its own principles and critiques and outputs a pointwise score for each
+            response. Because principles are generated per prompt, the same judge can be used
+            on maths, code and open-ended writing.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="scaling">
+        <h2>10. Inference-time scaling of the judge</h2>
+        <div class="prose-study">
+          <p>
+            A sampled critique is one opinion. Sample \(K\) of them and combine. For pairwise
+            verdicts the natural rule is a majority vote; for pointwise scores, such as the
+            per-response scores of Section 9, it is a sum or average:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(11)</span>
+          \[
+            \hat v=\operatorname{mode}\big(\hat v_1,\ldots,\hat v_K\big),
+            \qquad
+            S(y_i)=\sum_{k=1}^{K}s_i^{(k)} .
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            <a href="generative.html#sampling">Chapter 09</a> showed that averaging \(K\)
+            verdict probabilities shrinks their variance as \(1/K\). Here the question is
+            different: how often is the <em>final decision</em> right? Model each sampled verdict
+            as correct with probability \(p\), independently. With an odd number \(N=K\) of
+            votes, the majority is correct
+            when at least \((N+1)/2\) votes are, so
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(12)</span>
+          \[
+            A_N(p)=\sum_{k=(N+1)/2}^{N}\binom{N}{k}p^{k}(1-p)^{N-k}.
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            At \(p=0.7\): \(A_1=0.700\), \(A_3=0.784\), \(A_5\approx0.837\),
+            \(A_{15}\approx0.950\). At \(p=0.4\) the same sums move the other way:
+            \(A_1=0.400\), \(A_3=0.352\), \(A_5\approx0.317\). The step from \(N\) to \(N+2\)
+            has a closed form:
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(13)</span>
+          \[
+            A_{N+2}(p)-A_N(p)=\binom{N}{\frac{N-1}{2}}\big(p(1-p)\big)^{\frac{N+1}{2}}\,(2p-1).
+          \]
+        </div>
+        <div class="thm-box">
+          <span class="box-label">Proposition 10.1 · Voting amplifies the sign of \(p-\tfrac12\)</span>
+          <p>
+            For independent votes and odd \(N\), the sign of Equation (13) is the sign of
+            \(2p-1\). If \(p&gt;\tfrac12\), majority accuracy rises with every extra pair of
+            votes and tends to 1; if \(p&lt;\tfrac12\) it falls toward 0. This is Condorcet's
+            jury theorem. Voting sharpens a judge that is better than chance; it cannot rescue
+            one that is worse.
+          </p>
+        </div>
+        <div class="prose-study">
+          <p>
+            Real critiques are not independent. They come from the same model and share its
+            blind spots. A crude way to see the effect: with probability \(\rho\) all \(N\)
+            critiques make the same judgment (one draw, correct with probability \(p\)), and
+            otherwise they are independent. Then
+          </p>
+        </div>
+        <div class="eq-block">
+          <span class="eq-tag">(14)</span>
+          \[
+            A_N^{\rho}(p)=\rho\,p+(1-\rho)\,A_N(p),
+          \]
+        </div>
+        <div class="prose-study">
+          <p>
+            which can never exceed \(\rho p+(1-\rho)\). With \(\rho=0.5\) and \(p=0.7\), even
+            infinitely many votes give at most \(0.85\). Shared errors put a ceiling on what
+            sampling buys. One practical response is to filter out low-quality samples before
+            voting, for example with a second model that rates each critique.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="weak">
+        <h2>11. Failure modes</h2>
+        <div class="prose-study">
+          <p>
+            The judge biases and failure modes of <a href="generative.html#weak">Chapter 09</a>
+            all carry over. Training the reasoning, and scaling it, adds twists of its own.
+          </p>
+          <ul>
+            <li>
+              <strong>Persuasive but wrong.</strong> A fluent critique can assert a false check
+              ("the arithmetic is correct") with the same confidence as a true one. A scalar head
+              trained on critiques (Section 3) learns to trust the critique's conclusion, so a
+              confident error in the text becomes a confident error in the score.
+            </li>
+            <li>
+              <strong>Rationalising a pre-chosen verdict.</strong> The critique may justify a
+              decision the model has effectively already made. A simple test: edit or remove the
+              critique and see whether the score moves. If it does not, the critique is
+              decoration, not evidence. Formats that put the verdict before the critique have
+              this failure built in.
+            </li>
+            <li>
+              <strong>Right verdict, wrong reason.</strong> Filtering (Section 7) and RL
+              (Section 8) reward the verdict only. A critique that reaches the right answer by a
+              flawed argument is reinforced just as strongly as a sound one.
+            </li>
+            <li>
+              <strong>Length and verbosity bias.</strong> Judges tend to favour longer, more
+              detailed-looking responses. A policy trained against such a judge learns to pad.
+              Under RL the judge's own critiques can also grow longer without growing better.
+            </li>
+            <li>
+              <strong>Voting amplifies systematic errors.</strong> On a slice of prompts where
+              the judge is usually wrong (\(p&lt;\tfrac12\)), Proposition 10.1 says more votes make
+              it more confidently wrong.
+            </li>
+            <li>
+              <strong>Cost.</strong> Millions of generated tokens per RL step (Equation 5), plus
+              the generation spent training the critic.
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="study-section lab-wide" id="lab">
+        <h2>12. Laboratory: voting over sampled critiques</h2>
+        <div class="prose-study">
+          <p>
+            Each sampled judgment is correct with probability \(p\). Set \(p\), the number of
+            votes \(N\), and the correlation \(\rho\) between critiques. The lab computes the
+            majority-vote accuracy exactly from Equations (12) and (14) and tabulates it for
+            every odd \(N\) up to 31. "Simulate" checks the formula by sampling.
+          </p>
+        </div>
+
+        <div class="lab">
+          <div class="lab-head">
+            <h3>Majority vote of N critiques</h3>
+            <span>\(A_N(p)=\sum_{k\ge (N+1)/2}\binom{N}{k}p^k(1-p)^{N-k}\)</span>
+          </div>
+
+          <div class="demo-controls" style="margin-bottom:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem">
+            <div class="control-block">
+              <span class="control-label">Single-judgment accuracy</span>
+              <label class="slider-label">
+                p
+                <input type="range" id="critP" min="0.05" max="0.95" step="0.01" value="0.7" />
+                <strong id="critPL">0.70</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Sampled critiques (odd)</span>
+              <label class="slider-label">
+                N
+                <input type="range" id="critN" min="1" max="31" step="2" value="5" />
+                <strong id="critNL">5</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Shared-error probability</span>
+              <label class="slider-label">
+                ρ
+                <input type="range" id="critRho" min="0" max="1" step="0.05" value="0" />
+                <strong id="critRhoL">0.00</strong>
+              </label>
+            </div>
+            <div class="control-block">
+              <span class="control-label">Check by sampling</span>
+              <div class="btn-row">
+                <button type="button" class="btn small primary" id="critSim">Simulate 2000 pairs</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="stat-strip" style="grid-template-columns:repeat(4,1fr)">
+            <div><span>One critique</span><strong id="critOne">-</strong></div>
+            <div><span>Majority of N</span><strong id="critMaj">-</strong></div>
+            <div><span>Change vs N = 1</span><strong id="critGain">-</strong></div>
+            <div><span>Limit as N grows</span><strong id="critLim">-</strong></div>
+          </div>
+
+          <h4 style="margin:1rem 0 0.5rem">Accuracy by number of votes</h4>
+          <div class="bellman-trace" id="critTrace" style="max-height:none">Move a slider.</div>
+        </div>
+
+        <div class="prose-study">
+          <p>
+            Try \(p=0.7\), then \(p=0.4\): the table climbs in one case and sinks in the other.
+            At \(p=0.5\) voting does nothing. Then set \(\rho=0.5\) and watch the curve flatten
+            below its ceiling.
+          </p>
+        </div>
+      </section>
+
+      <section class="study-section" id="worked">
+        <h2>13. Worked example, step by step</h2>
+        <div class="prose-study">
+          <p>
+            A reasoning judge compares two responses. On pairs like this one, a single sampled
+            critique reaches the right verdict 70% of the time. We sample five critiques and
+            take the majority. How accurate is the vote, and what if critiques share errors?
+          </p>
+        </div>
+
+        <div class="worked-board">
+          <button type="button" class="btn small" id="revealNext">Reveal next line</button>
+          <button type="button" class="btn small ghost" id="revealAll">Show all</button>
+          <ol class="math-steps revealable" id="workedSteps">
+            <li class="hidden-step">The five verdicts come back as \(A,A,B,A,B\). The majority is \(A\), three votes to two.</li>
+            <li class="hidden-step">Majority of 5 is correct when at least 3 votes are correct: \(A_5=\binom53p^3(1-p)^2+\binom54p^4(1-p)+p^5\).</li>
+            <li class="hidden-step">With \(p=0.7\): \(10(0.343)(0.09)+5(0.2401)(0.3)+0.16807=0.3087+0.36015+0.16807=0.83692\).</li>
+            <li class="hidden-step">Check with Equation (13): \(A_3=0.784\), and \(A_5-A_3=3\,(0.21)^2(0.4)=0.05292\), so \(A_5=0.83692\).</li>
+            <li class="hidden-step">If instead \(p=0.4\), the same sum gives \(A_5\approx0.317\): voting made a weak judge worse.</li>
+            <li class="hidden-step">With shared errors \(\rho=0.5\) and \(p=0.7\): \(A=0.5(0.7)+0.5(0.83692)\approx0.768\). Most of the gain from voting is gone.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="study-section" id="next">
+        <h2>14. What comes next</h2>
+        <div class="prose-study">
+          <p>
+            Reasoning reward models spend more computation on each judgment to make it better.
+            The next chapter goes the other way. It drops the separate reward model entirely and
+            shows that a policy trained with DPO already contains a reward, written in its own
+            log-probabilities.
+          </p>
+        </div>
+
+        <div class="thm-box">
+          <span class="box-label">Key idea to remember</span>
+          <p>
+            Generate a critique, then score with the critique in view. Train the critique by
+            rewarding the verdict it leads to, and scale the judge by voting, which helps only
+            when a single judgment beats chance and critiques do not share their mistakes.
+          </p>
+        </div>
+
+        <div class="see-also">
+          <h4>See also</h4>
+          <ul>
+            <li>Saunders et al., 2022, self-critiquing models for assisting human evaluators.</li>
+            <li>McAleese et al., 2024, LLM critics help catch LLM bugs (CriticGPT).</li>
+            <li>Ankner et al., 2024, Critique-out-Loud reward models: a critique followed by a scalar reward head.</li>
+            <li>Zhang et al., 2024, generative verifiers: reward modelling as next-token prediction, with voting over sampled verifications.</li>
+            <li>Wang et al., 2024, self-taught evaluators: judges trained on synthetic pairs with known winners.</li>
+            <li>Chen et al., 2025, RM-R1: reward modelling as reasoning, trained with RL on preference labels.</li>
+            <li>Liu et al., 2025, inference-time scaling for generalist reward modelling (self-generated principles, sampling and voting).</li>
+            <li>The RL notes on <a href="../rl/grpo.html">GRPO</a>.</li>
+          </ul>
+        </div>
+
+        <div class="chapter-end">
+          <div>
+            <p class="lesson-tag">Previous</p>
+            <h3><a href="generative.html" style="color:inherit;text-decoration:none">&larr; Generative Reward Model</a></h3>
+            <p style="margin-top:0.75rem" class="lesson-tag">Next chapter</p>
+            <h3>Implicit reward model (DPO)</h3>
+            <p>A reward read from the policy's own probabilities.</p>
+          </div>
+          <a class="btn primary" href="implicit.html">Continue &rarr;</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="site-foot">
+    <p>Reward Models · Chapter 10, Critique-then-score</p>
+    <p class="muted">Check first, then score. Vote only if one check beats a coin flip.</p>
+  </footer>
+
+  <script src="critique.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>
