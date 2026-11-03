@@ -1,4 +1,4 @@
-/* Pearl — MDP lesson interactions + gridworld */
+/* Reinforcement Learning — MDP lesson interactions + gridworld */
 
 (() => {
   "use strict";
@@ -400,7 +400,7 @@
     if (state.done) {
       const g = computeG0(state.rewards, state.gamma);
       if (transitionViz) {
-        transitionViz.innerHTML += `<div style="margin-top:0.6rem;color:var(--pearl-mint)">Episode ended. Final G₀ = <strong>${fmt(g, 4)}</strong>. Reset to sample another trajectory.</div>`;
+        transitionViz.innerHTML += `<div style="margin-top:0.6rem;color:var(--accent-secondary)">Episode ended. Final G₀ = <strong>${fmt(g, 4)}</strong>. Reset to sample another trajectory.</div>`;
       }
       stopAuto();
     }

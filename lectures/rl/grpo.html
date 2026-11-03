@@ -1,22 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>09 · GRPO — Pearl</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
-  <script>
-    (function () {
-      try {
-        if (localStorage.getItem("pearl-theme") === "light") {
-          document.documentElement.setAttribute("data-theme", "light");
-        }
-      } catch (e) {}
-    })();
-  </script>
-  <link rel="stylesheet" href="styles.css" />
+  <title>09 · GRPO — Reinforcement Learning</title>
+  <link rel="stylesheet" href="../notes.css" />
   <script>
     window.MathJax = {
       tex: {
@@ -29,41 +17,27 @@
   <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 </head>
 <body>
-  <div class="pearl-field" aria-hidden="true"></div>
-  <div class="steam" aria-hidden="true"></div>
-
-  <header class="topbar">
-    <a class="brand" href="why.html">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-text">Pearl</span>
-    </a>
-        <nav class="chapter-nav" aria-label="Chapters">
-      <a href="why.html">00 · Why</a>
-      <a href="index.html">01 · MDP</a>
-      <a href="value.html">02 · Value</a>
-      <a href="practice.html">Practice</a>
-      <a href="dp.html">03 · DP</a>
-      <a href="td.html">04 · TD</a>
-      <a href="qlearning.html">05 · DQN</a>
-      <a href="pg.html">06 · PG</a>
-      <a href="trpo.html">07 · TRPO</a>
-      <a href="ppo.html">08 · PPO</a>
-      <a class="active" href="grpo.html">09 · GRPO</a>
-      <span class="locked">10 · SAC</span>
-    </nav>
-    <div class="topbar-actions">
-      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
-        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
-        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
-      </button>
-      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
-    </div>
-  </header>
+  <a class="skip-link" href="#content">Skip to content</a>
 
   <div class="layout-book" id="top">
-    <nav class="toc" aria-label="On this page">
-      <span class="toc-title">Contents</span>
-      <ol>
+    <nav class="sidebar" aria-label="Notes">
+      <div class="menu-category">Syed Nazmus Sakib</div>
+      <div class="menu-item"><a href="/index.html">Home</a></div>
+      <div class="menu-item"><a href="/publications.html">Publications</a></div>
+      <div class="menu-item"><a href="/lectures/">Lecture Notes</a></div>
+      <div class="menu-category">Reinforcement Learning</div>
+      <div class="menu-item"><a href="why.html">Why MDPs</a></div>
+      <div class="menu-item"><a href="index.html">Markov Decision Processes</a></div>
+      <div class="menu-item"><a href="value.html">Value Functions</a></div>
+      <div class="menu-item"><a href="practice.html">Practice Gridworld</a></div>
+      <div class="menu-item"><a href="dp.html">Dynamic Programming</a></div>
+      <div class="menu-item"><a href="td.html">Temporal-Difference Learning</a></div>
+      <div class="menu-item"><a href="qlearning.html">Q-Learning &amp; DQN</a></div>
+      <div class="menu-item"><a href="pg.html">Policy Gradients</a></div>
+      <div class="menu-item"><a href="trpo.html">TRPO</a></div>
+      <div class="menu-item"><a href="ppo.html">PPO</a></div>
+      <div class="menu-item"><a class="current" aria-current="page" href="grpo.html">GRPO</a></div>
+      <ol class="toc">
         <li><a href="#overview">1. Overview</a></li>
         <li><a href="#motivation">2. Motivation</a></li>
         <li><a href="#setup">3. Problem setup</a></li>
@@ -78,14 +52,15 @@
         <li><a href="#worked">12. Worked example</a></li>
         <li><a href="#next">13. What follows</a></li>
       </ol>
+      <div class="menu-item locked">Soft Actor-Critic (soon)</div>
     </nav>
 
-    <article class="study-main">
+    <article class="study-main" id="content" tabindex="-1">
       <p class="chapter-kicker">Chapter 09 · Group relative policy optimization</p>
       <h1 class="study-title"><em>GRPO</em></h1>
 
       <div class="abstract">
-        <strong>Abstract.</strong>
+        <strong>In this chapter.</strong>
         Group Relative Policy Optimization (Shao et al., 2024 — DeepSeekMath; reused in
         DeepSeek-R1) keeps PPO's clipped importance-ratio surrogate but deletes the learned
         value network entirely. For each prompt it samples a <em>group</em> of \(G\)
@@ -652,9 +627,9 @@ For iteration k = 1, 2, …:
 
           <div class="split" style="grid-template-columns:1fr 1fr;gap:1rem">
             <div>
-              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:0 0 0.5rem">Policy π over {A,B,C,D}</h4>
+              <h4 style="margin:0 0 0.5rem">Policy π over {A,B,C,D}</h4>
               <div class="bar-chart" id="grpoBars"></div>
-              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:1rem 0 0.5rem">Group samples (R, Â)</h4>
+              <h4 style="margin:1rem 0 0.5rem">Group samples (R, Â)</h4>
               <div id="grpoGroup"></div>
             </div>
             <div>
@@ -665,7 +640,7 @@ For iteration k = 1, 2, …:
                 <div><span>KL(π‖π_ref)</span><strong id="grpoKL">—</strong></div>
                 <div><span>Entropy H(π)</span><strong id="grpoEnt">—</strong></div>
               </div>
-              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:1rem 0 0.5rem">Ledger</h4>
+              <h4 style="margin:1rem 0 0.5rem">Ledger</h4>
               <div class="bellman-trace" id="grpoTrace">Sample a group, then run a GRPO step.</div>
             </div>
           </div>
@@ -752,7 +727,7 @@ For iteration k = 1, 2, …:
   </div>
 
   <footer class="site-foot">
-    <p>Pearl · Chapter 09 · GRPO</p>
+    <p>Reinforcement Learning · Chapter 09 · GRPO</p>
     <p class="muted">Group-relative advantages · no critic · clipped surrogate · KL to reference · failure modes.</p>
   </footer>
 

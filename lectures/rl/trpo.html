@@ -1,22 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>07 · TRPO — Pearl</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
-  <script>
-    (function () {
-      try {
-        if (localStorage.getItem("pearl-theme") === "light") {
-          document.documentElement.setAttribute("data-theme", "light");
-        }
-      } catch (e) {}
-    })();
-  </script>
-  <link rel="stylesheet" href="styles.css" />
+  <title>07 · TRPO — Reinforcement Learning</title>
+  <link rel="stylesheet" href="../notes.css" />
   <script>
     window.MathJax = {
       tex: {
@@ -29,41 +17,25 @@
   <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 </head>
 <body>
-  <div class="pearl-field" aria-hidden="true"></div>
-  <div class="steam" aria-hidden="true"></div>
-
-  <header class="topbar">
-    <a class="brand" href="why.html">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-text">Pearl</span>
-    </a>
-            <nav class="chapter-nav" aria-label="Chapters">
-      <a href="why.html">00 · Why</a>
-      <a href="index.html">01 · MDP</a>
-      <a href="value.html">02 · Value</a>
-      <a href="practice.html">Practice</a>
-      <a href="dp.html">03 · DP</a>
-      <a href="td.html">04 · TD</a>
-      <a href="qlearning.html">05 · DQN</a>
-      <a href="pg.html">06 · PG</a>
-      <a class="active" href="trpo.html">07 · TRPO</a>
-      <a href="ppo.html">08 · PPO</a>
-      <a href="grpo.html">09 · GRPO</a>
-      <span class="locked">10 · SAC</span>
-    </nav>
-    <div class="topbar-actions">
-      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" title="Toggle milk-tea light / dark roast">
-        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
-        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
-      </button>
-      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
-    </div>
-  </header>
+  <a class="skip-link" href="#content">Skip to content</a>
 
   <div class="layout-book" id="top">
-    <nav class="toc" aria-label="On this page">
-      <span class="toc-title">Contents</span>
-      <ol>
+    <nav class="sidebar" aria-label="Notes">
+      <div class="menu-category">Syed Nazmus Sakib</div>
+      <div class="menu-item"><a href="/index.html">Home</a></div>
+      <div class="menu-item"><a href="/publications.html">Publications</a></div>
+      <div class="menu-item"><a href="/lectures/">Lecture Notes</a></div>
+      <div class="menu-category">Reinforcement Learning</div>
+      <div class="menu-item"><a href="why.html">Why MDPs</a></div>
+      <div class="menu-item"><a href="index.html">Markov Decision Processes</a></div>
+      <div class="menu-item"><a href="value.html">Value Functions</a></div>
+      <div class="menu-item"><a href="practice.html">Practice Gridworld</a></div>
+      <div class="menu-item"><a href="dp.html">Dynamic Programming</a></div>
+      <div class="menu-item"><a href="td.html">Temporal-Difference Learning</a></div>
+      <div class="menu-item"><a href="qlearning.html">Q-Learning &amp; DQN</a></div>
+      <div class="menu-item"><a href="pg.html">Policy Gradients</a></div>
+      <div class="menu-item"><a class="current" aria-current="page" href="trpo.html">TRPO</a></div>
+      <ol class="toc">
         <li><a href="#overview">1. Overview</a></li>
         <li><a href="#problem">2. The instability problem</a></li>
         <li><a href="#cpi">3. Conservative policy iteration</a></li>
@@ -81,14 +53,17 @@
         <li><a href="#worked">15. Worked calculations</a></li>
         <li><a href="#next">16. What follows</a></li>
       </ol>
+      <div class="menu-item"><a href="ppo.html">PPO</a></div>
+      <div class="menu-item"><a href="grpo.html">GRPO</a></div>
+      <div class="menu-item locked">Soft Actor-Critic (soon)</div>
     </nav>
 
-    <article class="study-main">
+    <article class="study-main" id="content" tabindex="-1">
       <p class="chapter-kicker">Chapter 07 · Trust-region policy optimization</p>
       <h1 class="study-title"><em>TRPO</em></h1>
 
       <div class="abstract">
-        <strong>Abstract.</strong>
+        <strong>In this chapter.</strong>
         Trust Region Policy Optimization (Schulman et al., 2015) stabilizes on-policy policy
         gradients by maximizing a surrogate for expected improvement subject to a hard
         constraint on how far the new policy may move from the old one in KL divergence.
@@ -639,7 +614,7 @@
 
           <div class="split" style="grid-template-columns:1fr 1fr;gap:1rem">
             <div>
-              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:0 0 0.5rem">Policy (greedy)</h4>
+              <h4 style="margin:0 0 0.5rem">Policy (greedy)</h4>
               <div class="dp-grid" id="trpoGrid"></div>
               <p class="caption tight">Collect a batch first, then take a trust-region or vanilla step.</p>
             </div>
@@ -652,7 +627,7 @@
                 <div><span>Line steps</span><strong id="trpoLS">—</strong></div>
                 <div><span>Avg G₀</span><strong id="trpoG">—</strong></div>
               </div>
-              <h4 style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--pearl-mint);margin:1rem 0 0.5rem">Solver ledger</h4>
+              <h4 style="margin:1rem 0 0.5rem">Solver ledger</h4>
               <div class="bellman-trace" id="trpoTrace">Collect batch → TRPO-style step. Ledger shows proposed KL, backtracking, and accepted ΔL.</div>
             </div>
           </div>
@@ -730,7 +705,7 @@
   </div>
 
   <footer class="site-foot">
-    <p>Pearl · Chapter 07 · TRPO</p>
+    <p>Reinforcement Learning · Chapter 07 · TRPO</p>
     <p class="muted">Surrogate improvement · KL trust region · Fisher · CG · line search · bridge to PPO.</p>
   </footer>
 

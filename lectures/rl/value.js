@@ -1,4 +1,4 @@
-/* Pearl — Chapter 02: V/Q visual studio + iterative policy evaluation */
+/* Reinforcement Learning — Chapter 02: V/Q visual studio + iterative policy evaluation */
 
 (() => {
   "use strict";

@@ -1,4 +1,4 @@
-/* Pearl — Ch 06: softmax REINFORCE / baseline / actor-critic */
+/* Reinforcement Learning — Ch 06: softmax REINFORCE / baseline / actor-critic */
 
 (() => {
   "use strict";
@@ -298,6 +298,6 @@
   });
   document.getElementById("pgReset")?.addEventListener("click", reset);
 
-  setMode("reinforce");
   reset();
+  setMode("reinforce");
 })();

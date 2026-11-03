@@ -1,37 +1,6 @@
-/* Pearl — shared TOC scroll-spy, theme toggle, worked-example reveal */
+/* Reinforcement Learning — shared TOC scroll-spy, worked-example reveal */
 (() => {
   "use strict";
-
-  // ---------- Theme (dark roast ↔ light milk tea) ----------
-  const root = document.documentElement;
-  const toggle = document.getElementById("themeToggle");
-  const label = document.getElementById("themeToggleLabel");
-
-  function currentTheme() {
-    return root.getAttribute("data-theme") === "light" ? "light" : "dark";
-  }
-
-  function applyTheme(theme) {
-    if (theme === "light") root.setAttribute("data-theme", "light");
-    else root.removeAttribute("data-theme");
-    try {
-      localStorage.setItem("pearl-theme", theme);
-    } catch (e) {}
-    if (label) label.textContent = theme === "light" ? "Dark" : "Light";
-    if (toggle) {
-      toggle.setAttribute("aria-pressed", theme === "light" ? "true" : "false");
-      toggle.title =
-        theme === "light"
-          ? "Switch to dark roast"
-          : "Switch to light milk tea";
-    }
-  }
-
-  applyTheme(currentTheme());
-
-  toggle?.addEventListener("click", () => {
-    applyTheme(currentTheme() === "light" ? "dark" : "light");
-  });
 
   // ---------- TOC scroll-spy ----------
   const links = [...document.querySelectorAll(".toc a")];

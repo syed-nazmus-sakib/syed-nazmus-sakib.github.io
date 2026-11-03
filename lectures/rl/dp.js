@@ -1,4 +1,4 @@
-/* Pearl — Chapter 03: Policy Iteration & Value Iteration lab */
+/* Reinforcement Learning — Chapter 03: Policy Iteration & Value Iteration lab */
 
 (() => {
   "use strict";

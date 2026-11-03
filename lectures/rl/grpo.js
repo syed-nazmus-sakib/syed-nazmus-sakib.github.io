@@ -1,4 +1,4 @@
-/* Pearl — Ch 09: GRPO group-relative laboratory (contextual bandit) */
+/* Reinforcement Learning — Ch 09: GRPO group-relative laboratory (contextual bandit) */
 
 (() => {
   "use strict";
@@ -75,7 +75,7 @@
       sub.style.opacity = "0.55";
       sub.innerHTML =
         `<span>π_ref</span>` +
-        `<div class="bar-track"><div class="bar-fill" style="width:${(pref[i] * 100).toFixed(1)}%;background:var(--pearl-mint)"></div></div>` +
+        `<div class="bar-track"><div class="bar-fill" style="width:${(pref[i] * 100).toFixed(1)}%;background:var(--accent-secondary)"></div></div>` +
         `<span>${pref[i].toFixed(3)}</span>`;
       el.appendChild(sub);
     });

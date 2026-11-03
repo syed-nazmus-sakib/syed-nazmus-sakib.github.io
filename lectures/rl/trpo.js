@@ -1,4 +1,4 @@
-/* Pearl — Ch 07: tabular TRPO-style trust region lab */
+/* Reinforcement Learning — Ch 07: tabular TRPO-style trust region lab */
 
 (() => {
   "use strict";

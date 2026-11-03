@@ -1,4 +1,4 @@
-/* Pearl — Chapter 04: SARSA vs Q-learning on a classic-style cliff */
+/* Reinforcement Learning — Chapter 04: SARSA vs Q-learning on a classic-style cliff */
 
 (() => {
   "use strict";

@@ -1,4 +1,4 @@
-/* Pearl — Ch 08: PPO clipped-surrogate laboratory */
+/* Reinforcement Learning — Ch 08: PPO clipped-surrogate laboratory */
 
 (() => {
   "use strict";

@@ -1,4 +1,4 @@
-/* Pearl — Ch 05: tabular Q-learning with replay + target + double */
+/* Reinforcement Learning — Ch 05: tabular Q-learning with replay + target + double */
 
 (() => {
   "use strict";
@@ -386,6 +386,6 @@
     reset();
   });
 
-  syncFlags();
   reset();
+  syncFlags();
 })();
