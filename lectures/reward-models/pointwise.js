@@ -1,4 +1,4 @@
-/* Pearl · RM Ch 02: pointwise BCE playground */
+/* Reward Models · RM Ch 02: pointwise BCE playground */
 
 (() => {
   "use strict";

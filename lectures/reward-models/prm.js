@@ -1,4 +1,4 @@
-/* Pearl · RM Ch 06: PRM step scores + aggregation */
+/* Reward Models · RM Ch 06: PRM step scores + aggregation */
 
 (() => {
   "use strict";

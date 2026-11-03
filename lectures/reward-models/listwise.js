@@ -1,4 +1,4 @@
-/* Pearl · RM Ch 04: listwise Plackett-Luce playground */
+/* Reward Models · RM Ch 04: listwise Plackett-Luce playground */
 
 (() => {
   "use strict";

@@ -1,4 +1,4 @@
-/* Pearl · RM Ch 01: Bradley–Terry scalar playground */
+/* Reward Models · RM Ch 01: Bradley–Terry scalar playground */
 
 (() => {
   "use strict";

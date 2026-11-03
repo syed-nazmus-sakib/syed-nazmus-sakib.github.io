@@ -1,36 +1,6 @@
-/* Pearl · Reward Models — shared TOC, theme, worked reveal */
+/* Reward Models — shared TOC scroll-spy, worked reveal */
 (() => {
   "use strict";
-
-  const root = document.documentElement;
-  const toggle = document.getElementById("themeToggle");
-  const label = document.getElementById("themeToggleLabel");
-
-  function currentTheme() {
-    return root.getAttribute("data-theme") === "light" ? "light" : "dark";
-  }
-
-  function applyTheme(theme) {
-    if (theme === "light") root.setAttribute("data-theme", "light");
-    else root.removeAttribute("data-theme");
-    try {
-      localStorage.setItem("pearl-theme", theme);
-    } catch (e) {}
-    if (label) label.textContent = theme === "light" ? "Dark" : "Light";
-    if (toggle) {
-      toggle.setAttribute("aria-pressed", theme === "light" ? "true" : "false");
-      toggle.title =
-        theme === "light"
-          ? "Switch to dark roast"
-          : "Switch to light milk tea";
-    }
-  }
-
-  applyTheme(currentTheme());
-
-  toggle?.addEventListener("click", () => {
-    applyTheme(currentTheme() === "light" ? "dark" : "light");
-  });
 
   const links = [...document.querySelectorAll(".toc a")];
   const sections = links

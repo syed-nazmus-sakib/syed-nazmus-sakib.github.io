@@ -1,22 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>04 · Listwise Reward Model - Pearl</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
-  <script>
-    (function () {
-      try {
-        if (localStorage.getItem("pearl-theme") === "light") {
-          document.documentElement.setAttribute("data-theme", "light");
-        }
-      } catch (e) {}
-    })();
-  </script>
-  <link rel="stylesheet" href="styles.css" />
+  <title>04 · Listwise Reward Model — Reward Models</title>
+  <link rel="stylesheet" href="../notes.css" />
   <script>
     window.MathJax = {
       tex: {
@@ -29,35 +17,20 @@
   <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 </head>
 <body>
-  <div class="pearl-field" aria-hidden="true"></div>
-  <div class="steam" aria-hidden="true"></div>
-  <header class="topbar">
-    <a class="brand" href="index.html">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-text">Pearl · Rewards</span>
-    </a>
-    <nav class="chapter-nav" aria-label="Chapters">
-      <a href="index.html">00 · Overview</a>
-      <a href="scalar.html">01 · Scalar</a>
-      <a href="pointwise.html">02 · Pointwise</a>
-      <a href="pairwise.html">03 · Pairwise</a>
-      <a class="active" href="listwise.html">04 · Listwise</a>
-      <a href="orm.html">05 · ORM</a>
-      <a href="prm.html">06 · PRM</a>
-    </nav>
-    <div class="topbar-actions">
-      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
-        <span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span>
-        <span class="theme-toggle-label" id="themeToggleLabel">Light</span>
-      </button>
-      <a class="theme-hint" href="#lab" style="text-decoration:none">Lab</a>
-    </div>
-  </header>
 
   <div class="layout-book" id="top">
-    <nav class="toc" aria-label="On this page">
-      <span class="toc-title">Contents</span>
-      <ol>
+    <nav class="sidebar" aria-label="Notes">
+      <div class="menu-category">Syed Nazmus Sakib</div>
+      <div class="menu-item"><a href="/index.html">Home</a></div>
+      <div class="menu-item"><a href="/publications.html">Publications</a></div>
+      <div class="menu-item"><a href="/lectures/">Lecture Notes</a></div>
+      <div class="menu-category">Reward Models</div>
+      <div class="menu-item"><a href="index.html">Overview</a></div>
+      <div class="menu-item"><a href="scalar.html">Scalar Reward Model</a></div>
+      <div class="menu-item"><a href="pointwise.html">Pointwise Verifier</a></div>
+      <div class="menu-item"><a href="pairwise.html">Pairwise Comparator</a></div>
+      <div class="menu-item"><a class="current" aria-current="page" href="listwise.html">Listwise Ranking</a></div>
+      <ol class="toc">
         <li><a href="#idea">1. Idea</a></li>
         <li><a href="#why">2. Why listwise</a></li>
         <li><a href="#arch">3. Architecture</a></li>
@@ -70,6 +43,17 @@
         <li><a href="#lab">10. Laboratory</a></li>
         <li><a href="#next">11. Next</a></li>
       </ol>
+      <div class="menu-item"><a href="orm.html">Outcome Reward Model</a></div>
+      <div class="menu-item"><a href="prm.html">Process Reward Model</a></div>
+      <div class="menu-item"><a href="value.html">Value Model</a></div>
+      <div class="menu-item"><a href="multi-objective.html">Multi-Objective RM</a></div>
+      <div class="menu-item"><a href="generative.html">Generative RM</a></div>
+      <div class="menu-item"><a href="critique.html">Critique-then-Score</a></div>
+      <div class="menu-item"><a href="implicit.html">Implicit RM (DPO)</a></div>
+      <div class="menu-item"><a href="conditional.html">Conditional RM</a></div>
+      <div class="menu-item"><a href="ensemble.html">Uncertainty &amp; Ensembles</a></div>
+      <div class="menu-item"><a href="hybrid.html">Hybrid Rule + Learned</a></div>
+      <div class="menu-item"><a href="prm-variants.html">PRM Variants in Depth</a></div>
     </nav>
     <article class="study-main">
       <p class="chapter-kicker">Architecture 04 · Whole-list ranking</p>
@@ -221,7 +205,7 @@
       </section>
     </article>
   </div>
-  <footer class="site-foot"><p>Pearl · Reward Models · 04 Listwise</p><p class="muted">Many candidates. One ranking.</p></footer>
+  <footer class="site-foot"><p>Reward Models · 04 Listwise</p><p class="muted">Many candidates. One ranking.</p></footer>
   <script src="listwise.js"></script>
   <script src="nav.js"></script>
 </body></html>

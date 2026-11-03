@@ -1,4 +1,4 @@
-/* Pearl · RM Ch 05: ORM outcome playground */
+/* Reward Models · RM Ch 05: ORM outcome playground */
 
 (() => {
   "use strict";

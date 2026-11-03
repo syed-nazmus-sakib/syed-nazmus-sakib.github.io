@@ -1,4 +1,4 @@
-/* Pearl · RM Ch 03: direct comparator playground */
+/* Reward Models · RM Ch 03: direct comparator playground */
 
 (() => {
   "use strict";
